@@ -203,3 +203,10 @@ clients, restoring mobile terminal drag-to-dismiss behavior after Android's
 `HandleTextInput` integration. Keyboard traits update and reset with the
 focused element; both scroll directions keep working across keyboard resize.
 The terminal plugin and Ghostty manifest remain unchanged.
+
+Fork commit `913e9acb7a9a` keeps custom controls with `TextContext` on
+iOS's surrounding-text snapshot bridge, even when they also register a
+native text-input client for indexed backends such as Android. This preserves
+the committed input and caret after English and Chinese edits instead of
+resetting UIKit's proxy to empty text at offset zero. The terminal plugin,
+Ghostty manifest and Retty's independent CLI/iOS packaging are unchanged.

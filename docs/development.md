@@ -378,9 +378,10 @@ RETTY_MOBILE_RECOVERY_E2E=1 GOWORK=off go test . \
 ```sh
 GOWORK=off IOS_TEAM="$IOS_TEAM" IOS_DEVICE="$IOS_DEVICE" ./scripts/test-ios.sh
 GOWORK=off IOS_TEST_FLOW=background IOS_TEAM="$IOS_TEAM" IOS_DEVICE="$IOS_DEVICE" ./scripts/test-ios.sh
+GOWORK=off IOS_TEST_FLOW=input IOS_TEAM="$IOS_TEAM" IOS_DEVICE="$IOS_DEVICE" ./scripts/test-ios.sh
 ```
 
-`full` 流程覆盖扫描、会话、键盘、选择和旋转；`background` 流程验证后台 45 秒复用同一控制连接，以及控制连接断开后回到同一会话、桌面尺寸不变。手机需有英文和中文拼音九宫格键盘。XCTest 的测试专用启动参数是 `RETTY_UI_TEST=1`，普通使用不要保留它。
+`full` 流程覆盖扫描、会话、键盘、选择和旋转；`background` 流程验证后台 45 秒复用同一控制连接，以及控制连接断开后回到同一会话、桌面尺寸不变；`input` 流程在独立 shell 中验证连续英文、两次中文九宫格候选提交及后续英文的实际输入顺序，并复查上下滑动收起键盘。手机需有英文和中文拼音九宫格键盘。XCTest 的测试专用启动参数是 `RETTY_UI_TEST=1`，普通使用不要保留它。
 
 测试后恢复正常启动：
 

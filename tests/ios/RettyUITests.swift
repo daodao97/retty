@@ -53,6 +53,55 @@ final class RettyUITests: XCTestCase {
         let pattern = "\\s*" + letters.map(String.init).joined(separator: "\\s*") + "\\s*"
         return app.keys.matching(NSPredicate(format: "label MATCHES[c] %@", pattern)).firstMatch
     }
+
+    func testInputContinuation() throws {
+        continueAfterFailure = false
+        let app = XCUIApplication(bundleIdentifier: "com.daodao.retty")
+        app.launchEnvironment["RETTY_UI_TEST"] = "1"
+        app.terminate()
+        app.launch()
+        XCTAssertTrue(app.buttons["扫码连接桌面"].waitForExistence(timeout: 15))
+        if #available(iOS 16.4, *) { app.open(URL(string: Fixture.link)!) }
+        else { throw XCTSkip("URL opening requires iOS 16.4") }
+        let existing = app.buttons["打开会话 " + Fixture.existing]
+        XCTAssertTrue(existing.waitForExistence(timeout: 45), app.debugDescription)
+        existing.tap()
+        let terminal = app.descendants(matching: .any).matching(identifier: "Terminal").firstMatch
+        XCTAssertTrue(terminal.waitForExistence(timeout: 10))
+        terminal.tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 10))
+        func english() {
+            for _ in 0..<8 where !app.keys["q"].exists { app.buttons["Next keyboard"].tap() }
+            XCTAssertTrue(app.keys["q"].exists)
+        }
+        func chinese() {
+            for _ in 0..<8 where !nineKey(app, "MNO").exists { app.buttons["Next keyboard"].tap() }
+            XCTAssertTrue(nineKey(app, "MNO").exists)
+            for key in ["MNO", "GHI", "GHI", "ABC", "MNO"] { nineKey(app, key).tap() }
+            let candidate = app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "你好")).firstMatch
+            XCTAssertTrue(candidate.waitForExistence(timeout: 5))
+            candidate.tap()
+        }
+        english()
+        app.typeText("printf '%s' '")
+        for letter in ["a", "b", "c"] { app.keys[letter].tap() }
+        chinese()
+        english()
+        app.typeText("XYZ")
+        chinese()
+        english()
+        app.typeText("tail' > '" + Fixture.directory + "/input-result'\n")
+        screenshot("input-english-chinese-continuation")
+        // The routing fix must also retain the earlier scroll-dismiss fix.
+        let gone = NSPredicate(format: "exists == false")
+        for upward in [true, false] {
+            terminal.tap()
+            XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
+            if upward { terminal.swipeUp() } else { terminal.swipeDown() }
+            let hidden = XCTNSPredicateExpectation(predicate: gone, object: app.keyboards.firstMatch)
+            XCTAssertEqual(XCTWaiter.wait(for: [hidden], timeout: 5), .completed)
+        }
+    }
     func screenshot(_ name: String) {
         let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         attachment.name = name

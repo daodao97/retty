@@ -24,7 +24,12 @@ case "${IOS_TEST_FLOW:-full}" in
   RETTY_IOS_BACKGROUND_FIXTURE="$WORK/fixture.json" \
    go test ./internal/remote -run '^TestTailcatIOSBackgroundRetention$' -v -timeout 6m > "$WORK/host.log" 2>&1 &
   ;;
- *) echo "IOS_TEST_FLOW must be full or background" >&2; exit 1 ;;
+ input)
+  TEST_CASE=RettyUITests/RettyUITests/testInputContinuation
+  RETTY_IOS_INPUT_FIXTURE="$WORK/fixture.json" \
+   go test ./internal/remote -run '^TestTailcatIOSInputContinuation$' -v -timeout 5m > "$WORK/host.log" 2>&1 &
+  ;;
+ *) echo "IOS_TEST_FLOW must be full, background or input" >&2; exit 1 ;;
 esac
 HOST_PID=$!
 finish() {
