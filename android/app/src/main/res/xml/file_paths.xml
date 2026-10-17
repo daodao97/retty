@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  扫码用的 FileProvider 路径。
+
+  🔴 必须是 external-cache-path，不是 cache-path。cache-path 指的是
+  /data/data/<pkg>/cache —— 相机应用对那个目录没有写权限，一部分厂商相机
+  会默默写不进去、然后返回 RESULT_CANCELED。external-cache-path 是分区存储下
+  app 自己的外部缓存（/storage/emulated/0/Android/data/<pkg>/cache），相机能写，
+  而且同样不需要任何存储权限。
+
+  只开缓存根下的 scan-*.jpg，别的都不共享。
+-->
+<paths>
+    <external-cache-path
+        name="scans"
+        path="." />
+</paths>

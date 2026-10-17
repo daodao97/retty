@@ -1,0 +1,47 @@
+// mygo Android 宿主工程 —— Gradle settings
+//
+// ── 版本选择依据（官方兼容矩阵 + 本机实测）───────────────────────────────
+// 官方矩阵（https://developer.android.com/build/releases/agp-9-0-0-release-notes）:
+//   AGP 9.0.x  最低 Gradle = 9.1.0 / 默认 Gradle = 9.1.0
+//              默认 SDK Build Tools = 36.0.0
+//              默认 NDK             = 28.2.13676358
+//              最低 JDK             = 17
+//              支持最高 API         = 36.1
+// 本机实测（命令见 README 与产出 T2B.md）:
+//   JDK              = Microsoft OpenJDK 17.0.10            ✔ 满足
+//   build-tools      = 35.0.0 / 36.0.0 / 36.1.0 / 37.0.0     ✔ 有 36.0.0
+//   NDK              = 28.2.13676358                         ✔ 逐字命中默认值
+//   platforms        = android-34 / 35 / 36 / 36.1           ✔ 有 36
+//   Gradle 发行版    = ~/.gradle/wrapper/dists/gradle-9.1.0-all（已解压，.zip.ok）
+// 四项全中 ⇒ 选 AGP 9.0.1（也是本机 ~/.gradle 缓存里已有的版本）。
+//
+// ⚠️ 注意 AGP 9.0 的两个破坏性默认值：android.newDsl=true、android.builtInKotlin=true。
+//    官方明确说明 org.jetbrains.kotlin.android 插件与 newDsl 不兼容，
+//    因此本工程 **不声明 kotlin-android 插件**，.kt 由 AGP 内置 Kotlin 编译
+//    （见 app/build.gradle 顶部注释与 gradle.properties）。
+
+pluginManagement {
+    repositories {
+        google()
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+
+// AGP 的版本必须在这里给出。app/build.gradle 里写的是 id 'com.android.application'
+// 不带版本——本机的 ~/.gradle 里有 9.0.1 的缓存，所以那台机器上一直能编；
+// 一台干净的 CI runner 没有缓存，Gradle 会报 "plugin was not found"。
+plugins {
+    id 'com.android.application' version '9.0.1' apply false
+}
+
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
+rootProject.name = 'mygo-android-host'
+include ':app'

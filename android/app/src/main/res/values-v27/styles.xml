@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  v27：windowLightNavigationBar 是 API 27 才有的属性，写在 values/ 会在
+  minSdk 24 的设备上（或 aapt 的 lint 里）报错。分开一份，v27 及以上取这份，
+  24~26 取 values/ 那份（那里没有这一条）。
+
+  加它的理由：手势条透明后，底色是本 app 的背景（浅色），而系统默认画白色
+  手势条 —— 在浅底上看不见。这一条让它画深色。
+-->
+<resources>
+    <style name="MygoTheme" parent="@android:style/Theme.DeviceDefault.Light.NoActionBar">
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <!-- API 27+：手势条也画深色 -->
+        <item name="android:windowLightNavigationBar">true</item>
+        <item name="android:windowDrawsSystemBarBackgrounds">true</item>
+    </style>
+</resources>

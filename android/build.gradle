@@ -1,0 +1,168 @@
+// mygo Android 宿主工程 —— app 模块
+//
+// 本模块 **不使用 externalNativeBuild / CMake**：
+// Go 侧的 libmygo.so 由 Go 工具链（cgo / gomobile bind 之外的 C shared 目标）单独产出，
+// 产物按 ABI 放进 app/src/main/jniLibs/<abi>/libmygo.so 即可被 AGP 打包。
+// 因此这里只需要 Android SDK，不需要在本工程里配 NDK 编译。
+plugins {
+    id 'com.android.application'
+    // ⚠️ 这里 **故意不写** id 'org.jetbrains.kotlin.android'：
+    //    AGP 9.0 默认 android.builtInKotlin=true，官方明确说 kotlin-android 插件
+    //    与 AGP 9.0 的新 DSL（newDsl=true）不兼容。.kt 源码由 AGP 内置 Kotlin 编译。
+}
+
+android {
+    // 包名（namespace）与 JNI 契约的包 org.mygo 一致，保证 System.loadLibrary("mygo")
+    // 找到的类与 Go 侧 JNI 符号 Java_org_mygo_Native_* 对得上。
+    namespace 'org.mygo'
+
+    // ── compileSdk 依据 ──────────────────────────────────────────────────
+    // 本机 platforms 里有 android-34 / 35 / 36 / 36.1（ls 输出见 T2B.md）。
+    // AGP 9.0 官方支持的最高 API 是 36.1；build-tools 36.0.0 恰好对应 API 36。
+    // 取 36（不是 36.1）以对齐 AGP 9.0 的默认 Build Tools 36.0.0，避免 36.1 需要
+    // build-tools 36.1.0 的组合差异。
+    compileSdk 36
+
+    defaultConfig {
+        applicationId 'com.daodao.retty'
+        // 只打 arm64-v8a。真机（PKJ110，骁龙 8 系）只用得到这个；
+        // OpenCV 的 AAR 带四个 ABI，全带上 APK 会从 54MB 涨到 189MB。
+        ndk {
+            abiFilters 'arm64-v8a'
+        }
+        versionCode 1
+        versionName '1.0'
+
+        // ── 图片服务地址（lab 的 Images 页）─────────────────────────────
+        // 不在这里传。它编进 lab 自己的 .so：
+        //   MYGO_LAB_LIST=http://<主机>:8098 bash build.sh android
+        // （mygo-wind-router-lab/build.sh，-ldflags -X 注入 listBaseBuild）。
+        // 以前走 -PmygoLabList → BuildConfig → Os.setenv → os.Getenv，
+        // 是拿编译期常量绕两个运行时弯，还带 setenv/loadLibrary 的时序依赖。
+
+        // ── minSdk 依据 ─────────────────────────────────────────────────
+        // 1) Go 运行时（runtime + runtime/cgo + 调度器）在 Android 上的支持下限是 API 21
+        //    （Go 官方 android 目标最低 API 21）；NDK r28 的最低支持 API 也是 21。
+        //    ⇒ 不能低于 21。
+        // 2) 本工程要用 android.view.SurfaceView + SurfaceHolder.Callback（API 1 起有），
+        //    不构成下限约束。
+        // 3) 取 **24（Android 7.0）** 而不是 21：21–23 上 ART 的 .so 加载/dex 边界行为
+        //    差异大（如早期 ART 对 JNI 静态方法与 System.loadLibrary 的错误处理更苛刻），
+        //    而 API 24 在 2026 年的设备覆盖率几乎是 100%，用 24 换取更少的历史坑、
+        //    不需要 multidex 兼容路径。若未来要压到 21，只改这一个数字即可。
+        minSdk 24
+
+        // targetSdk 与 compileSdk 对齐取 36。
+        // ⚠️ 已知副作用（Android 16 / API 36）：平台会 **忽略** targetSdk>=36 应用在大屏
+        //    （最小宽度 >= 600dp）上的 android:screenOrientation 锁定。也就是说
+        //    Manifest 里锁竖屏在平板上不生效 —— 这正是本工程坚持「surface 重建路径必须
+        //    正确」而不是只靠锁屏的原因，详见 MygoView.surfaceDestroyed 的注释。
+        targetSdk 36
+    }
+
+    // 一个 release 包要看的是它和 debug 包差在哪：体积、以及 debug 包多背的
+    // 那些东西（可调试标记、inspector、帧统计）。AGP 要求 release 必须有签名
+    // 才能装，而实验室要的是一个能装上、能量内存的包，不是能上架的包 ——
+    // 所以签的是本机的 debug keystore：`~/.android/debug.keystore`，口令
+    // android/android，全世界的 Android SDK 都一样，不是秘密。
+    //
+    // 要真上架时换掉这一段，别把 debug 签名发出去。
+    signingConfigs {
+        release {
+            storeFile file(System.getProperty('user.home') + '/.android/debug.keystore')
+            storePassword 'android'
+            keyAlias 'androiddebugkey'
+            keyPassword 'android'
+        }
+    }
+
+    // 🔴 必须解压 .so 到磁盘（useLegacyPackaging），不能留 extractNativeLibs=false。
+    //
+    // 默认（AGP 8+）是把 .so 原样留在 APK 的 lib/ 里、运行时直接 mmap，
+    // 于是 srcDir 的 nativeLibraryDir 是**空目录**。libghostty-vt 是用 purego
+    // 在运行时 dlopen 的，它要一个真实文件路径——从 zip 里映射出来的 .so
+    // 拿不到，报 "undefined symbol: ghostty_terminal_new"，而那个符号其实
+    // 就在库里。解压出来就好了。
+    packagingOptions {
+        jniLibs {
+            useLegacyPackaging = true
+        }
+    }
+
+    buildTypes {
+        debug {
+            minifyEnabled false
+        }
+        release {
+            // 首个宿主工程不开混淆：JNI 方法名会被 R8 改名/裁剪的风险不值得现在承担
+            minifyEnabled false
+            signingConfig signingConfigs.release
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    // 不需要 ViewBinding / Compose，保持最小。
+    // BuildConfig 不再需要（LAB_LIST 已改为编进 .so，见上面 app/build.gradle 的注）。
+    buildFeatures {
+        buildConfig true
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// nativeLibName —— 这个宿主装的是哪个 app 的 Go 库
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// 这个工程不只是 "mygo 自己的 demo 宿主"：任何用 mygo 写原生 UI 的 app 都可以把
+// 自己的 c-shared 库放进 app/src/main/jniLibs/<abi>/，然后把库名告诉构建。app 的
+// .so 必须自带 JNI 入口（见 android/jni），因为 c-shared 的 main 不会被调用，
+// 而 app 启动自己只能靠包的 init。
+//
+//   ./gradlew :app:assembleDebug -PnativeLibName=lab     → 装 liblab.so
+//
+// 不给参数时是 "mygo"，也就是仓库里这个宿主自己的库。
+//
+// ⚠️ Java 侧不能按构建参数切库名：native 方法所在类的包名（org.mygo）是 JNI 符号
+//    的一部分，见 README「库名」。所以这个参数只在这里做**校验**，用来在参数与
+//    Native 类不符时早点失败，而不是等到运行时 UnsatisfiedLinkError。
+def nativeLibName = (findProperty('nativeLibName') ?: 'mygo')
+def nativeJavaLibName = 'mygo' // Native.java 的 System.loadLibrary 必须逐字用它
+if (nativeLibName != nativeJavaLibName) {
+    throw new GradleException(
+        "nativeLibName=${nativeLibName} 与宿主 Java 侧的库名 '${nativeJavaLibName}' 不一致。\n" +
+        "Java 的 native 方法写在 org.mygo 下，JNI 符号是 Java_org_mygo_*，所以库名不能从\n" +
+        "构建参数改 —— 改库名意味着换一个 Java 契约类。要用别的库名，请改\n" +
+        "app/src/main/java/org/mygo/Native.java 的 System.loadLibrary 与包名。")
+}
+
+
+// 🔴 调试：保留 libmygo.so 的符号，tombstone 才能出帧（2026-10-15）。
+android {
+    packagingOptions {
+        jniLibs {
+            keepDebugSymbols += "**/libmygo.so"
+        }
+    }
+}
+
+// 扫码解码用 ZXing core：纯 Java、无 NDK、不申请权限。
+// 不引 camera-x / ML Kit —— 这里只解码已经拿到的一张图，不需要相机栈。
+dependencies {
+    // FileProvider：把外部缓存里的照片以 content:// 交给系统相机写。
+    //
+    // 只为这一个类引入整个 androidx.core —— 但它是**拍照路径的必要条件**：
+    // 没有它就只能给相机一个 file:// Uri，而 targetSdk≥24 会抛
+    // FileUriExposed。相机路径本身是必需的（没有照片选择器的设备、或用户
+    // 就想现拍），两条路径也都实测通过，所以这个依赖不能省。
+    implementation 'androidx.core:core:1.13.1'
+
+    // 二维码解码：ZXing core，纯 Java，无原生库。
+    //
+    // 曾一度换成 OpenCV（QRCodeDetector），理由是「同一张照片 ZXing 解不出」。
+    // 复测后那个结论不成立：相册预览页那张 OpenCV 反而 0 命中、ZXing 命中；
+    // 对规范码做 9 种劣化两者全过。体积差 21.6MB vs 0.58MB，没有理由多付。
+    implementation 'com.google.zxing:core:3.5.3'
+}

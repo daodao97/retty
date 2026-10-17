@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  MygoTheme —— 本 app 的主题。一个普通 app：系统栏显示，内容铺到屏幕边缘，
+  但由 Go 侧把内容躲开系统栏（ui.SafeArea / MygoView.reportSafeArea）。
+
+  为什么不用系统主题包一层（Theme.DeviceDefault.Light.NoActionBar 直接写在
+  Manifest 里），而要多这一个文件：那三条 window* 属性是 **API 21 才有**的
+  （statusBarColor / navigationBarColor），而 minSdk 是 24 —— 24 ≥ 21，
+  所以其实可以直接写。分开是因为 cutout 模式（API 28 才有）要分版本，
+  见 values-v28/。这里放共有的部分。
+-->
+<resources>
+    <style name="MygoTheme" parent="@android:style/Theme.DeviceDefault.Light.NoActionBar">
+        <!-- ActionBar 不要：本 app 自己画顶栏（lab/shell.go），系统再画一条会
+             占掉一整行，样式也不跟本 app 的 token 走。 -->
+
+        <!-- 状态栏透明：内容铺到屏幕边缘（图片/视频页要这个效果）。
+             🔴 透明不等于"内容可以压在系统栏下不管"——躲开是 Go 侧 SafeArea 的
+             事。两者是分开的两件事：主题管"画布从哪开始"，布局管"内容从哪开始"。 -->
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+
+        <!-- 状态栏图标用深色：状态栏透明后底色是本 app 的背景（浅色），
+             系统默认的白色图标会看不见。API 23 起有这条，minSdk 24 满足。 -->
+        <item name="android:windowLightStatusBar">true</item>
+
+        <!-- 手势条（导航栏）也让内容铺过去。windowLightNavigationBar 是 API 27 的，
+             要分版本，见 values-v27/。 -->
+        <item name="android:windowDrawsSystemBarBackgrounds">true</item>
+    </style>
+</resources>

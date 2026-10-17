@@ -1,0 +1,134 @@
+name: Build Android APK
+
+# Android 包由两部分合成：Go 编出的 libmygo.so（引擎 + 这个 app），
+# 和 android/ 里的 Kotlin 宿主 + Gradle 打包。
+on:
+  push:
+    branches: [main, android-support]
+    paths:
+      - "**/*.go"
+      - "go.mod"
+      - "go.sum"
+      - "android/**"
+      - ".github/workflows/android.yml"
+  pull_request:
+    paths:
+      - "**/*.go"
+      - "go.mod"
+      - "go.sum"
+      - "android/**"
+      - ".github/workflows/android.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  # 两边必须同版本：mygo 的 GL 加载器和这个 app 的 Gradle 都用它。
+  NDK_VERSION: "28.2.13676358"
+
+jobs:
+  apk:
+    # 只编 arm64，而且 C 代码在 Linux 上也能交叉编——HarfBuzz 和 ghostty
+    # 都是现成的 .a/.so，这里只做链接。
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Android SDK 与 NDK
+        run: |
+          echo "y" | sudo "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" \
+            --install "ndk;${NDK_VERSION}" > /dev/null
+          echo "NDK=${ANDROID_HOME}/ndk/${NDK_VERSION}" >> "$GITHUB_ENV"
+
+      # 两个二进制都不进 git（几十 MB），都从 release 取：
+      #   - HarfBuzz + FreeType 静态库：字体整形要链接它们
+      #   - libghostty-vt.so：终端引擎，运行时 dlopen
+      #
+      # release 的下载地址走 CDN，刚发布的几分钟里可能 404；runner 上
+      # 也遇到过一次。所以重试，而不是让一次抖动判整次构建死刑。
+      - name: 预编译的依赖
+        run: |
+          fetch() {
+            local url="$1" out="$2"
+            for i in 1 2 3 4 5; do
+              if curl -fsSL --retry 2 "$url" -o "$out"; then return 0; fi
+              echo "第 $i 次失败，重试：$url"
+              sleep 5
+            done
+            echo "::error::拉不下来 $url"
+            return 1
+          }
+          mkdir -p android/app/src/main/jniLibs/arm64-v8a third_party/hb-build/src/lib
+          fetch https://github.com/Heyana/mygo-upstream/releases/download/hb-android-arm64/hb-android-arm64.tar.gz /tmp/hb.tgz
+          tar xzf /tmp/hb.tgz -C third_party/hb-build/src/lib
+          fetch https://github.com/Heyana/retty-android/releases/download/ghostty-vt-android-arm64/libghostty-vt.so \
+            android/app/src/main/jniLibs/arm64-v8a/libghostty-vt.so
+          test -f third_party/hb-build/src/lib/android/lib/libharfbuzz.a
+          test -s android/app/src/main/jniLibs/arm64-v8a/libghostty-vt.so
+
+      - name: 编译 libmygo.so
+        run: |
+          CC="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android29-clang"
+          HB="$PWD/third_party/hb-build/src/lib/android"
+          # chb.go 的 #cgo 指的是 ${SRCDIR}/../hb-build，从 module cache
+          # 里解析不到，所以由这里给出真实路径。
+          CGO_CFLAGS="-I$HB/include/harfbuzz -I$HB/include/freetype2"
+          CGO_LDFLAGS="-L$HB/lib -lharfbuzz -lfreetype -lm -llog"
+          GOOS=android GOARCH=arm64 CGO_ENABLED=1 CC="$CC" \
+            CGO_CFLAGS="$CGO_CFLAGS" CGO_LDFLAGS="$CGO_LDFLAGS" \
+            go build -trimpath -buildmode=c-shared \
+              -o android/app/src/main/jniLibs/arm64-v8a/libmygo.so .
+          ls -lh android/app/src/main/jniLibs/arm64-v8a/
+
+      - name: 校验 16 KB 页对齐
+        # Android 15 起有 16 KB 页的设备，要求 LOAD 段 align 2**14。
+        # NDK r28 默认就满足；这里只是把「哪天不满足了」挡在 CI 上，
+        # 而不是等它在设备上崩。
+        run: |
+          OBJDUMP="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-objdump"
+          "$OBJDUMP" -p android/app/src/main/jniLibs/arm64-v8a/libmygo.so | grep LOAD > /tmp/loads
+          cat /tmp/loads
+          if grep -qv 'align 2\*\*14' /tmp/loads; then
+            echo "::error::LOAD 段不是 16 KB 对齐"
+            exit 1
+          fi
+
+      - name: 打包 APK
+        working-directory: android
+        run: |
+          # release 用的是本机的 debug keystore（口令全世界都是 android/android，
+          # 见 app/build.gradle 的说明：这个包要能装、能测内存，不是上架用的）。
+          # 那文件是 Android SDK 第一次跑才生成的，新 runner 上没有，自己造一个。
+          if [ ! -f "$HOME/.android/debug.keystore" ]; then
+            mkdir -p "$HOME/.android"
+            keytool -genkeypair -v \
+              -keystore "$HOME/.android/debug.keystore" \
+              -storepass android -keypass android -alias androiddebugkey \
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -dname "CN=Android Debug,O=Android,C=US" > /dev/null 2>&1
+          fi
+          ./gradlew :app:assembleRelease --no-daemon
+
+      # AGP 会缓存 jniLibs。这一步把 APK 里的 .so 掏出来和刚编的比，
+      # 免得打出旧包——今天在真机上已经因为这个白测过几轮。
+      - name: 确认 APK 带的是刚编的 .so
+        run: |
+          apk=android/app/build/outputs/apk/release/app-release.apk
+          unzip -p "$apk" lib/arm64-v8a/libmygo.so > /tmp/in-apk.so
+          if ! cmp -s /tmp/in-apk.so android/app/src/main/jniLibs/arm64-v8a/libmygo.so; then
+            echo "::error::APK 里的 libmygo.so 和刚编出来的不是同一个"
+            exit 1
+          fi
+          ls -lh "$apk"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: app-release-apk
+          path: android/app/build/outputs/apk/release/*.apk
+          retention-days: 14

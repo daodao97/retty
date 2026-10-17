@@ -1,0 +1,10 @@
+# 构建产物
+/build/
+/app/build/
+.gradle/
+local.properties
+
+# 两个 .so 都是产物：libmygo.so 由 CI 从 Go 代码编出来，
+# libghostty-vt.so 是预编译的终端引擎，挂在 release 上由 CI 下载。
+# 不进 git 的理由和 HarfBuzz 的静态库一样——几十 MB 的二进制。
+/app/src/main/jniLibs/

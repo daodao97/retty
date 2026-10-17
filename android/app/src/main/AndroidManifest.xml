@@ -1,0 +1,130 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!--
+      mygo Android 宿主工程 Manifest
+
+      【屏幕方向：允许旋转（2026-10-12 真机验证通过后解锁）】
+      原选择是「锁竖屏」——旋转时系统不改配置 ⇒ Activity 不重建 ⇒ 首个宿主工程的
+      验证变量最少，能先把「Go 侧渲染 + 事件转发」跑通，不被生命周期噪声干扰。
+      真机上跑通「首帧 + 前后台 20 次 + 强制 Activity 重建 3 次」之后解锁：
+      因为下面声明了 configChanges="orientation|..."，旋转**不会重建 Activity**，
+      只走 surfaceChanged(w,h) 把新尺寸交给 Go 侧 —— 正是我们要的语义。
+      （若哪天要测「旋转导致 Activity 重建」那条更狠的路径，把 configChanges 里的
+       orientation 去掉即可，代价是每次旋转都重建。）
+
+      【configChanges 的作用】
+        screenSize / smallestScreenSize / screenLayout / density 这些**不改变方向**的
+        配置变化（分屏、折叠屏展开、悬浮窗、字体/密度调整、显示尺寸改变）会频繁发生。
+        声明它们后，Activity 不重建，Surface 只走 surfaceChanged(w,h)，正是我们要的
+        「尺寸变化交给 Go 侧处理」的语义。
+
+      【configChanges 里为什么有 orientation】
+        有了它，方向变化不重建 Activity，只把新尺寸走 surfaceChanged(w,h) 给 Go 侧；
+        没有它，每次旋转都重建 Activity（surfaceDestroyed→surfaceCreated），
+        Go 侧虽然也能恢复（真机实测过），但会白白丢掉 EGL context 与渲染线程。
+    -->
+    <!-- T34: Android 13+ 发通知需要该运行时权限（缺它时 notify() 会被系统接受并丢弃） -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- pprof 的调试服务器（lab 的 cmd/lab/pprof_android.go）要开一个
+         127.0.0.1 的 socket，而 Android 10 起没有这个权限连 AF_INET 都建不了。
+         它只绑回环，不接外网；release 包不带那个文件，所以这条也就没有用处，
+         留着是因为 debug 包才需要它。 -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <!--
+      【主题：普通 app，不隐藏系统栏】
+
+      🔴 原值是 `Theme.Black.NoTitleBar.Fullscreen`，那个 `Fullscreen` 的语义是
+      **隐藏状态栏**（windowFullscreen=true）。它来自「这是个 demo，画面越大越好」
+      的阶段，而一个普通 app 不该这样：用户要看时间、电量、通知，手势条也要在。
+
+      现在的取舍：
+        · NoTitleBar  —— 不要 ActionBar。本 app 自己画顶栏（见 lab/shell.go），
+                         系统再画一条会占掉一整行，且样式与本 app 的 token 无关。
+        · 不 Fullscreen —— 状态栏与手势条都显示。
+        · layoutInDisplayCutoutMode=shortEdges + 透明状态栏（values-v27 里）
+          —— 内容铺到屏幕边缘（图片/视频页要这个），但 Go 侧用
+          ui.SafeArea 把内容躲开系统栏（见 MygoView.reportSafeArea）。
+                          「内容铺满」和「内容躲开」是两件事，前者靠主题，后者靠布局。
+
+      旧行为（隐藏系统栏）不是不能要，而是它属于全屏类 app（播放器、游戏），
+      那时应当由那个 Activity 自己声明。见 MygoActivity 里对 flags 的注释。
+    -->
+    <application
+        android:allowBackup="false"
+        android:label="mygo"
+        android:supportsRtl="true"
+        android:theme="@style/MygoTheme">
+
+        <activity
+            android:name=".MygoActivity"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:windowSoftInputMode="adjustResize"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|density|keyboardHidden|uiMode">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- T34: 通知被点击时的回传接收方（org.mygo.MygoPlatform.NotificationReceiver） -->
+        <receiver
+            android:name=".MygoPlatform$NotificationReceiver"
+            android:exported="false" />
+
+        <!--
+          扫码用的写入口：相机把全尺寸照片写进本应用的 cache。
+          exported=false + grantUriPermissions，只有拿到授权的那个相机应用能写。
+        -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
+    </application>
+
+    <!--
+      【queries：让 resolveActivity 也能回答，但不是必需的】
+
+      Android 11（API 30）起有「包可见性」：targetSdk ≥ 30 的 app 默认看不见
+      别的 app，所以 `intent.resolveActivity()` / `queryIntentActivities()`
+      会**返回 null / 空列表**——即使设备上明明装着相机。这不是「没有相机」，
+      是「没被允许看」。
+
+      🔴 这个坑真踩过：扫码判断写成 `if (resolveActivity == null) → 退回相册`，
+      于是在装有相机的小米上走成了相册分支，而相册用的 `ACTION_PICK` 在
+      Android 16 上同样受限，最后两个都没起来，点一下什么都没发生。
+
+      **修法主要是代码，不是这里**：startScan 与 openExternalUrl 一样，
+      不查询、直接 startActivity 并捕获 ActivityNotFoundException
+      （见 MygoPlatform.kt）。只靠 try/catch 时本段其实可以省掉。
+
+      留着这段的理由：MygoPlatform 里若有人（或将来的代码）要**列出**可用相机、
+      或要对某个 action 做 resolveActivity 判断，没有它就会拿到空结果。
+      两个 action 只声明「我要看谁处理这个意图」，不申请任何权限，
+      也不需要 QUERY_ALL_PACKAGES（那个要过 Google 审核）。
+    -->
+    <queries>
+        <!-- 拍照：系统相机应用 -->
+        <intent>
+            <action android:name="android.media.action.IMAGE_CAPTURE" />
+        </intent>
+        <!-- 选图：系统照片选择器（Android 13+，photo picker） -->
+        <intent>
+            <action android:name="android.provider.action.PICK_IMAGES" />
+        </intent>
+        <!-- 老的相册入口，作为 ACTION_PICK_IMAGES 的退路 -->
+        <intent>
+            <action android:name="android.intent.action.PICK" />
+            <data android:mimeType="image/*" />
+        </intent>
+    </queries>
+
+</manifest>
