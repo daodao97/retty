@@ -35,7 +35,7 @@ func voiceTestFixture(t *testing.T) (*mobileApp, *ui.Tester, *voiceTestRecording
 	if err != nil {
 		t.Fatal(err)
 	}
-	m := &mobileApp{term: term, selected: rex.SessionInfo{ID: "voice-fixture"}}
+	m := &mobileApp{term: term, selected: rex.SessionInfo{ID: "voice-fixture"}, voiceEnabled: true}
 	recording := &voiceTestRecording{results: make(chan mygo.SpeechResult, 8)}
 	queue := make(chan func(), 16)
 	m.voice.post = func(fn func()) { queue <- fn }
@@ -447,6 +447,97 @@ func TestMobileVoiceKeyboardInputPreservesReviewAndHidesDock(t *testing.T) {
 		t.Fatal("editing hid review action")
 	}
 	saveDesktopImage(t, tt, "mobile-voice-editing-no-dock.png")
+}
+
+func TestMobileVoiceDisabledHidesDockAndCancelsCapture(t *testing.T) {
+	m, tt, r, q, _ := voiceTestFixture(t)
+	before, _ := tt.Find("Terminal")
+	voiceTestPress(t, tt)
+	voiceTestDispatch(t, tt, q)
+	epoch := m.voice.epoch
+	m.setVoiceEnabled(false)
+	m.applySpeechResult(epoch, mygo.SpeechResult{Text: "迟到的结果", Final: true})
+	tt.Frame()
+	if r.canceled.Load() != 1 || m.voice.phase != voiceIdle || m.voice.text != "" || m.beginSpeech(0) {
+		t.Fatal("disabled voice retained recording, accepted a late result or allowed capture")
+	}
+	for _, label := range []string{"按住说话", "切换键盘输入", "语音草稿", "语音识别面板"} {
+		if _, ok := tt.Find(label); ok {
+			t.Fatalf("disabled voice retained %s", label)
+		}
+	}
+	after, _ := tt.Find("Terminal")
+	if after.H <= before.H {
+		t.Fatal("disabled voice still reserved terminal space")
+	}
+	m.setVoiceEnabled(true)
+	tt.Frame()
+	if _, ok := tt.Find("按住说话"); !ok {
+		t.Fatal("enabling voice did not restore dock")
+	}
+	m.voice.phase, m.voice.text = voiceDraft, "未发送草稿"
+	m.setVoiceEnabled(false)
+	tt.Frame()
+	if m.voice.phase != voiceIdle || m.voice.text != "" {
+		t.Fatal("disabling retained voice draft")
+	}
+	if err := tt.Click("Terminal"); err != nil {
+		t.Fatal(err)
+	}
+	if !tt.Focused("Terminal") {
+		t.Fatal("disabling voice prevented keyboard input")
+	}
+}
+
+func TestMobileVoicePreferenceRestorePreservesNewChoice(t *testing.T) {
+	m := &mobileApp{}
+	if m.voiceEnabled {
+		t.Fatal("voice should default to disabled")
+	}
+	m.applyLoadedVoicePreference(false)
+	if m.voiceEnabled {
+		t.Fatal("saved disabled preference was not restored")
+	}
+	m.setVoiceEnabled(true)
+	m.applyLoadedVoicePreference(false)
+	if !m.voiceEnabled {
+		t.Fatal("delayed storage read overwrote a new choice")
+	}
+}
+
+func TestMobileVoiceSettingsSwitch(t *testing.T) {
+	registerFonts()
+	for _, size := range [][2]int{{320, 568}, {390, 750}, {750, 390}} {
+		t.Run(fmt.Sprint(size), func(t *testing.T) {
+			m := &mobileApp{client: &rex.Client{}}
+			m.hello.Version = 6
+			tt := ui.NewTester(m.view, size[0], size[1])
+			if err := tt.Click("会话列表设置"); err != nil {
+				t.Fatal(err)
+			}
+			panel, ok := tt.Find("会话列表设置面板")
+			if !ok || panel.Y < 0 || panel.Y+panel.H > float32(size[1]) {
+				t.Fatalf("settings panel outside viewport: %v", panel)
+			}
+			if err := tt.Click("语音输入"); err != nil {
+				t.Fatal(err)
+			}
+			if !m.voiceEnabled {
+				t.Fatal("switch did not enable voice")
+			}
+			tt.Click("关闭会话列表设置")
+			tt.Click("会话列表设置")
+			if !m.voiceEnabled {
+				t.Fatal("reopening settings lost the choice")
+			}
+			if err := tt.Click("语音输入"); err != nil {
+				t.Fatal(err)
+			}
+			if m.voiceEnabled {
+				t.Fatal("switch did not disable voice")
+			}
+		})
+	}
 }
 func TestVoiceLivePreviewKeepsLatestWords(t *testing.T) {
 	preview := voiceLivePreview("前面说的文字，最后说的新内容", 8)

@@ -48,7 +48,28 @@ type mobileVoice struct {
 }
 
 func (m *mobileApp) voiceInputReady() bool {
-	return m.term != nil && !m.background && !m.selected.Exited && !m.needsRecovery() && (m.stream == nil || m.stream.inputReady())
+	return m.voiceEnabled && m.term != nil && !m.background && !m.selected.Exited && !m.needsRecovery() && (m.stream == nil || m.stream.inputReady())
+}
+
+func (m *mobileApp) setVoiceEnabled(enabled bool) {
+	m.voicePreferenceTouched = true
+	m.voiceEnabled = enabled
+	if !enabled {
+		m.cancelSpeech(true)
+	}
+	m.save("voice-input-enabled", keychainBool(enabled), func() { m.error = "无法保存语音输入设置"; m.invalidate() })
+	m.invalidate()
+}
+
+func (m *mobileApp) applyLoadedVoicePreference(enabled bool) {
+	if m.voicePreferenceTouched {
+		return
+	}
+	m.voiceEnabled = enabled
+	if !enabled {
+		m.cancelSpeech(true)
+	}
+	m.invalidate()
 }
 func (m *mobileApp) voiceTargetCurrent() bool {
 	return m.voice.term == m.term && m.voice.sid == m.selected.ID && m.voice.generation == m.generation
@@ -296,6 +317,9 @@ func (m *mobileApp) sendVoiceDraft(s ui.Services) {
 	}
 }
 func (m *mobileApp) voiceView(c *ui.Context, terminalElement ui.Element) {
+	if !m.voiceEnabled {
+		return
+	}
 	v := &m.voice
 	if !m.voiceTargetCurrent() {
 		m.cancelSpeech(true)
@@ -398,7 +422,7 @@ func (m *mobileApp) voiceView(c *ui.Context, terminalElement ui.Element) {
 // they arrive, including in the reduced viewport above an open keyboard.
 func (m *mobileApp) voiceOverlay(c *ui.Context, keyboardFocused bool) {
 	v := &m.voice
-	if !v.held && v.phase != voiceFinishing {
+	if !m.voiceEnabled || !v.held && v.phase != voiceFinishing {
 		return
 	}
 	theme := *c.Theme()

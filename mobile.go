@@ -57,6 +57,8 @@ type mobileApp struct {
 	navigationPage                     string
 	keyboardMore                       bool
 	voice                              mobileVoice
+	voiceEnabled                       bool
+	voicePreferenceTouched             bool
 	background                         bool
 	presence                           map[string]desktopPresence
 	presenceCancel                     context.CancelFunc
@@ -171,10 +173,15 @@ func mobileMain() {
 			if saved, err := m.store.Get("size-lock"); err == nil {
 				sizeLock = string(saved) == "1"
 			}
+			voiceEnabled := false
+			if saved, err := m.store.Get("voice-input-enabled"); err == nil {
+				voiceEnabled = string(saved) == "1"
+			}
 			history = readDesktopHistory(m.store)
 			mygo.RunOnMain(func() {
 				m.restoreConnectionDiagnostics(diagnostics)
 				m.sizeLock = sizeLock
+				m.applyLoadedVoicePreference(voiceEnabled)
 				if m.historyEpoch == historyEpoch {
 					m.applyLoadedConnectionHistory(history, recentSessions, historyEpoch)
 					if m.pendingSession != "" {

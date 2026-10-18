@@ -214,10 +214,13 @@ func (s *session) writeScreens(p *screenPeer) {
 			p.eventBytes -= len(event)
 			s.mu.Unlock()
 		}
-		// Pace by measured delivery+ack time. At most one frame is in flight;
-		// queued mutations collapse into the next authoritative snapshot.
+		// Pace frame starts, counting delivery and receiver processing toward
+		// the interval. Waiting a full interval after the ack stacks an idle gap
+		// on top of network/decoding time and delays interactive scrolling.
+		// At most one frame is in flight; queued mutations still collapse into
+		// the next authoritative snapshot.
 		interval = max(16*time.Millisecond, min((interval*3+time.Since(started)/2)/4, time.Second))
-		pace := time.NewTimer(interval)
+		pace := time.NewTimer(max(interval-time.Since(started), 0))
 		select {
 		case <-pace.C:
 		case <-p.stop:

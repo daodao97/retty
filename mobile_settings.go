@@ -14,8 +14,8 @@ func (m *mobileApp) sessionSettingsDialog(c *ui.Context) {
 	}
 	ui.DialogBase(c, &m.sessionSettingsOpen, func(back, panel ui.Element) {
 		back.Background(ui.RGBA(0, 0, 0, .4)).Column().Justify(ui.End).AlignItems(ui.Center).Padding(12)
-		panel.Label("会话列表设置面板").FillWidth().MaxWidth(480).Padding(16).Radius(20).Background(c.Theme().Surface).Column().Gap(12)
-		ui.Row(c).FillWidth().Height(40).AlignItems(ui.Center).Children(func() {
+		panel.Label("会话列表设置面板").FillWidth().MaxWidth(480).MaxHeight(c.Root().Bounds().H - 24).Padding(16).Radius(20).Background(c.Theme().Surface).Column().Gap(12).Clip()
+		ui.Row(c).FillWidth().Height(40).Shrink(0).AlignItems(ui.Center).Children(func() {
 			ui.Text(c, "会话列表设置").FontSize(17).Bold().Grow(1)
 			if ui.ButtonBase(c).Label("关闭会话列表设置").Role(ui.RoleButton).Size(40, 40).Radius(20).Background(c.Theme().Background).Children(func() {
 				ui.Icon(c, icon("x")).Size(16, 16).TextColor(c.Theme().TextMuted)
@@ -23,39 +23,45 @@ func (m *mobileApp) sessionSettingsDialog(c *ui.Context) {
 				m.sessionSettingsOpen = false
 			}
 		})
-		if ui.ButtonBase(c).Label("重命名连接设备").Role(ui.RoleButton).FillWidth().MinHeight(72).Padding(12).Radius(12).Background(c.Theme().Background).Gap(12).AlignItems(ui.Center).Children(func() {
-			ui.Box(c).Size(32, 32).Shrink(0).Radius(10).Background(c.Theme().Surface).Center().Children(func() {
-				ui.Icon(c, icon("monitor")).Size(17, 17).TextColor(c.Theme().TextMuted)
-			})
-			ui.Column(c).Grow(1).MinWidth(0).Gap(4).Children(func() {
-				ui.Text(c, "设备名称").FontSize(15)
-				ui.Text(c, m.connectedDevice().displayName()).FontSize(12).TextColor(c.Theme().TextMuted).FillWidth().SingleLine().Ellipsis("…")
-			})
-			ui.Icon(c, icon("pencil")).Size(16, 16).Shrink(0).TextColor(c.Theme().TextMuted)
-		}).Clicked() {
-			m.deviceNameDraft = m.connectedDevice().Alias
-			m.sessionSettingsOpen, m.deviceNameOpen = false, true
-			c.Blur()
-		}
-		enabled := !m.pushDisabled
-		if mobileSettingSwitch(c, &enabled, "手机通知", "bell", "手机通知", "接收此手机的后台任务提醒").Changed() {
-			m.setPushEnabled(enabled)
-		}
-		if m.hello.Version >= 6 {
-			enabled := m.sizeLock
-			if mobileSettingSwitch(c, &enabled, "按手机尺寸显示", "smartphone", "按手机尺寸显示", "离开后恢复桌面尺寸").Changed() {
-				m.setSizeLock(enabled)
+		ui.Scroll(c.Key("mobile-settings-options")).FillWidth().MinHeight(0).Shrink(1).Gap(12).Children(func() {
+			if ui.ButtonBase(c).Label("重命名连接设备").Role(ui.RoleButton).FillWidth().MinHeight(72).Padding(12).Radius(12).Background(c.Theme().Background).Gap(12).AlignItems(ui.Center).Children(func() {
+				ui.Box(c).Size(32, 32).Shrink(0).Radius(10).Background(c.Theme().Surface).Center().Children(func() {
+					ui.Icon(c, icon("monitor")).Size(17, 17).TextColor(c.Theme().TextMuted)
+				})
+				ui.Column(c).Grow(1).MinWidth(0).Gap(4).Children(func() {
+					ui.Text(c, "设备名称").FontSize(15)
+					ui.Text(c, m.connectedDevice().displayName()).FontSize(12).TextColor(c.Theme().TextMuted).FillWidth().SingleLine().Ellipsis("…")
+				})
+				ui.Icon(c, icon("pencil")).Size(16, 16).Shrink(0).TextColor(c.Theme().TextMuted)
+			}).Clicked() {
+				m.deviceNameDraft = m.connectedDevice().Alias
+				m.sessionSettingsOpen, m.deviceNameOpen = false, true
+				c.Blur()
 			}
-		}
-		if m.pushError != "" && !m.pushDisabled {
-			ui.Row(c).FillWidth().Gap(8).AlignItems(ui.Center).Children(func() {
-				ui.Text(c, m.pushError).FontSize(12).LineHeight(1.4).TextColor(c.Theme().TextMuted).Grow(1).MinWidth(0)
-				if m.notificationDenied && mobileIconAction(c, "打开通知设置", "chevron-right").Clicked() {
-					go mygo.Permissions.OpenSettings()
+			enabled := !m.pushDisabled
+			if mobileSettingSwitch(c, &enabled, "手机通知", "bell", "手机通知", "接收此手机的后台任务提醒").Changed() {
+				m.setPushEnabled(enabled)
+			}
+			voiceEnabled := m.voiceEnabled
+			if mobileSettingSwitch(c, &voiceEnabled, "语音输入", "mic", "语音输入", "在会话页面显示按住说话区域").Changed() {
+				m.setVoiceEnabled(voiceEnabled)
+			}
+			if m.hello.Version >= 6 {
+				enabled := m.sizeLock
+				if mobileSettingSwitch(c, &enabled, "按手机尺寸显示", "smartphone", "按手机尺寸显示", "离开后恢复桌面尺寸").Changed() {
+					m.setSizeLock(enabled)
 				}
-			})
-		}
-		m.connectionDiagnosticsAction(c)
+			}
+			if m.pushError != "" && !m.pushDisabled {
+				ui.Row(c).FillWidth().Gap(8).AlignItems(ui.Center).Children(func() {
+					ui.Text(c, m.pushError).FontSize(12).LineHeight(1.4).TextColor(c.Theme().TextMuted).Grow(1).MinWidth(0)
+					if m.notificationDenied && mobileIconAction(c, "打开通知设置", "chevron-right").Clicked() {
+						go mygo.Permissions.OpenSettings()
+					}
+				})
+			}
+			m.connectionDiagnosticsAction(c)
+		})
 	})
 	m.deviceNameDialog(c)
 }
