@@ -187,7 +187,7 @@ func TestScrollback(t *testing.T) {
 		return term.term.Scrollbar().Offset
 	}
 	bottom := offset()
-	tt.Scroll(100, 100, 0, -40) // a notch of a mouse wheel up
+	tt.Wheel(100, 100, 0, -40) // a notch of a mouse wheel up
 	if got := offset(); got != bottom-3 {
 		t.Errorf("after scrolling a notch up, offset = %d, want %d", got, bottom-3)
 	}
@@ -439,7 +439,7 @@ func TestMouse(t *testing.T) {
 	if got, want := conn.take(9), "\x1b[<0;6;4m"; got != want {
 		t.Errorf("release sent %q, want %q", got, want)
 	}
-	tt.Scroll(x, y, 0, -40)
+	tt.Wheel(x, y, 0, -40)
 	if got := conn.take(30); !strings.HasPrefix(got, "\x1b[<64;3;4M") {
 		t.Errorf("wheel sent %q", got)
 	}

@@ -129,7 +129,7 @@ func TestAgentSelectionKeepsClicksWheelAndOverrides(t *testing.T) {
 	if got := conn.take(18); got != "\x1b[<0;3;4M\x1b[<0;3;4m" {
 		t.Fatalf("plain click = %q", got)
 	}
-	tt.Scroll(x, y, 0, 40)
+	tt.Wheel(x, y, 0, 40)
 	if got := conn.take(1); !strings.Contains(got, "\x1b[<65;") {
 		t.Fatalf("wheel was not passed to Agent: %q", got)
 	}

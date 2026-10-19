@@ -39,7 +39,7 @@ func TestEditorDragCopiesWithMouseTracking(t *testing.T) {
 	if got := conn.take(len("\x1b[<0;3;4M\x1b[<0;3;4m")); got != "\x1b[<0;3;4M\x1b[<0;3;4m" {
 		t.Fatalf("editor click = %q", got)
 	}
-	tt.Scroll(x0, y, 0, 40)
+	tt.Wheel(x0, y, 0, 40)
 	wheel := strings.Repeat("\x1b[<65;1;1M", 3)
 	if got := conn.take(len(wheel)); got != wheel {
 		t.Fatalf("editor wheel = %q", got)

@@ -210,3 +210,14 @@ native text-input client for indexed backends such as Android. This preserves
 the committed input and caret after English and Chinese edits instead of
 resetting UIKit's proxy to empty text at offset zero. The terminal plugin,
 Ghostty manifest and Retty's independent CLI/iOS packaging are unchanged.
+
+Fork commit `963f451f` merges upstream through `3e9f9c6c`, including partial
+GPU redraws, layout/text caches, asynchronous Metal drawable acquisition and
+smooth scrolling for framework scroll containers. The terminal plugin's
+implementation and Ghostty manifest are unchanged from `913e9acb7a9a`.
+`ui.Tester.Scroll` now models precise scrolling; `Tester.Wheel` models mouse
+wheel notches. Retty's wheel protocol/scrollback tests use `Wheel` to retain
+their existing three-row notch semantics, while phone/reflow and tap gesture
+tests retain precise scrolling. Retty keeps its local terminal additions and
+independent CLI/iOS packaging; the iOS text-context and keyboard-dismiss fixes
+remain in the fork.
