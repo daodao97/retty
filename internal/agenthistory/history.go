@@ -1,10 +1,10 @@
 // Package agenthistory reads local coding-agent history without starting an
-// agent or modifying its storage. Only display and resume metadata is retained.
+// agent inference. Native continuation preparation preserves original history;
+// Retty retains only display and resume metadata.
 package agenthistory
 
 import (
 	"bufio"
-	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -21,8 +21,11 @@ import (
 )
 
 type Session struct {
-	Agent, ID, Dir, Title, ConfigDir string
-	Updated                          time.Time
+	Agent, ID, Dir, Title, ConfigDir  string
+	Provider, AccountID, AccountLabel string
+	ResumeError                       string
+	Updated                           time.Time
+	named                             bool // database name takes precedence over an old JSONL index
 }
 
 func (s Session) Key() string { return s.Agent + ":" + s.ConfigDir + ":" + s.ID }
@@ -30,6 +33,9 @@ func (s Session) Key() string { return s.Agent + ":" + s.ConfigDir + ":" + s.ID 
 // Resume uses argv, never shell text or transcript commands. Preserve the
 // configuration home that owns this conversation, including for custom homes.
 func (s Session) Resume() (command, env []string, err error) {
+	if s.ResumeError != "" {
+		return nil, nil, errors.New(s.ResumeError)
+	}
 	if s.Agent != "codex" && s.Agent != "claude" {
 		return nil, nil, errors.New("不支持的 Agent")
 	}
@@ -45,6 +51,11 @@ func (s Session) Resume() (command, env []string, err error) {
 	}
 	if s.Agent == "codex" {
 		command = []string{"codex", "resume", s.ID, "-C", s.Dir}
+		if s.Provider != "" {
+			// Encode a TOML string rather than interpolating provider text as code.
+			provider, _ := json.Marshal(s.Provider)
+			command = append(command, "-c", "model_provider="+string(provider))
+		}
 	} else {
 		command = []string{"claude", "--resume", s.ID}
 	}
@@ -62,6 +73,11 @@ type cachedFile struct {
 type Reader struct{ files map[string]cachedFile }
 
 func (r *Reader) Read(codexHome, claudeHome string) ([]Session, error) {
+	return r.ReadSources(Sources{Homes: []Home{{Dir: codexHome}}}, claudeHome)
+}
+
+func (r *Reader) ReadSources(sources Sources, claudeHome string) ([]Session, error) {
+	sources.Homes = slices.Clone(sources.Homes)
 	next := make(map[string]cachedFile)
 	byID := make(map[string]Session)
 	var errs []error
@@ -73,6 +89,9 @@ func (r *Reader) Read(codexHome, claudeHome string) ([]Session, error) {
 		}
 		next[path] = cached
 		s := cached.session
+		// Several account homes may share a symlinked history directory. The
+		// parsed file is cacheable; its owning configuration home is not.
+		s.ConfigDir = home
 		if !validID(s.ID) || !filepath.IsAbs(s.Dir) {
 			return
 		}
@@ -80,24 +99,51 @@ func (r *Reader) Read(codexHome, claudeHome string) ([]Session, error) {
 			byID[s.Key()] = s
 		}
 	}
-	for _, sub := range []string{"sessions", "archived_sessions"} {
-		root := filepath.Join(codexHome, sub)
-		err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
-			if err != nil {
-				if !os.IsNotExist(err) {
-					errs = append(errs, fmt.Errorf("Codex 历史：%w", err))
+	for i, home := range sources.Homes {
+		if home.AccountID == "" {
+			home.AccountID = currentAccountID(home.Dir)
+			sources.Homes[i] = home
+		}
+		codexHome := home.Dir
+		for _, sub := range []string{"sessions", "archived_sessions"} {
+			root := filepath.Join(codexHome, sub)
+			if resolved, err := filepath.EvalSymlinks(root); err == nil {
+				root = resolved
+			}
+			err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+				if err != nil {
+					if !os.IsNotExist(err) {
+						errs = append(errs, fmt.Errorf("Codex 历史：%w", err))
+					}
+					return nil
+				}
+				// Imported snapshots back native fork lineage; they are not
+				// additional user conversations in the destination account.
+				if d.IsDir() && strings.HasPrefix(d.Name(), "retty-import-") {
+					return filepath.SkipDir
+				}
+				if !d.IsDir() && d.Type().IsRegular() && strings.HasPrefix(d.Name(), "rollout-") && strings.HasSuffix(path, ".jsonl") {
+					if st, err := d.Info(); err == nil {
+						add(path, "codex", codexHome, st)
+					}
 				}
 				return nil
+			})
+			if err != nil {
+				errs = append(errs, err)
 			}
-			if !d.IsDir() && d.Type().IsRegular() && strings.HasPrefix(d.Name(), "rollout-") && strings.HasSuffix(path, ".jsonl") {
-				if st, err := d.Info(); err == nil {
-					add(path, "codex", codexHome, st)
-				}
-			}
-			return nil
-		})
+		}
+		// Paginated Codex history no longer has a rollout JSONL on disk. The
+		// state database is authoritative for its title, provider and activity.
+		sessions, err := readCodexDatabase(codexHome)
 		if err != nil {
-			errs = append(errs, err)
+			errs = append(errs, fmt.Errorf("Codex 历史 %s：%w", codexHome, err))
+		}
+		for _, s := range sessions {
+			if old, ok := byID[s.Key()]; ok && s.Title == "" {
+				s.Title = old.Title
+			}
+			byID[s.Key()] = s
 		}
 	}
 	// Claude's top-level transcripts are projects/<encoded directory>/<id>.jsonl.
@@ -125,11 +171,21 @@ func (r *Reader) Read(codexHome, claudeHome string) ([]Session, error) {
 		}
 	}
 	r.files = next
-	names := codexNames(filepath.Join(codexHome, "session_index.jsonl"))
+	names := make(map[string]map[string]string)
+	for _, home := range sources.Homes {
+		names[home.Dir] = codexNames(filepath.Join(home.Dir, "session_index.jsonl"))
+	}
 	result := make([]Session, 0, len(byID))
 	for _, s := range byID {
-		if s.Agent == "codex" && names[s.ID] != "" {
-			s.Title = names[s.ID]
+		if s.Agent == "codex" {
+			if title := names[s.ConfigDir][s.ID]; title != "" && !s.named {
+				s.Title = title
+			}
+			var keep bool
+			s, keep = sources.describe(s, byID)
+			if !keep {
+				continue
+			}
 		}
 		if s.Title == "" {
 			s.Title = s.ID
@@ -178,6 +234,8 @@ func readSession(path, agent, home string, modified time.Time) Session {
 			Message                                             json.RawMessage
 			Payload                                             struct {
 				ID, CWD, Type, Message string
+				ModelProvider          string `json:"model_provider"`
+				CreatorAccountID       string `json:"creator_account_id"`
 				ThreadSource           string `json:"thread_source"`
 				Source                 json.RawMessage
 			}
@@ -190,10 +248,11 @@ func readSession(path, agent, home string, modified time.Time) Session {
 			if e.Type == "session_meta" {
 				// Source objects identify spawned workers. Old root sessions can
 				// omit source; user CLI, editor and app sessions are all included.
-				if e.Payload.ThreadSource == "subagent" || bytes.Contains(p.Source, []byte("subagent")) {
+				if hiddenCodexSource(string(p.Source), p.ThreadSource) {
 					invalid = true
 				}
 				s.ID, s.Dir = p.ID, p.CWD
+				s.Provider, s.AccountID = p.ModelProvider, p.CreatorAccountID
 			}
 			if title == "" && e.Type == "event_msg" && p.Type == "user_message" {
 				title = displayTitle(p.Message)

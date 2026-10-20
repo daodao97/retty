@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -24,8 +25,12 @@ type sidebarAgentHistory struct {
 	children map[string][]string
 	outline  ui.OutlineState[string]
 	selected int
-	opened   map[string]string // history identity -> PTY, before lifecycle hooks arrive
-	resuming map[string]bool   // command lookup in progress, shared by repeated clicks
+	// History identity -> PTY before lifecycle hooks arrive.
+	opened map[string]string
+	// Preparation in progress, shared by repeated clicks.
+	resuming map[string]bool
+
+	prepareCodex func(agenthistory.Session, string, string, string, []string) (agenthistory.Session, error) // fixture/native preparation
 }
 
 func (a *App) refreshAgentHistory(c *ui.Context, force bool) {
@@ -54,7 +59,9 @@ func (a *App) refreshAgentHistory(c *ui.Context, force bool) {
 	h.nextRead = c.Now().Add(15 * time.Second)
 	update, services := a.desktopDispatcher(), c.Services()
 	go func() {
-		sessions, err := h.reader.Read(codex, claude)
+		home, _ := os.UserHomeDir()
+		sources := agenthistory.DiscoverCodexSources(home, codex)
+		sessions, err := h.reader.ReadSources(sources, claude)
 		update(func() {
 			h.loading, h.loaded, h.err = false, true, ""
 			if a.quitting || a.agentHistory != h {
@@ -155,6 +162,13 @@ func (a *App) sidebarHistoryRow(c *ui.Context, k *colors, h *sidebarAgentHistory
 		label, glyph = s.Title, programOf(s.Agent).Glyph
 		color = programIconColor(c, programOf(s.Agent))
 		tooltip = fmt.Sprintf("%s · %s\n%s\n%s\n打开会话；已打开时切换到原标签页", programOf(s.Agent).Name, s.Updated.Local().Format("2006-01-02 15:04"), s.Dir, s.ID)
+		if s.Agent == "codex" {
+			tooltip += "\n使用当前 provider 和登录账号继续；切换来源时保留原历史并创建续接分支"
+			tooltip += "\n账号来源：" + s.AccountLabel + "\n配置目录：" + s.ConfigDir
+			if s.Provider != "" {
+				tooltip += "\nProvider：" + s.Provider
+			}
+		}
 	} else {
 		dir := key[len("project:"):]
 		label, tooltip = filepath.Base(dir), dir
@@ -186,7 +200,7 @@ func (a *App) activateHistoryItem(c *ui.Context, h *sidebarAgentHistory, key str
 			if a.quitting {
 				return
 			}
-			if a.activateOpenHistory(h, s) {
+			if s.Agent != "codex" && a.activateOpenHistory(h, s) {
 				return
 			}
 			a.resumeHistorySession(h, s)
@@ -210,31 +224,49 @@ func (a *App) resumeHistorySession(h *sidebarAgentHistory, s agenthistory.Sessio
 	update, services := a.desktopDispatcher(), a.services
 	agentName := programOf(s.Agent).Name
 	go func() {
-		command, env, err := s.Resume()
+		target := s
+		executable, pathEnv, err := rex.ResumeExecutable(s.Agent)
+		if err != nil {
+			err = fmt.Errorf("无法找到 %s 命令，请确认已安装且可在登录 shell 中运行：%w", agentName, err)
+		} else if s.Agent == "codex" {
+			var home string
+			home, err = agents.ConfigDir("codex")
+			if err == nil {
+				prepare := h.prepareCodex
+				if prepare == nil {
+					prepare = agenthistory.ContinueCodex
+				}
+				target, err = prepare(s, executable, home, filepath.Join(rex.Dir(), "codex-continuations.json"), pathEnv)
+			}
+		}
+		ready := err == nil
+		var command, env []string
 		if err == nil {
-			var pathEnv []string
-			command[0], pathEnv, err = rex.ResumeExecutable(command[0])
-			env = append(pathEnv, env...)
-			if err != nil {
-				err = fmt.Errorf("无法找到 %s 命令，请确认已安装且可在登录 shell 中运行：%w", agentName, err)
+			command, env, err = target.Resume()
+			if err == nil {
+				command[0] = executable
+				env = append(pathEnv, env...)
 			}
 		}
 		update(func() {
 			delete(h.resuming, s.Key())
-			if a.quitting || a.activateOpenHistory(h, s) {
+			if a.quitting {
+				return
+			}
+			if ready && a.activateOpenHistory(h, target) {
 				return
 			}
 			if err != nil {
 				a.err = err.Error()
 				return
 			}
-			t := a.newLocalOptionsTab(rex.CreateOptions{Dir: s.Dir, Command: command, Env: env})
+			t := a.newLocalOptionsTab(rex.CreateOptions{Dir: target.Dir, Command: command, Env: env})
 			t.Name = s.Title
 			if t.Focus.SID != "" {
 				if h.opened == nil {
 					h.opened = make(map[string]string)
 				}
-				h.opened[s.Key()] = t.Focus.SID
+				h.opened[target.Key()] = t.Focus.SID
 			}
 		})
 		services.Invalidate()
@@ -247,6 +279,14 @@ func (a *App) activateOpenHistory(h *sidebarAgentHistory, s agenthistory.Session
 			continue
 		}
 		state := p.info.Agent
+		if state.ID == s.Agent && state.ConfigDir != "" && !sameHistoryHome(state.ConfigDir, s.ConfigDir) {
+			continue
+		}
+		// Older servers did not expose the config home. When several homes
+		// contain the same ID, only a known launch may resolve that ambiguity.
+		if state.ConfigDir == "" && h.opened[s.Key()] != p.SID && ambiguousHistoryHome(h, s) {
+			continue
+		}
 		match := false
 		if state.ID == s.Agent && state.SessionID != "" && state.Source != rex.ProgramStatusSource {
 			// The user can switch conversations inside an existing CLI. Current
@@ -262,6 +302,24 @@ func (a *App) activateOpenHistory(h *sidebarAgentHistory, s agenthistory.Session
 				a.toggleFiles()
 			}
 			return a.focusAgentPane(p.noticeKey())
+		}
+	}
+	return false
+}
+
+func sameHistoryHome(a, b string) bool {
+	if a, err := filepath.EvalSymlinks(a); err == nil {
+		if b, err := filepath.EvalSymlinks(b); err == nil {
+			return a == b
+		}
+	}
+	return filepath.Clean(a) == filepath.Clean(b)
+}
+
+func ambiguousHistoryHome(h *sidebarAgentHistory, s agenthistory.Session) bool {
+	for _, other := range h.sessions {
+		if other.Agent == s.Agent && other.ID == s.ID && !sameHistoryHome(other.ConfigDir, s.ConfigDir) {
+			return true
 		}
 	}
 	return false

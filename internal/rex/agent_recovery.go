@@ -55,7 +55,7 @@ func resumeConfigEnv(agent string, config *string, inherited []string) []string 
 // their values (which might contain a prompt) cannot be mistaken for options.
 func resumeValueOptions(agent string) []string {
 	if agent == "codex" {
-		return []string{"-m", "--model", "-p", "--profile", "-s", "--sandbox", "-a", "--ask-for-approval"}
+		return []string{"-m", "--model", "-p", "--profile", "-s", "--sandbox", "-a", "--ask-for-approval", "-c", "--config"}
 	}
 	return []string{"--model", "--effort", "--permission-mode"}
 }
@@ -83,6 +83,9 @@ func resumeOptions(agent string, argv []string) (out []string, supported bool) {
 					return out, true
 				}
 				value = argv[i]
+			}
+			if agent == "codex" && (arg == "-c" || arg == "--config") && !codexProviderConfig(value) {
+				break
 			}
 			out = append(out, arg, value)
 			continue
@@ -112,6 +115,14 @@ func resumeOptions(agent string, argv []string) (out []string, supported bool) {
 	return out, true
 }
 
+// Preserve only the provider selector, never arbitrary config overrides that
+// may contain bearer tokens, headers or instructions.
+func codexProviderConfig(value string) bool {
+	raw, ok := strings.CutPrefix(value, "model_provider=")
+	var provider string
+	return ok && json.Unmarshal([]byte(raw), &provider) == nil && provider != "" && len(provider) <= 256 && !strings.ContainsAny(provider, "\x00\r\n")
+}
+
 func (r agentResume) command() ([]string, error) {
 	if r.Agent != "codex" && r.Agent != "claude" {
 		return nil, errors.New("unsupported Agent")
@@ -139,6 +150,9 @@ func (r agentResume) command() ([]string, error) {
 			i++
 			if i >= len(r.Options) {
 				return nil, errors.New("missing Agent option value")
+			}
+			if r.Agent == "codex" && (option == "-c" || option == "--config") && !codexProviderConfig(r.Options[i]) {
+				return nil, errors.New("unsupported Agent config override")
 			}
 		} else if r.Agent != "codex" || option != "--no-daemon" && option != "--full-auto" {
 			return nil, errors.New("unsupported Agent resume option")

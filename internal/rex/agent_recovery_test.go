@@ -67,6 +67,8 @@ func TestResumeLaunchMetadata(t *testing.T) {
 	}{
 		{"codex", []string{"codex", "--remote", "unix:///old-private.sock", "-C", "/old", "-p", "work", "--model=o3", "resume", "old-id", "old prompt --model secret"}, []string{"-p", "work", "--model", "o3"}, true},
 		{"codex", []string{"node", "/opt/bin/codex.js", "--no-daemon", "--full-auto", "hello"}, []string{"--no-daemon", "--full-auto"}, true},
+		{"codex", []string{"codex", "resume", "exact", "-c", `model_provider="gateway"`}, []string{"-c", `model_provider="gateway"`}, true},
+		{"codex", []string{"codex", "--config", `model_providers.gateway.experimental_bearer_token="fixture-secret"`}, nil, true},
 		{"claude", []string{"claude", "--model", "sonnet", "--effort=high", "--resume", "old-id", "a prompt"}, []string{"--model", "sonnet", "--effort", "high"}, true},
 		{"claude", []string{"claude", "--settings", "private settings", "--no-session-persistence"}, nil, false},
 		{"codex", []string{"codex", "--ephemeral"}, nil, false},
@@ -99,6 +101,32 @@ func TestResumeLaunchMetadata(t *testing.T) {
 		if _, err := r.command(); err == nil {
 			t.Fatal("accepted credentials")
 		}
+	}
+}
+
+func TestRecoveryProviderOverrideRejectsOtherConfig(t *testing.T) {
+	r := agentResume{Agent: "codex", SessionID: "exact", Dir: t.TempDir(), Options: []string{"--config", `model_provider="gateway"`}}
+	if _, err := r.command(); err != nil {
+		t.Fatal(err)
+	}
+	for _, value := range []string{`model_provider=""`, `model_provider=123`, `model_provider="gateway"\nmodel="injected"`, `model_providers.gateway.env_key="SECRET"`} {
+		r.Options[1] = value
+		if _, err := r.command(); err == nil {
+			t.Fatal("unsafe persisted config accepted")
+		}
+	}
+}
+
+func TestAgentLifecyclePreservesConfigurationHome(t *testing.T) {
+	var tracker agentTracker
+	home := t.TempDir()
+	tracker.apply(AgentEvent{Agent: "codex", At: time.Now(), Input: agents.HookInput{SessionID: "exact", Event: "SessionStart", ConfigDir: &home}})
+	if tracker.state.ConfigDir != home {
+		t.Fatal("hook configuration home lost")
+	}
+	tracker.apply(AgentEvent{Agent: "codex", At: time.Now(), Input: agents.HookInput{SessionID: "exact", Event: "UserPromptSubmit"}})
+	if tracker.state.ConfigDir != home {
+		t.Fatal("later lifecycle event erased configuration identity")
 	}
 }
 

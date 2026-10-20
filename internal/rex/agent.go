@@ -18,6 +18,7 @@ import (
 type AgentState struct {
 	ID                 string    `json:"id,omitempty"`
 	SessionID          string    `json:"sessionID,omitempty"`
+	ConfigDir          string    `json:"configDir,omitempty"`
 	State              string    `json:"state,omitempty"`
 	Reason             string    `json:"reason,omitempty"`
 	Updated            time.Time `json:"updated,omitzero"`
@@ -220,7 +221,21 @@ func (t *agentTracker) apply(e AgentEvent) {
 			summary = t.state.Summary
 		}
 	}
-	t.state = AgentState{ID: e.Agent, SessionID: h.SessionID, State: state, Reason: reason, Updated: e.At, WaitRevision: revision, CompletionRevision: completion, Summary: summary}
+	configDir := t.state.ConfigDir
+	if t.state.ID != e.Agent || t.state.SessionID != h.SessionID {
+		configDir = ""
+	}
+	if h.ConfigDir != nil {
+		configDir = *h.ConfigDir
+		if configDir == "" {
+			if home, err := os.UserHomeDir(); err == nil {
+				configDir = filepath.Join(home, "."+e.Agent)
+			}
+		} else if !filepath.IsAbs(configDir) && filepath.IsAbs(h.CWD) {
+			configDir = filepath.Join(h.CWD, configDir)
+		}
+	}
+	t.state = AgentState{ID: e.Agent, SessionID: h.SessionID, ConfigDir: configDir, State: state, Reason: reason, Updated: e.At, WaitRevision: revision, CompletionRevision: completion, Summary: summary}
 	if state == agents.Ended {
 		t.state.State = ""
 	}

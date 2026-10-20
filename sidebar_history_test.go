@@ -16,6 +16,7 @@ import (
 
 func historyFixture(a *App, sessions []agenthistory.Session) {
 	a.agentHistory = &sidebarAgentHistory{loaded: true, nextRead: time.Now().Add(time.Hour), selected: -1}
+	a.agentHistory.prepareCodex = func(s agenthistory.Session, _, _, _ string, _ []string) (agenthistory.Session, error) { return s, nil }
 	a.agentHistory.setSessions(sessions)
 }
 
@@ -102,7 +103,7 @@ func TestSidebarProjectHistoryDisclosureAndResume(t *testing.T) {
 		if err := tt.Click("恢复 " + programOf(s.Agent).Name + " 会话 " + s.Title); err != nil {
 			t.Fatal(err)
 		}
-		tt.Frame()
+		waitFor(t, tt, "reactivate history pane", func() bool { return a.tab().Focus == p })
 		if len(a.tabs) != i+2 || a.tab().Focus != p {
 			t.Fatal("already-open conversation was resumed a second time")
 		}
@@ -203,6 +204,56 @@ func TestHistoryResumeArgsExactIdentity(t *testing.T) {
 	}
 }
 
+func TestSidebarHistoryDoesNotActivateOtherAccountHome(t *testing.T) {
+	a, _ := newTestApp(t)
+	p := a.tab().Focus
+	first := agenthistory.Session{Agent: "codex", ID: "same-id", ConfigDir: "/accounts/first"}
+	second := first
+	second.ConfigDir = "/accounts/second"
+	h := &sidebarAgentHistory{sessions: map[string]agenthistory.Session{first.Key(): first, second.Key(): second}}
+	p.info.Agent = rex.AgentState{ID: "codex", SessionID: "same-id", State: "running", ConfigDir: first.ConfigDir}
+	if a.activateOpenHistory(h, second) || !a.activateOpenHistory(h, first) {
+		t.Fatal("conversation ID crossed account configuration homes")
+	}
+	p.info.Agent.ConfigDir = ""
+	if a.activateOpenHistory(h, first) || a.activateOpenHistory(h, second) {
+		t.Fatal("legacy server guessed a configuration home for an ambiguous ID")
+	}
+	h.opened = map[string]string{second.Key(): p.SID}
+	if !a.activateOpenHistory(h, second) {
+		t.Fatal("known scoped launch was not reused")
+	}
+}
+
+func TestSidebarHistoryShowsTitlesWithoutAccountOrProvider(t *testing.T) {
+	previous := prefs
+	prefs = settings{FontSize: defaultFontSize, DesktopLayout: "sidebar"}
+	t.Cleanup(func() { prefs = previous })
+	t.Setenv("RETTY_DIR", t.TempDir())
+	a, tt := newStaticTestApp(t)
+	a.tab().Name = "Retty"
+	a.tab().Focus.term.Feed([]byte("\x1b[2J\x1b[H› Select a conversation to resume\r\n"))
+	historyFixture(a, []agenthistory.Session{
+		{Agent: "codex", ID: "personal", Dir: "/work/retty", ConfigDir: "/fixture/personal", Title: "Personal conversation", Provider: "openai", AccountLabel: "Default Codex Account", Updated: time.Now()},
+		{Agent: "codex", ID: "work", Dir: "/work/retty", ConfigDir: "/fixture/work", Title: "Gateway conversation", Provider: "aicoding", AccountLabel: "Work", Updated: time.Now()},
+	})
+	a.agentHistory.outline.Open.Add("project:/work/retty")
+	tt.Frame()
+	for _, text := range []string{"Personal conversation", "Gateway conversation"} {
+		if !tt.HasText(text) {
+			t.Fatal("title missing from history row", text)
+		}
+	}
+	for _, text := range []string{"Default Codex Account", "Work", "openai · Default Codex Account", "aicoding · Work"} {
+		if tt.HasText(text) {
+			t.Fatal("account/provider remains in history row", text)
+		}
+	}
+	tt.SetTitleBar(ui.TitleBar{Left: 80, Height: 44})
+	tt.SetScale(2)
+	saveSettingsImage(t, tt, "sidebar-history-titles")
+}
+
 func TestSidebarHistoryAsyncRefreshAndMissingProject(t *testing.T) {
 	previous := prefs
 	prefs = settings{FontSize: defaultFontSize, DesktopLayout: "sidebar"}
@@ -216,6 +267,7 @@ func TestSidebarHistoryAsyncRefreshAndMissingProject(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { os.RemoveAll(home) })
+	t.Setenv("HOME", home)
 	t.Setenv("CODEX_HOME", filepath.Join(home, "codex"))
 	t.Setenv("CLAUDE_CONFIG_DIR", filepath.Join(home, "claude"))
 	project := filepath.Join(home, "missing project")
@@ -358,6 +410,9 @@ func TestSidebarHistoryClickFocusesNestedPaneWithoutNewTab(t *testing.T) {
 			prefs = settings{FontSize: defaultFontSize, DesktopLayout: "sidebar"}
 			t.Cleanup(func() { prefs = previous })
 			a, tt := newTestApp(t)
+			bin := t.TempDir()
+			os.WriteFile(filepath.Join(bin, "codex"), []byte("#!/bin/sh\nexit 0\n"), 0700)
+			t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 			original, left := a.tab(), a.tab().Focus
 			a.split(false)
 			a.split(true)
@@ -387,7 +442,7 @@ func TestSidebarHistoryClickFocusesNestedPaneWithoutNewTab(t *testing.T) {
 				if err := tt.Click("恢复 " + programOf(agent).Name + " 会话 " + s.Title); err != nil {
 					t.Fatal(err)
 				}
-				tt.Frame()
+				waitFor(t, tt, "focus nested history pane", func() bool { return a.tab() == original && original.Focus == target })
 				if len(a.tabs) != 2 || a.tab() != original || original.Focus != target || original.Zoom != nil {
 					t.Fatal("sidebar did not reveal the existing nested pane")
 				}
@@ -409,5 +464,50 @@ func TestSidebarHistoryClickFocusesNestedPaneWithoutNewTab(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestSidebarCodexHistoryFocusesCurrentProviderContinuation(t *testing.T) {
+	previous := prefs
+	prefs = settings{FontSize: defaultFontSize, DesktopLayout: "sidebar"}
+	t.Cleanup(func() { prefs = previous })
+	a, tt := newTestApp(t)
+	bin := t.TempDir()
+	os.WriteFile(filepath.Join(bin, "codex"), []byte("#!/bin/sh\nexit 0\n"), 0700)
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	original := a.tab()
+	originalPane := original.Focus
+	originalPane.info.Agent = rex.AgentState{ID: "codex", SessionID: "old-provider-session", State: "running", ConfigDir: "/fixture/current"}
+	continuationTab := a.newTab("/tmp")
+	a.split(false)
+	continuationPane := continuationTab.Focus
+	continuationPane.info.Agent = rex.AgentState{ID: "codex", SessionID: "current-provider-branch", State: "running", ConfigDir: "/fixture/current"}
+	continuationTab.setFocus(continuationTab.panes()[0])
+	continuationTab.Zoom = continuationTab.Focus
+	a.selectTab(0)
+	source := agenthistory.Session{Agent: "codex", ID: "old-provider-session", Dir: "/fixture/project", ConfigDir: "/fixture/current", Provider: "before", Title: "Old provider history"}
+	historyFixture(a, []agenthistory.Session{source})
+	a.agentHistory.outline.Open.Add("project:" + source.Dir)
+	a.agentHistory.prepareCodex = func(s agenthistory.Session, _, _, _ string, _ []string) (agenthistory.Session, error) {
+		s.ID = "current-provider-branch"
+		s.Provider = "after"
+		return s, nil
+	}
+	tt.Frame()
+	before, _ := a.client.List()
+	for range 2 {
+		if err := tt.Click("恢复 Codex 会话 " + source.Title); err != nil {
+			t.Fatal(err)
+		}
+		waitFor(t, tt, "current-provider continuation pane", func() bool { return a.tab() == continuationTab && a.tab().Focus == continuationPane })
+		if len(a.tabs) != 2 || continuationTab.Zoom != nil || a.tab() == original {
+			t.Fatal("activated original provider or created another tab")
+		}
+		a.selectTab(0)
+		tt.Frame()
+	}
+	after, _ := a.client.List()
+	if len(before) != len(after) {
+		t.Fatal("continuation activation created a PTY")
 	}
 }
