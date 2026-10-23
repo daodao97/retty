@@ -46,6 +46,12 @@ func drawn(r rune) bool {
 	return false
 }
 
+// noMinContrast also preserves shapes supplied by the font, including dashed
+// borders, legacy computing symbols and the full Powerline range.
+func noMinContrast(r rune) bool {
+	return 0x2500 <= r && r <= 0x259f || 0x1fb00 <= r && r <= 0x1fbff || 0xe0b0 <= r && r <= 0xe0d7
+}
+
 // drawBox draws r in cell c.
 func drawBox(p *ui.Painter, r rune, c ui.Rect, col ui.Color) {
 	s := p.Scale()

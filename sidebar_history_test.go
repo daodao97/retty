@@ -511,3 +511,56 @@ func TestSidebarCodexHistoryFocusesCurrentProviderContinuation(t *testing.T) {
 		t.Fatal("continuation activation created a PTY")
 	}
 }
+
+func TestSidebarHistoryProjectSelectionIsOnlyForKeyboardNavigation(t *testing.T) {
+	previous := prefs
+	prefs = settings{FontSize: defaultFontSize, DesktopLayout: "sidebar"}
+	t.Cleanup(func() { prefs = previous })
+	t.Setenv("RETTY_DIR", t.TempDir())
+	a, tt := newStaticTestApp(t)
+	historyFixture(a, []agenthistory.Session{{Agent: "claude", ID: "fixture", Dir: "/work/project", ConfigDir: "/fixture", Title: "Conversation", Updated: time.Now()}})
+	h := a.agentHistory
+	tt.Frame()
+	for range 2 {
+		if err := tt.Click("project"); err != nil {
+			t.Fatal(err)
+		}
+		tt.Move(700, 400)
+		tt.Frame()
+		if h.selected != -1 {
+			t.Fatal("mouse disclosure left project selected", h.selected)
+		}
+	}
+	// Keyboard selection must still give Left/Right a row to expand/collapse.
+	for range 30 {
+		if tt.Focused("项目会话列表") {
+			break
+		}
+		tt.Key(ui.Shift, ui.KeyTab)
+	}
+	if !tt.Focused("项目会话列表") {
+		t.Fatal("history outline is not keyboard reachable")
+	}
+	tt.Key(0, ui.KeyDown)
+	tt.Frame()
+	if h.selected != 0 {
+		t.Fatal("keyboard project selection lost", h.selected)
+	}
+	tt.Key(0, ui.KeyRight)
+	tt.Frame()
+	if !h.outline.Open.Has("project:/work/project") {
+		t.Fatal("keyboard cannot expand project")
+	}
+	tt.Key(0, ui.KeyLeft)
+	tt.Frame()
+	if h.outline.Open.Has("project:/work/project") {
+		t.Fatal("keyboard cannot collapse project")
+	}
+	if err := tt.Click("Terminal"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if h.selected != -1 {
+		t.Fatal("project remained selected after focus left history")
+	}
+}

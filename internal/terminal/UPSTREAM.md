@@ -221,3 +221,13 @@ their existing three-row notch semantics, while phone/reflow and tap gesture
 tests retain precise scrolling. Retty keeps its local terminal additions and
 independent CLI/iOS packaging; the iOS text-context and keyboard-dismiss fixes
 remain in the fork.
+
+Fork commit `5e44f43cd033` merges upstream through `c4d36967`, including
+glyph-atlas sampling, native text input, virtual-list and window fixes. The
+terminal plugin adds optional frame mirrors, Kitty graphics, configurable
+padding and additional clipboard/drop APIs; Retty keeps its existing screen
+transport and platform packaging. The Ghostty library pin is unchanged.
+Retty carries the expanded contrast exemption for font-rendered box drawing,
+legacy computing and Powerline artwork. Its search highlights already clip
+wrapped matches using screen coordinates, including matches entering from
+above the viewport. The build-scoped UI API requires no migration.

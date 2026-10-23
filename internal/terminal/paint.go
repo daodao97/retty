@@ -345,12 +345,12 @@ func (v *view) buildRow(line *rowCache, rs *vt.RenderState, cols int) {
 			st.bg, st.hasBg = color(bg), true
 			st.adaptiveBg = !c.Palette || c.Background.R >= 16
 		}
-		if st.adaptiveBg && !drawn(c.Codepoint) {
+		if st.adaptiveBg && !noMinContrast(c.Codepoint) {
 			st.bg = v.adaptiveBackground(st.bg)
 		}
 		// Cell backgrounds can be independent of the style, so adjust only
 		// after resolving both. Preserve the colors of block/line artwork.
-		if !st.invisible && c.Codepoint != 0 && !drawn(c.Codepoint) {
+		if !st.invisible && c.Codepoint != 0 && !noMinContrast(c.Codepoint) {
 			st.fg = v.readableForeground(st.fg, st.bg)
 			if st.hasUl {
 				st.ul = v.readableForeground(st.ul, st.bg)

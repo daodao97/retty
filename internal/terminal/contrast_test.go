@@ -172,3 +172,31 @@ func TestMinimumContrastPreservesReadableColorsAndBoundsCache(t *testing.T) {
 		t.Fatalf("unbounded contrast cache: %d", len(v.contrast))
 	}
 }
+
+func TestMinimumContrastPreservesFontArtwork(t *testing.T) {
+	loadLib(t)
+	light := LightTheme()
+	light.MinimumContrast = 4.5
+	term, err := New(Options{Conn: newPipe(), Theme: light, AdaptiveColors: true, NoBlink: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer term.Close()
+	// These shapes come from the font rather than drawBox. Their deliberately
+	// low contrast and cached dark background must survive theme adaptation.
+	for _, r := range []rune{'┄', '\U0001fb00', '\ue0b4'} {
+		t.Run(fmt.Sprintf("%U", r), func(t *testing.T) {
+			term.Feed([]byte(fmt.Sprintf("\x1b[H\x1b[2J\x1b[48;2;20;20;20;38;2;30;30;30m%c\x1b[0m", r)))
+			tt := ui.NewTester(func(c *ui.Context) { View(c, term).Fill() }, 700, 220)
+			tt.SetDark(false)
+			tt.Frame()
+			line := term.v.lines[0]
+			if len(line.runs) == 0 || line.runs[0].c != ui.RGB(30, 30, 30) {
+				t.Fatalf("contrast changed artwork: %+v", line.runs)
+			}
+			if len(line.bgs) == 0 || line.bgs[0].c != ui.RGB(20, 20, 20) {
+				t.Fatalf("theme adaptation changed artwork background: %+v", line.bgs)
+			}
+		})
+	}
+}

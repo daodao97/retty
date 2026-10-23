@@ -152,6 +152,14 @@ func (a *App) sidebarProjectSessions(c *ui.Context, k *colors) {
 	if list.Submitted() && h.selected >= 0 && h.selected < h.outline.Rows() {
 		a.activateHistoryItem(c, h, h.outline.Item(h.selected))
 	}
+	// Projects are disclosure actions, not a persistent choice. Keep a cursor
+	// only while the outline is visibly focused for keyboard navigation.
+	if h.selected >= 0 && h.selected < h.outline.Rows() && !list.FocusVisible() {
+		if _, session := h.sessions[h.outline.Item(h.selected)]; !session {
+			h.selected = -1
+			c.Invalidate()
+		}
+	}
 }
 
 func (a *App) sidebarHistoryRow(c *ui.Context, k *colors, h *sidebarAgentHistory, key string) {
