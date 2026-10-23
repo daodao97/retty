@@ -30,8 +30,14 @@ func (a *App) sidebarLayout(c *ui.Context, k *colors, bar ui.TitleBar) {
 					ui.Spacer(c)
 					a.collapseSidebarButton(c, k)
 				})
-				ui.Scroll(c.Key("sidebar-tabs")).Label("Sidebar tabs").Role(ui.RoleTabList).
-					Height(min(float32(len(a.tabs)*44+16), max(96, height*0.4))).Shrink(0).MinHeight(0).FillWidth().Padding(10, 8).Gap(4).Children(func() {
+				tabs := ui.Scroll(c.Key("sidebar-tabs")).Label("Sidebar tabs").Role(ui.RoleTabList).
+					MinHeight(0).FillWidth().Padding(10, 8).Gap(4)
+				if a.agentHistory != nil && a.agentHistory.expanded {
+					tabs.Height(min(float32(len(a.tabs)*44+16), max(96, height*0.4))).Shrink(0)
+				} else {
+					tabs.Grow(1).Basis(0)
+				}
+				tabs.Children(func() {
 					for i, t := range slices.Clone(a.tabs) {
 						a.sidebarTab(c, k, i, t)
 					}
@@ -144,6 +150,12 @@ func (a *App) sidebarTab(c *ui.Context, k *colors, i int, t *Tab) {
 				ui.Text(c, name).FontSize(12).FontWeight(500).TextColor(k.text).SingleLine().Ellipsis("…").FillWidth()
 			}
 			meta := detail
+			if git := a.paneGit(t.Focus); git != nil && git.Branch != "" && git.Branch != git.Default {
+				if meta != "" {
+					meta += " · "
+				}
+				meta += git.Branch
+			}
 			if t.Host != nil {
 				meta = t.Host.name()
 				if detail != "" {

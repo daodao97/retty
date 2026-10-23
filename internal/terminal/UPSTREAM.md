@@ -4,6 +4,13 @@ Retty originally kept a local copy because that version did not expose the Ghost
 
 When updating MyGo, compare this package with the framework terminal plugin and carry forward the applicable fixes while preserving Retty's platform packaging.
 
+Kitty graphics bindings, PNG decoder and layered bitmap painting were adapted
+from the pinned MyGo terminal. Retty caps storage/PNG pixels at 8 MiB, disables
+filesystem/shared-memory media, generates matching iOS symbols, and adds
+portable graphics snapshots for retained/remote screens and local reflow.
+Text-only history keeps its existing payload. Link hover previews use captured
+host readers, cancellation, bounded decoding and delayed UI overlays.
+
 Selection copying supports visible text (excluding SGR-concealed characters)
 and raw terminal text through Options.CopyRawText and SetCopyRawText. All three
 copy paths share the same formatter. The visible-text binding uses the pinned
@@ -231,3 +238,10 @@ Retty carries the expanded contrast exemption for font-rendered box drawing,
 legacy computing and Powerline artwork. Its search highlights already clip
 wrapped matches using screen coordinates, including matches entering from
 above the viewport. The build-scoped UI API requires no migration.
+
+Fork commit `376f50a86890` incorporates upstream v0.6.3, prevents duplicate
+native text-field paste on Windows, releases idle text-shaping scratch
+buffers, improves caret lookup and optimizes continuous Metal shadows.
+The terminal plugin, Ghostty manifest and public UI APIs are unchanged
+from `5e44f43cd033`; Retty retains its local terminal additions and
+independent CLI/iOS packaging.

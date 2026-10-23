@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -11,20 +12,24 @@ import (
 	"github.com/egoist/mygo/ui"
 	"retty/internal/agenthistory"
 	"retty/internal/agents"
+	"retty/internal/gitstate"
 	"retty/internal/rex"
 )
 
 type sidebarAgentHistory struct {
-	reader   agenthistory.Reader
-	loading  bool
-	loaded   bool
-	nextRead time.Time
-	err      string
-	sessions map[string]agenthistory.Session
-	projects []string
-	children map[string][]string
-	outline  ui.OutlineState[string]
-	selected int
+	expanded     bool
+	reader       agenthistory.Reader
+	loading      bool
+	loaded       bool
+	nextRead     time.Time
+	err          string
+	sessions     map[string]agenthistory.Session
+	projects     []string
+	children     map[string][]string
+	projectDirs  map[string]string
+	projectCache map[string]historyProject
+	outline      ui.OutlineState[string]
+	selected     int
 	// History identity -> PTY before lifecycle hooks arrive.
 	opened map[string]string
 	// Preparation in progress, shared by repeated clicks.
@@ -62,6 +67,9 @@ func (a *App) refreshAgentHistory(c *ui.Context, force bool) {
 		home, _ := os.UserHomeDir()
 		sources := agenthistory.DiscoverCodexSources(home, codex)
 		sessions, err := h.reader.ReadSources(sources, claude)
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		h.resolveProjects(ctx, sessions)
+		cancel()
 		update(func() {
 			h.loading, h.loaded, h.err = false, true, ""
 			if a.quitting || a.agentHistory != h {
@@ -84,6 +92,7 @@ func (h *sidebarAgentHistory) setSessions(sessions []agenthistory.Session) {
 		return b.Updated.Compare(a.Updated)
 	})
 	h.projects, h.children = nil, make(map[string][]string)
+	h.projectDirs = make(map[string]string)
 	h.sessions = make(map[string]agenthistory.Session)
 	// Sessions are newest first, so projects and their sessions both follow
 	// last activity. Full directory paths keep same-name projects distinct.
@@ -92,12 +101,69 @@ func (h *sidebarAgentHistory) setSessions(sessions []agenthistory.Session) {
 		if hiddenHistoryProject(dir) {
 			continue
 		}
-		project, key := "project:"+dir, s.Key()
+		identity, projectDir := s.ProjectID, s.ProjectDir
+		if identity == "" || projectDir == "" {
+			identity, projectDir = dir, dir
+		}
+		project, key := "project:"+identity, s.Key()
+		h.projectDirs[project] = projectDir
 		if _, ok := h.children[project]; !ok {
 			h.projects = append(h.projects, project)
 		}
 		h.children[project] = append(h.children[project], key)
 		h.sessions[key] = s
+	}
+}
+
+type historyProject struct {
+	repo    gitstate.Repository
+	expires time.Time
+}
+
+// resolveProjects runs only on the history worker. Keep failures briefly too,
+// so many conversations in a non-Git directory don't spawn repeated commands.
+func (h *sidebarAgentHistory) resolveProjects(ctx context.Context, sessions []agenthistory.Session) {
+	if h.projectCache == nil {
+		h.projectCache = make(map[string]historyProject)
+	}
+	now := time.Now()
+	for _, s := range sessions {
+		if ctx.Err() != nil {
+			break
+		}
+		dir := filepath.Clean(s.Dir)
+		if hiddenHistoryProject(dir) {
+			continue
+		}
+		cached, found := h.projectCache[dir]
+		if found && now.Before(cached.expires) {
+			continue
+		}
+		if len(h.projectCache) >= 512 && !found {
+			for key, value := range h.projectCache {
+				if !now.Before(value.expires) {
+					delete(h.projectCache, key)
+				}
+			}
+			if len(h.projectCache) >= 512 {
+				break
+			}
+		}
+		r, err := gitstate.Identify(ctx, dir)
+		if ctx.Err() != nil {
+			break
+		}
+		if err != nil {
+			r = gitstate.Repository{}
+		}
+		h.projectCache[dir] = historyProject{r, now.Add(time.Minute)}
+	}
+	for i := range sessions {
+		r := h.projectCache[filepath.Clean(sessions[i].Dir)].repo
+		if r.Key() != "" {
+			sessions[i].ProjectID, sessions[i].ProjectDir = r.Key(), r.ProjectDir
+			sessions[i].Branch = r.BranchName()
+		}
 	}
 }
 
@@ -113,16 +179,35 @@ func hiddenHistoryProject(dir string) bool {
 }
 
 func (a *App) sidebarProjectSessions(c *ui.Context, k *colors) {
-	a.refreshAgentHistory(c, false)
+	if a.agentHistory == nil {
+		a.agentHistory = &sidebarAgentHistory{selected: -1}
+	}
 	h := a.agentHistory
-	c.After(15 * time.Second)
 	ui.Row(c.Key("project-sessions-heading")).FillWidth().Height(34).Shrink(0).Padding(0, 10).
 		BorderWidth(1, 0, 0, 0).BorderColor(k.headerBorder).AlignItems(ui.Center).Children(func() {
-		ui.Text(c, "项目会话").FontSize(10.5).FontWeight(600).TextColor(k.textFaint).Grow(1)
-		if iconButton(c.Key("refresh-history"), k, "rotate-ccw", "刷新项目会话", 23, 12).Disabled(h.loading).Tooltip("刷新本机 Codex / Claude Code 历史").Clicked() {
+		toggle := ui.ButtonBase(c.Key("toggle-project-history")).Label("项目会话").Expanded(h.expanded).
+			Focusable().Grow(1).MinWidth(0).Height(33).Gap(6).AlignItems(ui.Center).Cursor(ui.CursorPointer)
+		toggle.Children(func() {
+			arrow := "chevron-right"
+			if h.expanded {
+				arrow = "chevron-down"
+			}
+			ui.Icon(c, icon(arrow)).Size(12, 12).TextColor(k.iconMuted).Shrink(0)
+			ui.Text(c, "项目会话").FontSize(10.5).FontWeight(600).TextColor(k.textFaint).Grow(1)
+		})
+		if toggle.Clicked() {
+			h.expanded = !h.expanded
+			c.Invalidate()
+		}
+		if h.expanded && iconButton(c.Key("refresh-history"), k, "rotate-ccw", "刷新项目会话", 23, 12).Disabled(h.loading).Tooltip("刷新本机 Codex / Claude Code 历史").Clicked() {
 			a.refreshAgentHistory(c, true)
 		}
 	})
+	if !h.expanded {
+		return
+	}
+	a.refreshAgentHistory(c, false)
+	c.After(15 * time.Second)
 	if h.err != "" {
 		ui.Text(c, "部分会话未能读取").FontSize(10.5).TextColor(k.textMuted).Padding(4, 12).Tooltip(h.err).Shrink(0)
 	}
@@ -142,7 +227,7 @@ func (a *App) sidebarProjectSessions(c *ui.Context, k *colors) {
 		if s, ok := h.sessions[key]; ok {
 			return programOf(s.Agent).Name + " · " + s.Title
 		}
-		return "项目 " + key[len("project:"):]
+		return "项目 " + h.projectDirs[key]
 	}
 	list := ui.Outline(c.Key("project-sessions"), &h.outline, h.projects, func(key string) []string {
 		return h.children[key]
@@ -170,6 +255,9 @@ func (a *App) sidebarHistoryRow(c *ui.Context, k *colors, h *sidebarAgentHistory
 		label, glyph = s.Title, programOf(s.Agent).Glyph
 		color = programIconColor(c, programOf(s.Agent))
 		tooltip = fmt.Sprintf("%s · %s\n%s\n%s\n打开会话；已打开时切换到原标签页", programOf(s.Agent).Name, s.Updated.Local().Format("2006-01-02 15:04"), s.Dir, s.ID)
+		if s.Branch != "" {
+			tooltip += "\n分支：" + s.Branch
+		}
 		if s.Agent == "codex" {
 			tooltip += "\n使用当前 provider 和登录账号继续；切换来源时保留原历史并创建续接分支"
 			tooltip += "\n账号来源：" + s.AccountLabel + "\n配置目录：" + s.ConfigDir
@@ -178,7 +266,7 @@ func (a *App) sidebarHistoryRow(c *ui.Context, k *colors, h *sidebarAgentHistory
 			}
 		}
 	} else {
-		dir := key[len("project:"):]
+		dir := h.projectDirs[key]
 		label, tooltip = filepath.Base(dir), dir
 	}
 	accessible := label
@@ -191,6 +279,9 @@ func (a *App) sidebarHistoryRow(c *ui.Context, k *colors, h *sidebarAgentHistory
 	b.Children(func() {
 		programIcon(c, glyph).Size(14, 14).TextColor(color).Shrink(0)
 		ui.Text(c, label).FontSize(11).TextColor(k.textMuted).SingleLine().Ellipsis("…").Grow(1).MinWidth(0)
+		if session && s.Branch != "" {
+			ui.Text(c, s.Branch).FontSize(9.5).TextColor(k.textFaint).SingleLine().Ellipsis("…").MaxWidth(80).Shrink(1)
+		}
 		if !session {
 			ui.Text(c, fmt.Sprint(len(h.children[key]))).FontSize(10).TextColor(k.textFaint).Shrink(0)
 		}

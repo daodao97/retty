@@ -11,7 +11,7 @@ import (
 // session another device took, preventing two foreground apps from fighting.
 func (a *App) syncRemotePaneActivity() {
 	var desired *Pane
-	if t := a.tab(); a.focusedWin && t != nil && t.Host != nil {
+	if t := a.tab(); a.focusedWin && t != nil && t.Host != nil && t.Focus != nil && t.Focus.browser == nil {
 		desired = t.Focus
 	}
 	if desired != a.activeRemote {

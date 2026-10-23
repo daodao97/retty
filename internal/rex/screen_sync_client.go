@@ -64,7 +64,7 @@ func (s *Stream) readScreenState(conn net.Conn) ([]byte, int, int, error) {
 		}
 		length := int(binary.BigEndian.Uint32(header[:4]))
 		cols, rows := int(binary.BigEndian.Uint16(header[4:6])), int(binary.BigEndian.Uint16(header[6:8]))
-		if length < screenStateHeader || length > screenStateLimit+screenStateHeader || cols == 0 || rows == 0 {
+		if length < screenStateHeader || length > screenGraphicsLimit+screenStateHeader || cols == 0 || rows == 0 {
 			return nil, 0, 0, errors.New("rex: invalid screen state frame")
 		}
 		payload := make([]byte, length)

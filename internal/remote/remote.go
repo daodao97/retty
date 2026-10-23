@@ -20,6 +20,7 @@ import (
 	"retty/internal/notification"
 	"retty/internal/rex"
 	"retty/internal/selfupdate"
+	"tailscale.com/tailcfg"
 )
 
 const Port = 4242
@@ -77,6 +78,7 @@ type Bridge struct {
 	uploadDir    string
 	uploadGate   chan struct{}
 	filesGate    chan struct{}
+	portGate     chan struct{}
 	updateGate   chan struct{}
 	identityLock *os.File
 }
@@ -85,6 +87,10 @@ type Bridge struct {
 func (b *Bridge) OnClose(fn func()) { b.mu.Lock(); b.onClose = fn; b.mu.Unlock() }
 
 type Options struct {
+	// BootstrapRegion optionally supplies the initial relay for an ephemeral
+	// bridge, allowing isolated transports without a public DERP map request.
+	// A persisted identity's region takes precedence.
+	BootstrapRegion *tailcfg.DERPRegion
 	// StateDir persists the identity and relay across restarts. Empty uses an
 	// ephemeral capability, useful for isolated fixtures.
 	StateDir string
@@ -104,7 +110,7 @@ type Options struct {
 }
 
 func Start(ctx context.Context, socket string, options Options) (*Bridge, error) {
-	b := &Bridge{server: &tailcat.Server{Logf: quiet}, conns: make(map[net.Conn]bool), devices: make(map[net.Conn]ConnectedDevice)}
+	b := &Bridge{server: &tailcat.Server{Logf: quiet, Region: options.BootstrapRegion}, conns: make(map[net.Conn]bool), devices: make(map[net.Conn]ConnectedDevice)}
 	stateDir := options.StateDir
 	if stateDir != "" {
 		identity, lock, err := loadIdentity(ctx, stateDir)

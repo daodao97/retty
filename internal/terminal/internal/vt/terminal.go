@@ -11,8 +11,10 @@ import (
 // Terminal is a GhosttyTerminal: the screen, its scrollback, the cursor
 // and the modes, which the output of programs changes.
 type Terminal struct {
-	h  uintptr
-	id uintptr
+	imageTransmissions map[uint32]imageTransmission
+	resetGeneration    uint64
+	h                  uintptr
+	id                 uintptr
 	// Effects are called during Write, on its goroutine; they must not
 	// call Write.
 	effects Effects
@@ -136,6 +138,11 @@ func NewTerminal(cols, rows int, effects Effects) (*Terminal, error) {
 	// so that programs fall back to something else.
 	var limit uint64
 	t.set(optKittyImageLimit, unsafe.Pointer(&limit))
+	// Only direct transfers are portable across Retty's local/remote viewers.
+	allowFile := false
+	t.set(16, unsafe.Pointer(&allowFile))
+	t.set(17, nil)
+	t.set(18, unsafe.Pointer(&allowFile))
 	return t, nil
 }
 
@@ -158,6 +165,7 @@ func (t *Terminal) get(data int, out unsafe.Pointer) error {
 
 // Free frees the terminal.
 func (t *Terminal) Free() {
+	t.imageTransmissions = nil
 	if t.h == 0 {
 		return
 	}
@@ -198,7 +206,13 @@ func (t *Terminal) Cursor() (x, y int) {
 }
 
 // Reset resets the terminal fully (RIS).
-func (t *Terminal) Reset() { call(fnTerminalReset, t.h) }
+func (t *Terminal) Reset() {
+	call(fnTerminalReset, t.h)
+	clear(t.imageTransmissions)
+	t.resetGeneration++
+}
+
+func (t *Terminal) ResetGeneration() uint64 { return t.resetGeneration }
 
 // SetColors sets the default colors, which programs may change: the
 // foreground, the background, the cursor's (nil for the text's) and the

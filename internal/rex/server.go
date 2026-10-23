@@ -27,10 +27,14 @@ import (
 	"golang.org/x/sys/unix"
 
 	"retty/internal/atomicfile"
+	"retty/internal/gitstate"
+	"retty/internal/runtimeinfo"
 )
 
 // Server owns the sessions.
 type Server struct {
+	turnSnapshots *gitstate.SnapshotStore
+	turnStarts    map[string]string // guarded by agentMu; suppress duplicate turn starts
 	mu            sync.Mutex
 	agentMu       sync.Mutex // serialize shared-daemon session binding and reports
 	agentToken    string
@@ -92,7 +96,8 @@ func Serve() error {
 	}
 	os.Chmod(sock, 0o600)
 	s := &Server{
-		agentToken: agentToken, hostID: hostID(deviceID),
+		turnSnapshots: &gitstate.SnapshotStore{Dir: filepath.Join(dir, "git-snapshots")},
+		agentToken:    agentToken, hostID: hostID(deviceID),
 		sessions: map[string]*session{}, started: time.Now(), ln: ln,
 		hostDone: make(chan struct{}), idleFrom: time.Now(), quit: make(chan struct{}),
 	}
@@ -195,13 +200,13 @@ func (s *Server) handle(conn net.Conn) {
 			defer ss.releaseSizeAttachment(a.Owner, conn)
 		}
 		stateSync := a.ScreenFrames && a.ScreenSync
-		answer, _ := json.Marshal(attachResponse{OK: true, ScreenFrames: a.ScreenFrames, ScreenSync: stateSync, SizeLease: a.Owner != "" && a.SizeLease})
+		answer, _ := json.Marshal(attachResponse{OK: true, ScreenFrames: a.ScreenFrames, ScreenSync: stateSync, ScreenGraphics: a.ScreenGraphics, SizeLease: a.Owner != "" && a.SizeLease})
 		if _, err := conn.Write(append(answer, '\n')); err != nil {
 			conn.Close()
 			return
 		}
 		if stateSync {
-			ss.attachScreenSync(conn, r, a.Cols, a.Rows, a.InputOnly)
+			ss.attachScreenSync(conn, r, a.Cols, a.Rows, a.InputOnly, a.ScreenGraphics)
 			return
 		}
 		// What the reader buffered past the first line is input.
@@ -209,7 +214,7 @@ func (s *Server) handle(conn net.Conn) {
 			b, _ := r.Peek(n)
 			ss.input(b)
 		}
-		ss.attachScreen(conn, a.Cols, a.Rows, a.ScreenFrames)
+		ss.attachScreen(conn, a.Cols, a.Rows, a.ScreenFrames, a.ScreenGraphics)
 		return
 	}
 	s.control(conn, r, first)
@@ -291,7 +296,19 @@ func (s *Server) do(req Request) (any, error) {
 		host := s.host
 		s.mu.Unlock()
 		host.ID = s.hostID
-		return Hello{Version: ProtocolVersion, PID: os.Getpid(), Started: s.started, Host: host, Exe: s.exe, ExeTime: s.exeTime, AgentRecovery: s.recoveryPath != "", Attention: s.attentionPath != "", ScreenSync: true}, nil
+		return Hello{Build: runtimeinfo.Current(), Version: ProtocolVersion, PID: os.Getpid(), Started: s.started, Host: host, Exe: s.exe, ExeTime: s.exeTime, AgentRecovery: s.recoveryPath != "", Attention: s.attentionPath != "", ScreenSync: true, ScreenGraphics: true, TurnDiff: s.turnSnapshots != nil, SessionControl: true}, nil
+	case "sendInput":
+		ss, err := s.session(req.SID)
+		if err != nil {
+			return nil, err
+		}
+		return nil, ss.sendInput(req.Input)
+	case "programStatus":
+		ss, err := s.session(req.SID)
+		if err != nil {
+			return nil, err
+		}
+		return nil, ss.reportProgram(req.Status)
 	case "history":
 		ss, err := s.session(req.SID)
 		if err != nil {
@@ -343,6 +360,7 @@ func (s *Server) do(req Request) (any, error) {
 			s.agentMu.Unlock()
 			return nil, err
 		}
+		delete(s.turnStarts, req.SID)
 		s.mu.Lock()
 		ss := s.sessions[req.SID]
 		delete(s.sessions, req.SID)

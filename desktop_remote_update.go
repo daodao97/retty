@@ -12,7 +12,7 @@ import (
 	"retty/internal/selfupdate"
 )
 
-var cmdUpdateRemote = command{Title: "更新远端 Retty…", Run: func(a *App) { a.openRemoteUpdate() }}
+var cmdUpdateRemote = command{ID: "host.update", Title: "更新远端 Retty…", Run: func(a *App) { a.openRemoteUpdate() }}
 
 type remoteUpdateDialog struct {
 	open, busy, tracking bool

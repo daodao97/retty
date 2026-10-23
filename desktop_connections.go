@@ -698,6 +698,16 @@ func (a *App) restoreDesktopLayout(h *desktopHost) {
 		}
 		n := &Node{ID: a.id(), Parent: parent}
 		if s.A == nil || s.B == nil {
+			if s.Browser != nil {
+				p, err := a.newBrowserPane(s.Browser.ID, s.Browser.URL, h)
+				if err != nil {
+					p, _ = a.newBrowserPane(s.Browser.ID, "about:blank", h)
+				}
+				p.Tab, p.Node = t, n
+				p.info.Dir, p.startDir = s.Dir, s.Dir
+				n.Pane = p
+				return n
+			}
 			in, ok := desktopSession(h, s.SID)
 			if !ok || shown[s.SID] {
 				return nil

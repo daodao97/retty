@@ -152,5 +152,8 @@ func (a *App) tabMenu(m *ui.Menu, t *Tab) {
 }
 
 func paneProgram(p *Pane) program {
+	if p.browser != nil {
+		return program{Name: "浏览器", Glyph: "globe", IconColor: ui.Hex("#7ca8ef")}
+	}
 	return programOf(sessionProgramName(p.info))
 }

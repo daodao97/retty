@@ -98,9 +98,13 @@ func TestMobileInactiveSessionRestoresDesktopSize(t *testing.T) {
 func TestPaneFollowsPhoneSizeLockUntilUnlocked(t *testing.T) {
 	a, tt := newTestApp(t)
 	p := a.tabs[0].Focus
+	// Let the desktop view submit its actual size before remembering it. The
+	// session's 80x24 creation size is already >48, but is not its drawn size.
+	tt.Frame()
 	waitFor(t, tt, "desktop size", func() bool {
 		refresh(a)
-		return p.info.Cols > 48 && p.info.SizeLock == ""
+		cols, rows := p.term.Size()
+		return p.info.Cols > 48 && p.info.Cols == cols && p.info.Rows == rows && p.info.SizeLock == ""
 	})
 	desktop := [2]int{p.info.Cols, p.info.Rows}
 	phone := a.client.LockStream(p.SID, "phone-run", "Test iPhone", 48, 35)

@@ -7,14 +7,15 @@ import (
 )
 
 const (
-	screenFull        byte = 1
-	screenDelta       byte = 2
-	screenHeartbeat   byte = 3
-	screenInput       byte = 4
-	screenAck         byte = 5
-	screenEffect      byte = 6
-	screenStateLimit       = 4 << 20
-	screenStateHeader      = 17 // kind, sequence, authoritative revision
+	screenFull          byte = 1
+	screenDelta         byte = 2
+	screenHeartbeat     byte = 3
+	screenInput         byte = 4
+	screenAck           byte = 5
+	screenEffect        byte = 6
+	screenStateLimit         = 4 << 20
+	screenGraphicsLimit      = 16 << 20
+	screenStateHeader        = 17 // kind, sequence, authoritative revision
 )
 
 type HistorySnapshot struct {
@@ -22,6 +23,7 @@ type HistorySnapshot struct {
 	Cols        int    `json:"cols"`
 	Rows        int    `json:"rows"`
 	Revision    uint64 `json:"revision"`
+	Output      uint64 `json:"output"`
 	HistoryRows int    `json:"history_rows"`
 }
 
@@ -52,7 +54,7 @@ func applyScreenDifference(previous, delta []byte) ([]byte, error) {
 		return nil, errors.New("rex: incomplete screen delta")
 	}
 	prefix, suffix := int(binary.BigEndian.Uint32(delta[:4])), int(binary.BigEndian.Uint32(delta[4:8]))
-	if prefix > len(previous) || suffix > len(previous)-prefix || prefix+suffix+len(delta)-8 > screenStateLimit {
+	if prefix > len(previous) || suffix > len(previous)-prefix || prefix+suffix+len(delta)-8 > screenGraphicsLimit {
 		return nil, errors.New("rex: invalid screen delta")
 	}
 	next := make([]byte, 0, prefix+suffix+len(delta)-8)

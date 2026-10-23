@@ -17,7 +17,12 @@ const (
 func (a *App) view(c *ui.Context) {
 	a.services = c.Services()
 	a.runPosted()
+	a.syncBrowsers()
+	a.syncDevServers(c)
+	a.syncGitStatus(c)
 	a.syncFiles()
+	a.cancelHiddenImagePreviews(a.desktopContentWidth(c) < 720)
+	a.refreshTurnDiff(c)
 	k := colorsOf(c)
 	a.focusedWin = a.win == nil || a.win.IsFocused()
 	a.syncRemotePaneActivity()
@@ -38,6 +43,11 @@ func (a *App) view(c *ui.Context) {
 	a.shortcuts(c)
 	a.palette(c, k)
 	a.settingsPage(c, k)
+	if !a.settingsOpen && a.diagnostics != nil && a.diagnostics.busy {
+		a.diagnostics.cancel()
+		a.diagnostics.epoch++
+		a.diagnostics.busy = false
+	}
 	a.desktopConnectionDialog(c, k)
 	a.expandedFilePreview(c, k)
 	a.fileDirectoryDialog(c, k)
@@ -59,8 +69,12 @@ func (a *App) view(c *ui.Context) {
 
 func (a *App) desktopContent(c *ui.Context, k *colors) {
 	ui.Row(c.Key("desktop-content")).Grow(1).MinWidth(0).MinHeight(0).Children(func() {
-		if prefs.FilesOpen {
+		if prefs.FilesOpen && !prefs.FilesSidePanel {
 			a.filesPanel(c, k)
+			return
+		}
+		if prefs.FilesOpen && a.desktopContentWidth(c) < 720 {
+			a.changesSidePanel(c, k).Grow(1)
 			return
 		}
 		ui.Column(c.Key("terminal-content")).Grow(1).Basis(0).FillHeight().MinWidth(0).MinHeight(0).Children(func() {
@@ -68,6 +82,9 @@ func (a *App) desktopContent(c *ui.Context, k *colors) {
 				a.tabContent(c, k, t)
 			}
 		})
+		if prefs.FilesOpen {
+			a.changesSidePanel(c, k)
+		}
 	})
 }
 
@@ -166,6 +183,12 @@ func (a *App) paneCard(c *ui.Context, k *colors, t *Tab, p *Pane) ui.Element {
 	card := ui.Column(c.Key(p.ID)).Clip().MinWidth(0).MinHeight(0).Background(terminalBackground(c))
 	card.Transition(ui.ElementTransition{Colors: true, Duration: 160 * time.Millisecond})
 	card.Children(func() {
+		if p.browser != nil {
+			a.browserContent(c, k, t, p)
+			return
+		}
+		a.paneGitBar(c, k, t, p)
+		a.devServerBar(c, k, p)
 		if p.find.open {
 			a.findBar(c, k, t, p)
 		}

@@ -31,7 +31,7 @@ func sessionInfoEqual(a, b rex.SessionInfo) bool {
 	}) {
 		return false
 	}
-	return a.ID == b.ID && a.PID == b.PID && a.Shell == b.Shell && a.Created.Equal(b.Created) &&
+	return a.ID == b.ID && a.PID == b.PID && a.HookExecutable == b.HookExecutable && a.Shell == b.Shell && a.Created.Equal(b.Created) &&
 		a.Program == b.Program && a.Idle == b.Idle && a.Dir == b.Dir && a.Title == b.Title &&
 		a.LastOutput.Equal(b.LastOutput) && a.LastInput.Equal(b.LastInput) && a.Output == b.Output && a.Bells == b.Bells &&
 		a.Exited == b.Exited && a.ExitCode == b.ExitCode && a.Attached == b.Attached && a.Cols == b.Cols && a.Rows == b.Rows &&

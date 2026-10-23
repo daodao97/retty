@@ -7,6 +7,7 @@ package vt
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+extern void ghostty_alloc(void);
 extern void ghostty_focus_encode(void);
 extern void ghostty_formatter_format_alloc(void);
 extern void ghostty_formatter_free(void);
@@ -29,6 +30,14 @@ extern void ghostty_key_event_set_key(void);
 extern void ghostty_key_event_set_mods(void);
 extern void ghostty_key_event_set_unshifted_codepoint(void);
 extern void ghostty_key_event_set_utf8(void);
+extern void ghostty_kitty_graphics_get(void);
+extern void ghostty_kitty_graphics_image(void);
+extern void ghostty_kitty_graphics_image_get(void);
+extern void ghostty_kitty_graphics_placement_get(void);
+extern void ghostty_kitty_graphics_placement_iterator_free(void);
+extern void ghostty_kitty_graphics_placement_iterator_new(void);
+extern void ghostty_kitty_graphics_placement_next(void);
+extern void ghostty_kitty_graphics_placement_render_info(void);
 extern void ghostty_mouse_encoder_encode(void);
 extern void ghostty_mouse_encoder_free(void);
 extern void ghostty_mouse_encoder_new(void);
@@ -72,6 +81,7 @@ extern void ghostty_selection_gesture_free(void);
 extern void ghostty_selection_gesture_get(void);
 extern void ghostty_selection_gesture_new(void);
 extern void ghostty_selection_gesture_reset(void);
+extern void ghostty_sys_set(void);
 extern void ghostty_terminal_compress(void);
 extern void ghostty_terminal_compression_activity(void);
 extern void ghostty_terminal_free(void);
@@ -88,6 +98,7 @@ extern void ghostty_terminal_set(void);
 extern void ghostty_terminal_vt_write(void);
 extern void ghostty_type_json(void);
 static uintptr_t retty_vt_symbol(const char *name) {
+ if (!strcmp(name,"ghostty_alloc")) return (uintptr_t)&ghostty_alloc;
  if (!strcmp(name,"ghostty_focus_encode")) return (uintptr_t)&ghostty_focus_encode;
  if (!strcmp(name,"ghostty_formatter_format_alloc")) return (uintptr_t)&ghostty_formatter_format_alloc;
  if (!strcmp(name,"ghostty_formatter_free")) return (uintptr_t)&ghostty_formatter_free;
@@ -110,6 +121,14 @@ static uintptr_t retty_vt_symbol(const char *name) {
  if (!strcmp(name,"ghostty_key_event_set_mods")) return (uintptr_t)&ghostty_key_event_set_mods;
  if (!strcmp(name,"ghostty_key_event_set_unshifted_codepoint")) return (uintptr_t)&ghostty_key_event_set_unshifted_codepoint;
  if (!strcmp(name,"ghostty_key_event_set_utf8")) return (uintptr_t)&ghostty_key_event_set_utf8;
+ if (!strcmp(name,"ghostty_kitty_graphics_get")) return (uintptr_t)&ghostty_kitty_graphics_get;
+ if (!strcmp(name,"ghostty_kitty_graphics_image")) return (uintptr_t)&ghostty_kitty_graphics_image;
+ if (!strcmp(name,"ghostty_kitty_graphics_image_get")) return (uintptr_t)&ghostty_kitty_graphics_image_get;
+ if (!strcmp(name,"ghostty_kitty_graphics_placement_get")) return (uintptr_t)&ghostty_kitty_graphics_placement_get;
+ if (!strcmp(name,"ghostty_kitty_graphics_placement_iterator_free")) return (uintptr_t)&ghostty_kitty_graphics_placement_iterator_free;
+ if (!strcmp(name,"ghostty_kitty_graphics_placement_iterator_new")) return (uintptr_t)&ghostty_kitty_graphics_placement_iterator_new;
+ if (!strcmp(name,"ghostty_kitty_graphics_placement_next")) return (uintptr_t)&ghostty_kitty_graphics_placement_next;
+ if (!strcmp(name,"ghostty_kitty_graphics_placement_render_info")) return (uintptr_t)&ghostty_kitty_graphics_placement_render_info;
  if (!strcmp(name,"ghostty_mouse_encoder_encode")) return (uintptr_t)&ghostty_mouse_encoder_encode;
  if (!strcmp(name,"ghostty_mouse_encoder_free")) return (uintptr_t)&ghostty_mouse_encoder_free;
  if (!strcmp(name,"ghostty_mouse_encoder_new")) return (uintptr_t)&ghostty_mouse_encoder_new;
@@ -153,6 +172,7 @@ static uintptr_t retty_vt_symbol(const char *name) {
  if (!strcmp(name,"ghostty_selection_gesture_get")) return (uintptr_t)&ghostty_selection_gesture_get;
  if (!strcmp(name,"ghostty_selection_gesture_new")) return (uintptr_t)&ghostty_selection_gesture_new;
  if (!strcmp(name,"ghostty_selection_gesture_reset")) return (uintptr_t)&ghostty_selection_gesture_reset;
+ if (!strcmp(name,"ghostty_sys_set")) return (uintptr_t)&ghostty_sys_set;
  if (!strcmp(name,"ghostty_terminal_compress")) return (uintptr_t)&ghostty_terminal_compress;
  if (!strcmp(name,"ghostty_terminal_compression_activity")) return (uintptr_t)&ghostty_terminal_compression_activity;
  if (!strcmp(name,"ghostty_terminal_free")) return (uintptr_t)&ghostty_terminal_free;

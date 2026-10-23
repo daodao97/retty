@@ -469,7 +469,7 @@ func (s *Stream) attach() {
 		s.mu.Lock()
 		wantSync, inputOnly := s.wantScreenSync, s.inputOnly
 		s.mu.Unlock()
-		b, _ := json.Marshal(Attach{Op: "attach", SID: s.sid, Cols: cols, Rows: rows, ScreenFrames: true, ScreenSync: wantSync, InputOnly: inputOnly, Owner: owner, Device: device, SizeLease: owner != ""})
+		b, _ := json.Marshal(Attach{Op: "attach", SID: s.sid, Cols: cols, Rows: rows, ScreenFrames: true, ScreenSync: wantSync, ScreenGraphics: !inputOnly, InputOnly: inputOnly, Owner: owner, Device: device, SizeLease: owner != ""})
 		if _, err = conn.Write(append(b, '\n')); err == nil {
 			var answer attachResponse
 			answer, err = readAttachOK(conn)
@@ -564,11 +564,12 @@ func (s *Stream) sync() error {
 }
 
 type attachResponse struct {
-	ScreenFrames bool   `json:"screen_frames,omitempty"`
-	ScreenSync   bool   `json:"screen_sync,omitempty"`
-	SizeLease    bool   `json:"size_lease,omitempty"`
-	OK           bool   `json:"ok"`
-	Error        string `json:"error,omitempty"`
+	ScreenFrames   bool   `json:"screen_frames,omitempty"`
+	ScreenSync     bool   `json:"screen_sync,omitempty"`
+	ScreenGraphics bool   `json:"screen_graphics,omitempty"`
+	SizeLease      bool   `json:"size_lease,omitempty"`
+	OK             bool   `json:"ok"`
+	Error          string `json:"error,omitempty"`
 }
 
 // readAttachOK reads the server's answer a byte at a time, leaving the first

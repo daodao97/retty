@@ -14,6 +14,7 @@ var settingsSections = []struct{ title, label, glyph string }{
 	{"终端", "Terminal settings", "square-terminal"},
 	{"Agent", "Agent integrations", "bot"},
 	{"关于", "About Retty", "circle-dot"},
+	{"诊断", "Hook and version diagnostics", "circle-dot"},
 }
 
 type preferenceItem struct {
@@ -172,6 +173,20 @@ func (a *App) preferenceItems() []preferenceItem {
 					c.Invalidate()
 				}
 			}},
+		{id: "git-status", title: "Git 分支与变更", label: "Git status", detail: "在窗格中显示当前分支和变更摘要，点击打开 Diff。关闭后停止后台 Git 状态查询。", group: "布局", section: 0,
+			modified: prefs.HideGitStatus, reset: func() { a.setGitStatus(true) },
+			control: func(c *ui.Context) {
+				show := !prefs.HideGitStatus
+				if settingsSwitch(c, &show, "Git status").Changed() {
+					a.setGitStatus(show)
+				}
+			}},
+		{id: "diagnostics", title: "Hook 与版本诊断", label: "Open diagnostics", detail: "检查当前会话的 Hook 命令、工作目录、缺失路径和运行版本。只读检查，不执行 Hook 或重启服务。", group: "诊断", section: 4,
+			control: func(c *ui.Context) {
+				if ui.Button(c, "打开诊断").Label("Open diagnostics").Clicked() {
+					a.openDiagnostics()
+				}
+			}},
 		{id: "font-size", title: "字体大小", label: "Terminal font size", detail: "调整所有终端窗格的文字大小。也可使用 ⌘+、⌘− 和 ⌘0。", group: "文字", section: 1,
 			modified: prefs.FontSize != defaultFontSize, reset: func() { a.setFontSize(defaultFontSize) },
 			control: func(c *ui.Context) {
@@ -215,6 +230,15 @@ func (a *App) preferenceItems() []preferenceItem {
 							a.setLinkEditor(values[i])
 						}
 					}
+				}
+			}},
+		{id: "dev-servers", title: "发现开发地址", label: "Discover development URLs", detail: "从终端最近输出识别 localhost 等开发地址，点击后在同一主机的浏览器窗格中打开。不会自动打开或探测端口。", group: "链接", section: 1,
+			modified: prefs.HideDevServers, reset: func() { prefs.HideDevServers = false; saveSettings() },
+			control: func(c *ui.Context) {
+				show := !prefs.HideDevServers
+				if settingsSwitch(c, &show, "Discover development URLs").Changed() {
+					prefs.HideDevServers = !show
+					saveSettings()
 				}
 			}},
 		{id: "desktop-notifications", title: "桌面通知", label: "Desktop notifications", detail: "在此电脑显示系统通知，包括任务完成、等待输入和终端提醒。", group: "通知", section: 2,
@@ -372,6 +396,10 @@ func settingsSwitch(c *ui.Context, value *bool, label string) ui.Element {
 
 func (a *App) settingsContent(c *ui.Context, theme *ui.Theme) {
 	query := strings.ToLower(strings.TrimSpace(a.settingsQuery))
+	if a.settingsSection == 4 && query == "" && !a.settingsModifiedOnly {
+		a.diagnosticsPage(c, theme)
+		return
+	}
 	if a.settingsSection == 3 && query == "" && !a.settingsModifiedOnly {
 		ui.Text(c, "Retty").FontSize(17).FontWeight(600).TextColor(theme.Text).Margin(12, 0)
 		ui.Text(c, "Reconnect TTY · Relay TTY").FontSize(13).TextColor(theme.TextMuted)

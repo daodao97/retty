@@ -8,24 +8,30 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"runtime"
+	"syscall"
 	"time"
 
 	"github.com/egoist/mygo"
 	updatenative "github.com/egoist/mygo/plugins/updater/native"
 	"github.com/egoist/mygo/ui"
 
+	"retty/internal/controlcli"
 	"retty/internal/push"
 	"retty/internal/remote"
 	"retty/internal/rex"
+	"retty/internal/runtimeinfo"
 )
 
 func main() {
+	runtimeinfo.Version = mygo.App.Version()
 	if runtime.GOOS == "ios" {
 		mobileMain()
 		return
@@ -90,6 +96,16 @@ func main() {
 		log.SetPrefix("[server] ")
 		if err := rex.Serve(); err != nil {
 			log.Fatal(err)
+		}
+		return
+	}
+	if controlcli.Handles(os.Args[1:]) {
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		err := controlcli.Run(ctx, os.Args[1:], os.Stdin, os.Stdout, os.Stderr, controlcli.Options{})
+		stop()
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "retty:", err)
+			os.Exit(controlcli.ExitCode(err))
 		}
 		return
 	}
@@ -193,8 +209,13 @@ func (a *App) open() {
 	a.changed()
 	go a.poll(win, client)
 	a.debugHook()
+	a.startDesktopControl()
 	a.performanceFixture()
 	win.OnClosed(func() {
+		if a.control != nil {
+			a.control.Close()
+			a.control = nil
+		}
 		if a.terminalHistory != nil {
 			a.terminalHistory.close()
 		}

@@ -93,6 +93,9 @@ func New(cols, rows, scrollback int, bell func()) (*Screen, error) {
 		return nil, err
 	}
 	t.SetTerminfoName("xterm-256color")
+	t.SetImageLimit(8 << 20)
+	// Kitty placement geometry also needs cell pixels before the first viewer.
+	t.Resize(s.cols, s.rows, 8, 16)
 	t.SetModeDefault(vt.ModeGraphemes, true)
 	t.SetScrollback(scrollback)
 	t.SetDefaultCursor(vt.CursorBlock, true)
@@ -170,6 +173,17 @@ func (s *Screen) SnapshotRecent(historyRows int) []byte {
 		return s.term.VTScreen()
 	}
 	return s.term.VTRecent(historyRows)
+}
+
+// SnapshotGraphicsRecent includes portable Kitty pixel transfers and placements.
+// Ordinary history/text readers continue to receive the smaller text snapshot.
+func (s *Screen) SnapshotGraphicsRecent(historyRows int) []byte {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.term == nil {
+		return nil
+	}
+	return s.term.VTGraphicsRecent(historyRows)
 }
 
 func (s *Screen) Title() string {

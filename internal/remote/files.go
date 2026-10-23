@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"path/filepath"
 	"retty/internal/files"
 	"retty/internal/rex"
 	"strings"
@@ -14,6 +15,7 @@ import (
 )
 
 var ErrFileBrowseUnsupported = errors.New("请更新远端桌面端或 CLI 网关以支持文件浏览")
+var ErrGitReviewUnsupported = errors.New("请更新远端桌面端或 CLI 网关以支持 Git 状态和轮次 Diff；无需重启会话服务")
 
 func (b *Bridge) serveFiles(conn net.Conn, line []byte) {
 	b.mu.Lock()
@@ -42,7 +44,7 @@ func (b *Bridge) serveFiles(conn net.Conn, line []byte) {
 		err = errors.New("文件请求过大")
 	}
 	if err == nil {
-		result, err = files.Do(ctx, req)
+		result, err = files.Do(files.WithSnapshotStore(ctx, filepath.Join(rex.Dir(), "git-snapshots")), req)
 	}
 	res := rex.Response{}
 	if err != nil {
@@ -79,6 +81,9 @@ func BrowseFiles(ctx context.Context, client *rex.Client, req files.Request) (fi
 		return files.Result{}, fmt.Errorf("读取文件响应失败: %w", err)
 	}
 	if res.Error != "" {
+		if strings.HasPrefix(req.Kind, "git-") && res.Error == "不支持的文件操作" {
+			return files.Result{}, ErrGitReviewUnsupported
+		}
 		if strings.Contains(res.Error, "unknown op") {
 			return files.Result{}, ErrFileBrowseUnsupported
 		}

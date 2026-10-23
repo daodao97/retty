@@ -1,12 +1,15 @@
 package rex
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/subtle"
 	"encoding/hex"
 	"errors"
 	"os"
 	"path/filepath"
+	"strconv"
+	"time"
 
 	"retty/internal/agents"
 )
@@ -98,9 +101,15 @@ func codexTarget(candidates []codexCandidate, h agents.HookInput) string {
 	return "" // indistinguishable starts: do not notify the wrong pane
 }
 
-func (s *Server) reportAgent(req Request) error {
+func (s *Server) reportAgent(req Request) (err error) {
+	var capture func()
 	s.agentMu.Lock()
-	defer s.agentMu.Unlock()
+	defer func() {
+		s.agentMu.Unlock()
+		if capture != nil {
+			capture()
+		}
+	}()
 	if s.ending {
 		return errors.New("session server is ending")
 	}
@@ -110,7 +119,8 @@ func (s *Server) reportAgent(req Request) error {
 		if err != nil {
 			return err
 		}
-		return s.deliverAgent(ss, req.Token, req.AgentEvent)
+		capture, err = s.deliverAgent(ss, req.Token, req.AgentEvent)
+		return err
 	}
 	if err := validateAgentEvent(req.AgentEvent); err != nil {
 		return err
@@ -142,15 +152,78 @@ func (s *Server) reportAgent(req Request) error {
 	if err != nil {
 		return err
 	}
-	return s.deliverAgent(ss, ss.agentToken, req.AgentEvent)
+	capture, err = s.deliverAgent(ss, ss.agentToken, req.AgentEvent)
+	return err
 }
 
 // deliverAgent applies an event to its pane, then records what recovery
 // needs when the event became the pane's current state.
-func (s *Server) deliverAgent(ss *session, token string, event *AgentEvent) error {
+func (s *Server) deliverAgent(ss *session, token string, event *AgentEvent) (func(), error) {
 	h, accepted, err := ss.reportAgent(token, event)
 	if err != nil || !accepted {
-		return err
+		return nil, err
 	}
-	return s.recordAgent(ss, event.Agent, h)
+	capture := s.prepareAgentTurn(ss, event, h)
+	return capture, s.recordAgent(ss, event.Agent, h)
+}
+
+// The accepted root turn event defines the baseline. A viewer never invents a
+// baseline by noticing a spinner later. Capture is bounded and leaves PTY I/O
+// and terminal dimensions alone; failure does not fail the Agent's hook.
+func (s *Server) prepareAgentTurn(ss *session, event *AgentEvent, h agents.HookInput) func() {
+	if s.turnSnapshots == nil || h.Event != "UserPromptSubmit" {
+		return nil
+	}
+	if event.Agent == "codex" && (h.Source != agents.CodexLifecycleSource || h.TurnID == "") {
+		ss.mu.Lock()
+		ss.gitTurn = ""
+		ss.mu.Unlock()
+		return nil // native hooks/ephemeral helpers are not the canonical root turn
+	}
+	identity := h.SessionID + "\x00" + h.TurnID
+	if h.TurnID == "" {
+		identity += strconv.FormatInt(event.At.UnixNano(), 10)
+	}
+	if s.turnStarts[ss.id] == identity {
+		ss.mu.Lock()
+		ss.gitTurn = identity
+		ss.mu.Unlock()
+		return nil
+	}
+	if s.turnStarts == nil {
+		s.turnStarts = make(map[string]string)
+	}
+	s.turnStarts[ss.id] = identity
+	dir := h.CWD
+	if dir == "" {
+		dir = ss.info().Dir
+	}
+	budget := time.Second // fit the existing native hook's two-second timeout
+	if event.Agent == "codex" {
+		budget = 2 * time.Second // canonical observer reports independently of hooks
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), budget)
+	ss.mu.Lock()
+	if ss.gitCaptureCancel != nil {
+		ss.gitCaptureCancel()
+	}
+	ss.gitTurn, ss.gitCaptureCancel = identity, cancel
+	ss.mu.Unlock()
+	return func() {
+		defer cancel()
+		// Disk/Git work runs after agentMu is released. A slow worktree must
+		// never delay lifecycle reports for the server's other sessions.
+		ss.gitCaptureMu.Lock()
+		defer ss.gitCaptureMu.Unlock()
+		ss.mu.Lock()
+		current := ss.gitTurn == identity && !ss.exited
+		ss.mu.Unlock()
+		if !current || ctx.Err() != nil {
+			return
+		}
+		if err := s.turnSnapshots.Invalidate(ctx, dir, ss.id, "本轮快照未记录成功；工作区可能过大或在记录时发生变化"); err != nil {
+			return
+		}
+		_, _ = s.turnSnapshots.CaptureTurn(ctx, dir, ss.id, identity)
+	}
 }

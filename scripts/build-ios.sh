@@ -1,7 +1,7 @@
 #!/bin/bash
 # Build libghostty-vt for the selected SDK, then package the native Retty app.
 set -euo pipefail
-ROOT=$(cd "$(dirname "$0")/.." && pwd)
+ROOT=$(cd "$(dirname "$0")/.." && pwd -P)
 cd "$ROOT"
 GHOSTTY_COMMIT=befcdfd2c3a1cb24d9ec886e93c95b2b5daa7028
 ZIG_VERSION=0.16.0

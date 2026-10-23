@@ -55,6 +55,13 @@ func (v *view) presentation() *vt.Terminal {
 	if err != nil {
 		return t.term
 	}
+	if t.opts.ImageLimit >= 0 {
+		limit := uint64(t.opts.ImageLimit)
+		if limit == 0 {
+			limit = 8 << 20
+		}
+		next.SetImageLimit(limit)
+	}
 	switch {
 	case t.opts.Scrollback < 0:
 		next.SetScrollback(0)
@@ -65,7 +72,7 @@ func (v *view) presentation() *vt.Terminal {
 	}
 	next.SetModeDefault(vt.ModeGraphemes, true)
 	v.theme.apply(next)
-	snapshot := t.term.VTRecent(t.presentationHistory)
+	snapshot := t.term.VTGraphicsRecent(t.presentationHistory)
 	// The serialized screen enters the alternate buffer before its cells.
 	// Only this local copy changes buffers; raw program output never does.
 	for _, mode := range []string{"1049", "1047", "47"} {

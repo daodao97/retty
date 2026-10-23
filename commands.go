@@ -10,7 +10,10 @@ import (
 
 // command is an action of the menus and the command palette.
 type command struct {
-	Title string
+	ID         string
+	Automation bool // explicitly callable through the local CLI
+	Target     bool // requires a stable session target
+	Title      string
 	// Accel is the menu item's shortcut, and Keys how the palette shows it.
 	Accel, Keys string
 	Run         func(a *App)
@@ -19,46 +22,57 @@ type command struct {
 }
 
 var (
-	cmdFiles       = command{Title: "文件浏览器", Accel: "CmdOrCtrl+Shift+E", Keys: "⇧⌘E", Run: func(a *App) { a.toggleFiles() }}
-	cmdSettings    = command{Title: "Settings…", Accel: "CmdOrCtrl+,", Keys: "⌘,", Run: func(a *App) { a.openSettings() }}
-	cmdNewTab      = command{Title: "New Tab", Accel: "CmdOrCtrl+T", Keys: "⌘T", Run: func(a *App) { a.newTab(a.currentDir()) }}
-	cmdSplitRight  = command{Title: "Split Right", Accel: "CmdOrCtrl+D", Keys: "⌘D", Run: func(a *App) { a.split(false) }}
-	cmdSplitDown   = command{Title: "Split Down", Accel: "CmdOrCtrl+Shift+D", Keys: "⇧⌘D", Run: func(a *App) { a.split(true) }}
-	cmdClosePane   = command{Title: "Close Pane", Accel: "CmdOrCtrl+W", Keys: "⌘W", Run: func(a *App) { a.closeFocused() }}
-	cmdCloseTab    = command{Title: "Close Tab", Accel: "CmdOrCtrl+Shift+W", Keys: "⇧⌘W", Run: func(a *App) { a.closeActiveTab() }}
-	cmdZoom        = command{Title: "Zoom Pane", Accel: "CmdOrCtrl+Shift+Enter", Keys: "⇧⌘↩", Run: func(a *App) { a.toggleZoom() }}
-	cmdEqualize    = command{Title: "Equalize Panes", Accel: "CmdOrCtrl+Ctrl+=", Keys: "⌃⌘=", Run: func(a *App) { a.equalize() }}
-	cmdNextTab     = command{Title: "Next Tab", Accel: "Ctrl+Tab", Keys: "⌃Tab", Run: func(a *App) { a.cycleTab(1) }}
-	cmdPrevTab     = command{Title: "Previous Tab", Accel: "Ctrl+Shift+Tab", Keys: "⌃⇧Tab", Run: func(a *App) { a.cycleTab(-1) }}
-	cmdRenameTab   = command{Title: "Rename Tab…", Accel: "CmdOrCtrl+Shift+R", Keys: "⇧⌘R", Run: func(a *App) { a.startRename() }}
-	cmdPalette     = command{Title: "Command Palette…", Accel: "CmdOrCtrl+Shift+P", Keys: "⇧⌘P", Run: func(a *App) { a.openPalette() }, Hidden: true}
-	cmdPalette2    = command{Title: "Go to Pane…", Accel: "CmdOrCtrl+P", Keys: "⌘P", Run: func(a *App) { a.openPalette() }, Hidden: true}
-	cmdFocusLeft   = command{Title: "Focus Pane Left", Accel: "CmdOrCtrl+Alt+Left", Keys: "⌥⌘←", Run: func(a *App) { a.moveFocus(-1, 0) }}
-	cmdFocusRight  = command{Title: "Focus Pane Right", Accel: "CmdOrCtrl+Alt+Right", Keys: "⌥⌘→", Run: func(a *App) { a.moveFocus(1, 0) }}
-	cmdFocusUp     = command{Title: "Focus Pane Above", Accel: "CmdOrCtrl+Alt+Up", Keys: "⌥⌘↑", Run: func(a *App) { a.moveFocus(0, -1) }}
-	cmdFocusDown   = command{Title: "Focus Pane Below", Accel: "CmdOrCtrl+Alt+Down", Keys: "⌥⌘↓", Run: func(a *App) { a.moveFocus(0, 1) }}
-	cmdGrowLeft    = command{Title: "Move Divider Left", Accel: "CmdOrCtrl+Ctrl+Left", Keys: "⌃⌘←", Run: func(a *App) { a.resizeFocused(-1, 0) }}
-	cmdGrowRight   = command{Title: "Move Divider Right", Accel: "CmdOrCtrl+Ctrl+Right", Keys: "⌃⌘→", Run: func(a *App) { a.resizeFocused(1, 0) }}
-	cmdGrowUp      = command{Title: "Move Divider Up", Accel: "CmdOrCtrl+Ctrl+Up", Keys: "⌃⌘↑", Run: func(a *App) { a.resizeFocused(0, -1) }}
-	cmdGrowDown    = command{Title: "Move Divider Down", Accel: "CmdOrCtrl+Ctrl+Down", Keys: "⌃⌘↓", Run: func(a *App) { a.resizeFocused(0, 1) }}
-	cmdClear       = command{Title: "Clear Screen and Scrollback", Accel: "CmdOrCtrl+K", Keys: "⌘K", Run: func(a *App) { a.clearFocused() }, Hidden: true}
-	cmdClearScroll = command{Title: "Clear Scrollback", Run: func(a *App) { a.clearFocused() }}
-	cmdRestart     = command{Title: "Restart Shell in Pane", Run: func(a *App) { a.restartFocused() }}
-	cmdBigger      = command{Title: "Bigger Text", Accel: "CmdOrCtrl+=", Keys: "⌘+", Run: func(a *App) { a.setFontSize(termFont.Size + 1) }}
-	cmdSmaller     = command{Title: "Smaller Text", Accel: "CmdOrCtrl+-", Keys: "⌘−", Run: func(a *App) { a.setFontSize(termFont.Size - 1) }}
-	cmdActualSize  = command{Title: "Actual Size", Accel: "CmdOrCtrl+0", Keys: "⌘0", Run: func(a *App) { a.setFontSize(defaultFontSize) }}
-	cmdFind        = command{Title: "Find…", Accel: "CmdOrCtrl+F", Keys: "⌘F", Run: func(a *App) { a.openFind() }}
-	cmdHistory     = command{Title: "查看终端历史…", Run: func(a *App) { a.openTerminalHistory() }}
-	cmdFindNext    = command{Title: "Find Next", Accel: "CmdOrCtrl+G", Keys: "⌘G", Run: func(a *App) { a.findStep(1) }}
-	cmdFindPrev    = command{Title: "Find Previous", Accel: "CmdOrCtrl+Shift+G", Keys: "⇧⌘G", Run: func(a *App) { a.findStep(-1) }}
-	cmdLight       = command{Title: "Appearance: Light", Run: func(a *App) { a.setAppearance("light") }}
-	cmdDark        = command{Title: "Appearance: Dark", Run: func(a *App) { a.setAppearance("dark") }}
-	cmdSystem      = command{Title: "Appearance: System", Run: func(a *App) { a.setAppearance("") }}
-	cmdEndAll      = command{Title: "Quit and End All Sessions", Accel: "CmdOrCtrl+Alt+Q", Keys: "⌥⌘Q", Run: func(a *App) { a.quitAndEnd() }}
+	cmdBrowser = command{ID: "browser.open", Title: "打开浏览器窗格", Accel: "CmdOrCtrl+Shift+B", Keys: "⇧⌘B", Run: func(a *App) {
+		var parent *Pane
+		if t := a.tab(); t != nil {
+			parent = t.Focus
+		}
+		if _, err := a.openBrowser(parent, "about:blank", a.currentHost(), false); err != nil {
+			a.err = err.Error()
+		}
+	}}
+	cmdFiles       = command{ID: "files.toggle", Automation: true, Target: true, Title: "文件浏览器", Accel: "CmdOrCtrl+Shift+E", Keys: "⇧⌘E", Run: func(a *App) { a.toggleFiles() }}
+	cmdSettings    = command{ID: "settings.open", Automation: true, Target: false, Title: "Settings…", Accel: "CmdOrCtrl+,", Keys: "⌘,", Run: func(a *App) { a.openSettings() }}
+	cmdNewTab      = command{ID: "tab.new", Automation: false, Target: false, Title: "New Tab", Accel: "CmdOrCtrl+T", Keys: "⌘T", Run: func(a *App) { a.newTab(a.currentDir()) }}
+	cmdSplitRight  = command{ID: "pane.split-right", Automation: true, Target: true, Title: "Split Right", Accel: "CmdOrCtrl+D", Keys: "⌘D", Run: func(a *App) { a.split(false) }}
+	cmdSplitDown   = command{ID: "pane.split-down", Automation: true, Target: true, Title: "Split Down", Accel: "CmdOrCtrl+Shift+D", Keys: "⇧⌘D", Run: func(a *App) { a.split(true) }}
+	cmdClosePane   = command{ID: "pane.close", Automation: false, Target: true, Title: "Close Pane", Accel: "CmdOrCtrl+W", Keys: "⌘W", Run: func(a *App) { a.closeFocused() }}
+	cmdCloseTab    = command{ID: "tab.close", Automation: false, Target: true, Title: "Close Tab", Accel: "CmdOrCtrl+Shift+W", Keys: "⇧⌘W", Run: func(a *App) { a.closeActiveTab() }}
+	cmdZoom        = command{ID: "pane.zoom", Automation: true, Target: true, Title: "Zoom Pane", Accel: "CmdOrCtrl+Shift+Enter", Keys: "⇧⌘↩", Run: func(a *App) { a.toggleZoom() }}
+	cmdEqualize    = command{ID: "pane.equalize", Automation: true, Target: true, Title: "Equalize Panes", Accel: "CmdOrCtrl+Ctrl+=", Keys: "⌃⌘=", Run: func(a *App) { a.equalize() }}
+	cmdNextTab     = command{ID: "tab.next", Automation: true, Target: false, Title: "Next Tab", Accel: "Ctrl+Tab", Keys: "⌃Tab", Run: func(a *App) { a.cycleTab(1) }}
+	cmdPrevTab     = command{ID: "tab.previous", Automation: true, Target: false, Title: "Previous Tab", Accel: "Ctrl+Shift+Tab", Keys: "⌃⇧Tab", Run: func(a *App) { a.cycleTab(-1) }}
+	cmdRenameTab   = command{ID: "tab.rename", Automation: false, Target: true, Title: "Rename Tab…", Accel: "CmdOrCtrl+Shift+R", Keys: "⇧⌘R", Run: func(a *App) { a.startRename() }}
+	cmdPalette     = command{ID: "palette.open", Automation: true, Target: false, Title: "Command Palette…", Accel: "CmdOrCtrl+Shift+P", Keys: "⇧⌘P", Run: func(a *App) { a.openPalette() }, Hidden: true}
+	cmdPalette2    = command{ID: "pane.search", Automation: true, Target: false, Title: "Go to Pane…", Accel: "CmdOrCtrl+P", Keys: "⌘P", Run: func(a *App) { a.openPalette() }, Hidden: true}
+	cmdFocusLeft   = command{ID: "pane.focus-left", Automation: true, Target: true, Title: "Focus Pane Left", Accel: "CmdOrCtrl+Alt+Left", Keys: "⌥⌘←", Run: func(a *App) { a.moveFocus(-1, 0) }}
+	cmdFocusRight  = command{ID: "pane.focus-right", Automation: true, Target: true, Title: "Focus Pane Right", Accel: "CmdOrCtrl+Alt+Right", Keys: "⌥⌘→", Run: func(a *App) { a.moveFocus(1, 0) }}
+	cmdFocusUp     = command{ID: "pane.focus-up", Automation: true, Target: true, Title: "Focus Pane Above", Accel: "CmdOrCtrl+Alt+Up", Keys: "⌥⌘↑", Run: func(a *App) { a.moveFocus(0, -1) }}
+	cmdFocusDown   = command{ID: "pane.focus-down", Automation: true, Target: true, Title: "Focus Pane Below", Accel: "CmdOrCtrl+Alt+Down", Keys: "⌥⌘↓", Run: func(a *App) { a.moveFocus(0, 1) }}
+	cmdGrowLeft    = command{ID: "pane.divider-left", Automation: true, Target: true, Title: "Move Divider Left", Accel: "CmdOrCtrl+Ctrl+Left", Keys: "⌃⌘←", Run: func(a *App) { a.resizeFocused(-1, 0) }}
+	cmdGrowRight   = command{ID: "pane.divider-right", Automation: true, Target: true, Title: "Move Divider Right", Accel: "CmdOrCtrl+Ctrl+Right", Keys: "⌃⌘→", Run: func(a *App) { a.resizeFocused(1, 0) }}
+	cmdGrowUp      = command{ID: "pane.divider-up", Automation: true, Target: true, Title: "Move Divider Up", Accel: "CmdOrCtrl+Ctrl+Up", Keys: "⌃⌘↑", Run: func(a *App) { a.resizeFocused(0, -1) }}
+	cmdGrowDown    = command{ID: "pane.divider-down", Automation: true, Target: true, Title: "Move Divider Down", Accel: "CmdOrCtrl+Ctrl+Down", Keys: "⌃⌘↓", Run: func(a *App) { a.resizeFocused(0, 1) }}
+	cmdClear       = command{ID: "terminal.clear", Automation: false, Target: true, Title: "Clear Screen and Scrollback", Accel: "CmdOrCtrl+K", Keys: "⌘K", Run: func(a *App) { a.clearFocused() }, Hidden: true}
+	cmdClearScroll = command{ID: "terminal.clear-scrollback", Automation: false, Target: true, Title: "Clear Scrollback", Run: func(a *App) { a.clearFocused() }}
+	cmdRestart     = command{ID: "session.restart", Automation: false, Target: true, Title: "Restart Shell in Pane", Run: func(a *App) { a.restartFocused() }}
+	cmdBigger      = command{ID: "font.increase", Automation: true, Target: false, Title: "Bigger Text", Accel: "CmdOrCtrl+=", Keys: "⌘+", Run: func(a *App) { a.setFontSize(termFont.Size + 1) }}
+	cmdSmaller     = command{ID: "font.decrease", Automation: true, Target: false, Title: "Smaller Text", Accel: "CmdOrCtrl+-", Keys: "⌘−", Run: func(a *App) { a.setFontSize(termFont.Size - 1) }}
+	cmdActualSize  = command{ID: "font.reset", Automation: true, Target: false, Title: "Actual Size", Accel: "CmdOrCtrl+0", Keys: "⌘0", Run: func(a *App) { a.setFontSize(defaultFontSize) }}
+	cmdFind        = command{ID: "terminal.find", Automation: true, Target: true, Title: "Find…", Accel: "CmdOrCtrl+F", Keys: "⌘F", Run: func(a *App) { a.openFind() }}
+	cmdHistory     = command{ID: "terminal.history", Automation: true, Target: true, Title: "查看终端历史…", Run: func(a *App) { a.openTerminalHistory() }}
+	cmdFindNext    = command{ID: "terminal.find-next", Automation: true, Target: true, Title: "Find Next", Accel: "CmdOrCtrl+G", Keys: "⌘G", Run: func(a *App) { a.findStep(1) }}
+	cmdFindPrev    = command{ID: "terminal.find-previous", Automation: true, Target: true, Title: "Find Previous", Accel: "CmdOrCtrl+Shift+G", Keys: "⇧⌘G", Run: func(a *App) { a.findStep(-1) }}
+	cmdLight       = command{ID: "appearance.light", Automation: true, Target: false, Title: "Appearance: Light", Run: func(a *App) { a.setAppearance("light") }}
+	cmdDark        = command{ID: "appearance.dark", Automation: true, Target: false, Title: "Appearance: Dark", Run: func(a *App) { a.setAppearance("dark") }}
+	cmdSystem      = command{ID: "appearance.system", Automation: true, Target: false, Title: "Appearance: System", Run: func(a *App) { a.setAppearance("") }}
+	cmdEndAll      = command{ID: "session.end-all", Automation: false, Target: false, Title: "Quit and End All Sessions", Accel: "CmdOrCtrl+Alt+Q", Keys: "⌥⌘Q", Run: func(a *App) { a.quitAndEnd() }}
 )
 
 // paletteCommands are those the command palette lists, before the tabs.
 var paletteCommands = []*command{
+	&cmdDiagnostics,
+	&cmdBrowser,
 	&cmdFiles,
 	&cmdSettings,
 	&cmdCheckUpdates,
@@ -81,9 +95,9 @@ func (a *App) menu() *mygo.Menu {
 		}}
 	}
 	a.appearanceItems = make(map[string]*mygo.MenuItem)
-	appearance := func(label, v string) *mygo.MenuItem {
+	appearance := func(label, v string, cmd *command) *mygo.MenuItem {
 		it := &mygo.MenuItem{Label: label, Type: mygo.MenuItemRadio, Checked: prefs.Appearance == v, Click: func(*mygo.MenuItem, *mygo.Window) {
-			a.setAppearance(v)
+			a.run(cmd)
 		}}
 		a.appearanceItems[v] = it
 		return it
@@ -94,6 +108,7 @@ func (a *App) menu() *mygo.Menu {
 			item(&cmdCheckUpdates),
 			mygo.Separator(),
 			item(&cmdSettings),
+			item(&cmdDiagnostics),
 			mygo.Separator(),
 			{Role: mygo.RoleServices},
 			mygo.Separator(),
@@ -134,6 +149,7 @@ func (a *App) menu() *mygo.Menu {
 			item(&cmdClear),
 		}},
 		{Label: "View", Submenu: []*mygo.MenuItem{
+			item(&cmdBrowser),
 			item(&cmdFiles),
 			item(&cmdHistory),
 			item(&cmdPalette),
@@ -149,9 +165,9 @@ func (a *App) menu() *mygo.Menu {
 			item(&cmdSmaller),
 			item(&cmdActualSize),
 			{Label: "Appearance", Submenu: []*mygo.MenuItem{
-				appearance("System", ""),
-				appearance("Light", "light"),
-				appearance("Dark", "dark"),
+				appearance("System", "", &cmdSystem),
+				appearance("Light", "light", &cmdLight),
+				appearance("Dark", "dark", &cmdDark),
 			}},
 			mygo.Separator(),
 			{Role: mygo.RoleToggleFullScreen},
@@ -278,6 +294,10 @@ func (a *App) restartFocused() {
 		return
 	}
 	old := t.Focus
+	if old.browser != nil {
+		a.navigateBrowser(old, old.browser.url)
+		return
+	}
 	if t.Host != nil {
 		a.restartDesktopPane(old)
 		return
@@ -403,7 +423,7 @@ func (a *App) paletteItems() []paletteItem {
 		if cmd.Hidden || !match(cmd.Title) {
 			continue
 		}
-		items = append(items, paletteItem{id: "command:" + cmd.Title, title: cmd.Title, keys: cmd.Keys, glyph: "command", run: func() { cmd.Run(a) }})
+		items = append(items, paletteItem{id: "command:" + cmd.ID, title: cmd.Title, keys: cmd.Keys, glyph: "command", run: func() { cmd.Run(a) }})
 	}
 	return items
 }

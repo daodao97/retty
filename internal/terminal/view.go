@@ -39,10 +39,15 @@ func View(c *ui.Context, t *Terminal) ui.Element {
 	v.build(c, e)
 	x, y, over := e.PointerPosition()
 	v.hover = linkMatch{}
-	if over && (v.linkMods&ui.Cmd != 0 || t.opts.OpenLinksOnTap) && v.cellW != 0 {
+	var previewLink Link
+	if over && v.cellW != 0 && (v.linkMods&ui.Cmd != 0 || t.opts.OpenLinksOnTap || t.opts.OnPreviewLink != nil) {
 		t.mu.Lock()
-		v.hover = v.linkAt(x, y)
+		match := v.linkAt(x, y)
 		t.mu.Unlock()
+		previewLink = match.Link
+		if v.linkMods&ui.Cmd != 0 || t.opts.OpenLinksOnTap {
+			v.hover = match
+		}
 		if v.hover.valid() {
 			e.Cursor(ui.CursorPointer)
 			label := v.hover.URL
@@ -56,6 +61,7 @@ func View(c *ui.Context, t *Terminal) ui.Element {
 			e.Tooltip(prefix + label)
 		}
 	}
+	v.previewLink(c, e, previewLink, x, y)
 	e.HandleInput(v.input).TouchSelection()
 	e.TextCaretFunc(v.caret)
 	if t.opts.InputContext {
@@ -85,8 +91,13 @@ func (t *Terminal) viewOf(c *ui.Context) *view {
 // view is what a frame of the terminal needs from frame to frame. Main
 // thread only.
 type view struct {
-	t        *Terminal
-	services ui.Services
+	images        []shownImage
+	bitmaps       map[uint32]*cachedImage
+	imageTerminal *vt.Terminal
+	imageReset    uint64
+	preview       *linkPreview
+	t             *Terminal
+	services      ui.Services
 
 	theme              *Theme
 	applied            *Theme // the theme the emulator has

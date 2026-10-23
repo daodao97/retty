@@ -181,6 +181,9 @@ func (a *App) fileContentPanel(c *ui.Context, k *colors) {
 		if b == nil {
 			return
 		}
+		if b.diff {
+			ui.Row(c).Padding(6, 14).FillWidth().Children(func() { a.fileBaseControl(c, k, b) })
+		}
 		if b.preview == "" {
 			ui.Box(c).Grow(1).FillWidth().Center().Children(func() {
 				ui.Column(c).Gap(10).AlignItems(ui.Center).Children(func() {

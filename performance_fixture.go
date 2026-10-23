@@ -93,6 +93,33 @@ func (a *App) performanceFixture() {
 						p := t.Focus
 						switch req.Op {
 						case "status":
+						case "development":
+							if p.devServers != nil {
+								response["urls"] = p.devServers.urls
+							}
+						case "open-development":
+							found := false
+							if p.devServers != nil {
+								for _, u := range p.devServers.urls {
+									found = found || u.URL == req.Value
+								}
+							}
+							if !found {
+								response["error"] = "URL not advertised by fixture terminal"
+							} else if web, err := a.openDevServer(p, req.Value); err != nil {
+								response["error"] = err.Error()
+							} else {
+								response["browser"] = web.browser.id
+							}
+						case "diagnostics":
+							if req.Value == "open" {
+								a.openDiagnostics()
+							} else if req.Value == "close" {
+								a.settingsOpen = false
+							} else if a.diagnostics != nil {
+								response["diagnostics"] = a.diagnostics.report
+								response["diagnostics_error"] = a.diagnostics.err
+							}
 						case "search":
 							a.openFind()
 							p.find.query = req.Value

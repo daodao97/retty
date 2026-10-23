@@ -191,6 +191,12 @@ func (t *programStatusTracker) finish(now time.Time) bool {
 	if !ok {
 		return false
 	}
+	t.apply(r, now)
+	return false
+}
+
+// apply shares record/revision semantics between OSC and explicit CLI reports.
+func (t *programStatusTracker) apply(r ProgramStatus, now time.Time) {
 	t.lastReport = now
 	if r.State == "clear" {
 		for id := range t.records {
@@ -198,7 +204,7 @@ func (t *programStatusTracker) finish(now time.Time) bool {
 				delete(t.records, id)
 			}
 		}
-		return false
+		return
 	}
 	if t.records == nil {
 		t.records = make(map[string]programRecord)
@@ -221,7 +227,6 @@ func (t *programStatusTracker) finish(now time.Time) bool {
 		r.Revision = previous.Revision
 	}
 	t.records[r.ID] = programRecord{ProgramStatus: r, order: t.serial}
-	return false
 }
 
 func parseProgramStatus(body string) (ProgramStatus, bool) {

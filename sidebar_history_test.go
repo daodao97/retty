@@ -1,8 +1,10 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -14,10 +16,120 @@ import (
 	"retty/internal/rex"
 )
 
+func TestSidebarHistoryGroupsLinkedWorktreesAndPreservesResumeDirectory(t *testing.T) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	root, err := os.MkdirTemp(cwd, ".retty-worktree-history-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.RemoveAll(root) })
+	main, linked := filepath.Join(root, "project"), filepath.Join(root, "outside")
+	if err := os.Mkdir(main, 0700); err != nil {
+		t.Fatal(err)
+	}
+	git := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = main
+		cmd.Env = append(os.Environ(), "GIT_AUTHOR_NAME=Fixture", "GIT_AUTHOR_EMAIL=fixture@example.test", "GIT_COMMITTER_NAME=Fixture", "GIT_COMMITTER_EMAIL=fixture@example.test")
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatal(args, string(out), err)
+		}
+	}
+	git("init", "-qb", "main")
+	git("commit", "--allow-empty", "-qm", "fixture")
+	git("worktree", "add", "-qb", "task/fix", linked)
+	sessions := []agenthistory.Session{
+		{Agent: "codex", ID: "main-chat", Dir: main, ConfigDir: root, Title: "main"},
+		{Agent: "claude", ID: "linked-chat", Dir: linked, ConfigDir: root, Title: "linked"},
+	}
+	h := &sidebarAgentHistory{}
+	h.resolveProjects(context.Background(), sessions)
+	h.setSessions(sessions)
+	canonicalMain, err := filepath.EvalSymlinks(main)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(h.projects) != 1 || len(h.children[h.projects[0]]) != 2 || h.projectDirs[h.projects[0]] != canonicalMain {
+		t.Fatal("worktrees were not grouped", h.projects, h.projectDirs, h.children)
+	}
+	if h.sessions[sessions[0].Key()].Dir != main || h.sessions[sessions[1].Key()].Dir != linked || sessions[1].Branch != "task/fix" {
+		t.Fatal("grouping changed resume identity or directory", sessions)
+	}
+	// A Git checkout can disappear while its conversation remains resumable.
+	// A canceled scan still retains history under its exact directory.
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	h = &sidebarAgentHistory{}
+	h.resolveProjects(ctx, sessions[:1])
+	if h.projectCache == nil {
+		t.Fatal("canceled scan left an invalid cache")
+	}
+}
+
 func historyFixture(a *App, sessions []agenthistory.Session) {
-	a.agentHistory = &sidebarAgentHistory{loaded: true, nextRead: time.Now().Add(time.Hour), selected: -1}
+	a.agentHistory = &sidebarAgentHistory{expanded: true, loaded: true, nextRead: time.Now().Add(time.Hour), selected: -1}
 	a.agentHistory.prepareCodex = func(s agenthistory.Session, _, _, _ string, _ []string) (agenthistory.Session, error) { return s, nil }
 	a.agentHistory.setSessions(sessions)
+}
+
+func TestSidebarProjectHistoryStartsCollapsedAtBottomAndToggles(t *testing.T) {
+	previous := prefs
+	prefs = settings{FontSize: defaultFontSize, DesktopLayout: "sidebar"}
+	t.Cleanup(func() { prefs = previous })
+	a, tt := newStaticTestApp(t)
+	active := a.tab()
+	tt.Frame()
+	if a.agentHistory == nil || a.agentHistory.expanded || a.agentHistory.loading || a.agentHistory.loaded {
+		t.Fatal("collapsed history should not scan on startup")
+	}
+	a.agentHistory.loaded = true
+	a.agentHistory.nextRead = time.Now().Add(time.Hour)
+	a.agentHistory.setSessions([]agenthistory.Session{{Agent: "codex", ID: "fixture", Dir: "/work/project", Title: "Earlier task"}})
+	for _, size := range [][2]int{{1000, 700}, {560, 340}} {
+		tt.SetSize(size[0], size[1])
+		tt.Frame()
+		assertCollapsed := func() {
+			t.Helper()
+			if _, ok := tt.Find("项目会话列表"); ok || tt.HasText("project") {
+				t.Fatal("collapsed history still occupies the sidebar")
+			}
+			header, ok := tt.Find("项目会话")
+			sidebar, hasSidebar := tt.Find("Tab sidebar")
+			if !ok || !hasSidebar || header.Y+header.H < sidebar.Y+sidebar.H-2 {
+				t.Fatal("collapsed history heading is not at the bottom", header, sidebar)
+			}
+		}
+		assertCollapsed()
+		saveSettingsImage(t, tt, "sidebar-history-collapsed")
+		if err := tt.Click("项目会话"); err != nil {
+			t.Fatal(err)
+		}
+		tt.Frame()
+		if _, ok := tt.Find("项目会话列表"); !ok || !tt.HasText("project") {
+			t.Fatal("history did not expand")
+		}
+		if !tt.HasText("Earlier task") {
+			if err := tt.Click("project"); err != nil {
+				t.Fatal(err)
+			}
+		}
+		tt.Frame()
+		if !tt.HasText("Earlier task") {
+			t.Fatal("expanded project history is not usable")
+		}
+		if err := tt.Click("项目会话"); err != nil {
+			t.Fatal(err)
+		}
+		tt.Frame()
+		assertCollapsed()
+		if a.tab() != active || len(a.tabs) != 1 {
+			t.Fatal("history disclosure changed the active session")
+		}
+	}
 }
 
 func TestSidebarProjectHistoryDisclosureAndResume(t *testing.T) {
@@ -276,6 +388,9 @@ func TestSidebarHistoryAsyncRefreshAndMissingProject(t *testing.T) {
 	data := fmt.Sprintf("{\"type\":\"session_meta\",\"payload\":{\"id\":\"exact-id\",\"cwd\":%q}}\n{\"type\":\"event_msg\",\"payload\":{\"type\":\"user_message\",\"message\":\"History task\"}}\n", project)
 	os.WriteFile(path, []byte(data), 0o600)
 	a, tt := newTestApp(t)
+	if err := tt.Click("项目会话"); err != nil {
+		t.Fatal(err)
+	}
 	waitFor(t, tt, "history scan", func() bool { return a.agentHistory != nil && a.agentHistory.loaded })
 	if err := tt.Click("missing project"); err != nil {
 		t.Fatal(err)

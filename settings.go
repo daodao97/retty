@@ -21,7 +21,11 @@ type settings struct {
 	FilesOpen                        bool    `json:"filesOpen,omitempty"`
 	FilesHidden                      bool    `json:"filesHidden,omitempty"`
 	FilesDiff                        bool    `json:"filesDiff,omitempty"`
+	FilesDiffBase                    string  `json:"filesDiffBase,omitempty"`
+	FilesSidePanel                   bool    `json:"filesSidePanel,omitempty"`
 	FilesWidth                       float32 `json:"filesWidth,omitempty"`
+	HideGitStatus                    bool    `json:"hideGitStatus,omitempty"`
+	HideDevServers                   bool    `json:"hideDevServers,omitempty"`
 	FontSize                         float32 `json:"fontSize,omitempty"`
 	LinkEditor                       string  `json:"linkEditor,omitempty"`
 	CopyRawText                      bool    `json:"copyRawText,omitempty"`
@@ -58,6 +62,9 @@ func readSettings() settings {
 	}
 	if s.DesktopLayout != "sidebar" {
 		s.DesktopLayout = ""
+	}
+	if s.FilesDiffBase != "turn" && s.FilesDiffBase != "branch" {
+		s.FilesDiffBase = "head"
 	}
 	return s
 }
@@ -118,6 +125,12 @@ func (a *App) setCopyRawText(raw bool) {
 func saveSettings() {
 	b, _ := json.MarshalIndent(prefs, "", "  ")
 	atomicfile.Write(settingsPath(), b)
+}
+
+func (a *App) setGitStatus(show bool) {
+	prefs.HideGitStatus = !show
+	a.gitStatus = nil
+	saveSettings()
 }
 
 func applyAppearance() {

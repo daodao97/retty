@@ -16,6 +16,8 @@ ESC ] 7501 ; state=done:app=cargo:msg=QWxsIHRlc3RzIHBhc3NlZA== ESC \
 
 Shell 中可以这样发送报告：
 
+已支持会话控制的新服务也可使用 `retty report --state working --app build --progress 40` 直接报告，包含任务 ID、消息和子任务的用法见 [会话自动化](session-control.md#显式状态与-agent-skill)。这条入口与下面的终端协议共用记录及通知版本。
+
 ```sh
 status() {
   printf '\033]7501;state=%s:app=build:msg=%s\033\\' \

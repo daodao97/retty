@@ -41,6 +41,12 @@ zsh 会话在返回提示符时清空遗留的 Kitty 键盘协议栈，防止 TU
 
 ## 常用检查
 
+终端路径悬停与 Kitty 图片的格式、限制、服务能力和隔离测试见 [终端图片](terminal-images.md)。
+
+浏览器分屏、布局恢复、CLI 自动化、远端开发端口及原生隔离验收见 [浏览器窗格](browser-panes.md)。
+
+Hook/版本诊断与终端开发地址发现的范围、只读检查及回归入口见 [诊断与开发地址](diagnostics-and-devservers.md)。
+
 可重复的生产版性能测量见 [性能基线](performance.md)。工具为每个场景创建独立会话与 GUI 数据目录，报告 GUI、会话服务、推送 worker 的 CPU、物理内存、RSS、启动峰值及原始样本。
 
 画面同步的新旧协议限速对照见 [画面同步测量](performance-baselines/2026-10-14-screen-sync.md)；它使用独立的内存传输和 Ghostty，不连接真实 daemon，也不模拟无线丢包。
@@ -84,6 +90,8 @@ RETTY_DIR="$PWD/.mygo/server-debug" GOWORK=off go run . -server
 ```
 
 ## CLI 服务器构建
+
+会话控制命令、GUI Action 端点与内嵌 Agent skill 的接口和隔离验收见 [会话与 GUI 自动化](session-control.md)。它们不负责升级仍有真实任务的会话服务。
 
 CLI 自身更新使用 `retty update --check` / `retty update`；桌面远端会话的命令面板 / Shell 菜单提供「更新远端 Retty…」。请求由远端桥接在独立加密控制流中处理，不转发给会话服务，不通过终端输入执行。CLI 只从固定的官方正式 Release 获取 CLI 和 SHA-256，验证完整运行时后原子切换入口，保留旧文件，关闭并 `exec` 自己的网关进程；macOS 桌面版复用 MyGo 原生更新器的共享安装任务，保持既有 Ed25519 密钥与增量 / 全量下载策略，安装后正常 `App.Relaunch`，仅重开 GUI。两者都不升级会话服务或结束 PTY/Agent。旧端先手动升级一次；桌面开发构建和不可写安装位置仍由原生更新器拒绝。详细行为与部署限制见 [自身更新](cli.md#自身更新和从桌面更新远端)。
 
@@ -416,6 +424,8 @@ xcrun devicectl device process launch --device "$IOS_DEVICE" --terminate-existin
 Git 预览使用只读命令显示工作区（含已暂存修改）相对 HEAD 的单文件变更；未跟踪文件和首次提交前的文件按新增文件显示。禁用外部 diff、textconv、fsmonitor、pager 和可选索引锁，不暂存、提交或执行项目脚本。代码预览使用 MyGo 官方 [`ui/editor.View`](https://mygo.egoist.dev/docs/ui/code-editor)，以只读模式提供语法高亮、行号、折叠、查找、横向滚动及跨行选择复制。Diff 使用同包的 [`DiffView`](https://mygo.egoist.dev/docs/ui/diff-viewer) 和 `SetPatch` 显示服务返回的单文件补丁，保留原文件行号和行内变更高亮；不启用编辑、接受或回退操作。组件状态随已加载的预览保留，放大预览复用它；主题与窗口明暗模式同步。未知语言保留纯文本，不再限制展示行数或截断超长行；读取范围仍为初始 256KB、按需加载到最多 4MB。预览菜单复制已加载的原始字节内容，保留制表符和 CRLF；图片、二进制提示及下载沿用既有流程。
 
 ## 弹层和命令面板
+
+Git 分支摘要、Worktree 项目归组、终端旁的只读本轮 / 未提交 / 整分支 Diff，以及独立快照存储与隔离验证，见 [Git 项目与轮次审阅](git-review.md)。旧服务不补录轮次，保持真实任务运行；安全更新后从新一轮开始记录。
 
 等待授权或回答时在对应 Tab / 窗格显示状态；完成和失败通过通知提醒，点击通知直达会话，不再提供独立的「待处理」入口或列表。当前结果窗格在前台且可见时记录已读；列表浏览或通知送达不算已读，查看不会解除等待。
 

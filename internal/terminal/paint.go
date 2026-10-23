@@ -203,6 +203,7 @@ func (v *view) paint(p *ui.Painter, r ui.Rect) {
 	}
 	if !held {
 		t.rs.BeginUpdate(screen)
+		v.readImages(screen)
 	}
 	v.scrollbar = screen.Scrollbar()
 	t.mu.Unlock()
@@ -517,6 +518,7 @@ func (v *view) draw(p *ui.Painter, r ui.Rect) {
 	if !v.t.opts.Transparent {
 		p.Fill(r, color(v.colors.Background), 0)
 	}
+	v.drawImages(p, belowBackground, ox, oy)
 	selection := v.theme.Selection
 	if selection.A == 0 {
 		selection = color(v.colors.Foreground).Alpha(0.3)
@@ -537,6 +539,7 @@ func (v *view) draw(p *ui.Painter, r ui.Rect) {
 			p.Fill(ui.Rect{X: ox + float32(line.selA)*cw, Y: ry, W: float32(line.selB-line.selA+1) * cw, H: ch}, selection, 0)
 		}
 	}
+	v.drawImages(p, belowText, ox, oy)
 	if v.hover.valid() && v.linkMods&ui.Cmd != 0 {
 		if a, b := v.hover.cellA, v.hover.cellB; a < b {
 			for row := a / v.cols; row <= (b-1)/v.cols; row++ {
@@ -601,6 +604,7 @@ func (v *view) draw(p *ui.Painter, r ui.Rect) {
 			}
 		})
 	}
+	v.drawImages(p, aboveText, ox, oy)
 	// The composition is drawn whenever there is one. It used to also require
 	// v.focused, which build() sets from the element's focus — and an input
 	// method's SetMarkedText runs off the frame, so on the first composition

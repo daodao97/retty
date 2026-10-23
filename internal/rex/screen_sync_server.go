@@ -25,6 +25,7 @@ type screenPeer struct {
 	stop       chan struct{}
 	once       sync.Once
 	inputOnly  bool
+	graphics   bool
 	events     chan []byte
 	eventBytes int // guarded by session.mu, includes the in-flight event
 }
@@ -61,15 +62,24 @@ func (s *session) sendScreenEffectLocked(data []byte) {
 	}
 }
 
-func (s *session) viewport() ([]byte, int, int, uint64, bool) {
+func (s *session) viewport(graphics ...bool) ([]byte, int, int, uint64, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	data, title := s.finalViewport, s.finalTitle
+	include := len(graphics) > 0 && graphics[0]
+	if s.exited && include && len(s.finalGraphics) > 0 {
+		data = s.finalGraphics
+	}
 	if !s.exited {
 		if source, ok := s.vt.(interface{ SnapshotReady() bool }); ok && !source.SnapshotReady() {
 			return nil, s.cols, s.rows, s.screenRevision, false
 		}
-		data, title = s.vt.SnapshotRecent(-1), s.vt.Title()
+		title = s.vt.Title()
+		if include {
+			data = s.graphicsSnapshotLocked(-1)
+		} else {
+			data = s.vt.SnapshotRecent(-1)
+		}
 	}
 	// State frames are already applied atomically. The program's rendering
 	// transaction must not leave a fresh receiver holding its own paint lock.
@@ -80,8 +90,9 @@ func (s *session) viewport() ([]byte, int, int, uint64, bool) {
 	return data, s.cols, s.rows, s.screenRevision, s.exited
 }
 
-func (s *session) attachScreenSync(conn net.Conn, r *bufio.Reader, cols, rows int, inputOnly bool) {
+func (s *session) attachScreenSync(conn net.Conn, r *bufio.Reader, cols, rows int, inputOnly bool, graphics ...bool) {
 	p := &screenPeer{conn: conn, wake: make(chan struct{}, 1), acks: make(chan uint64, 1), stop: make(chan struct{}), inputOnly: inputOnly, events: make(chan []byte, 32)}
+	p.graphics = len(graphics) > 0 && graphics[0]
 	s.mu.Lock()
 	if cols > 0 && rows > 0 && s.sizeLock == "" {
 		s.resizeLocked(cols, rows)
@@ -132,7 +143,7 @@ func (s *session) writeScreens(p *screenPeer) {
 	var lastCols, lastRows int
 	interval := 16 * time.Millisecond
 	for {
-		data, cols, rows, revision, exited := s.viewport()
+		data, cols, rows, revision, exited := s.viewport(p.graphics)
 		if data == nil && !exited {
 			if previous == nil {
 				timer := time.NewTimer(interval)
@@ -146,7 +157,11 @@ func (s *session) writeScreens(p *screenPeer) {
 			}
 			data, cols, rows, revision = previous, lastCols, lastRows, lastRevision
 		}
-		if len(data) == 0 || len(data) > screenStateLimit || cols <= 0 || rows <= 0 || cols > 65535 || rows > 65535 {
+		limit := screenStateLimit
+		if p.graphics {
+			limit = screenGraphicsLimit
+		}
+		if len(data) == 0 || len(data) > limit || cols <= 0 || rows <= 0 || cols > 65535 || rows > 65535 {
 			return
 		}
 		kind, body := byte(screenHeartbeat), []byte(nil)
@@ -271,5 +286,5 @@ func (s *session) history(rows int) (HistorySnapshot, error) {
 	if len(data) > 8<<20 {
 		return HistorySnapshot{}, errors.New("history snapshot exceeds 8 MiB")
 	}
-	return HistorySnapshot{Data: data, Cols: s.cols, Rows: s.rows, Revision: s.screenRevision, HistoryRows: rows}, nil
+	return HistorySnapshot{Data: data, Cols: s.cols, Rows: s.rows, Revision: s.screenRevision, Output: s.output, HistoryRows: rows}, nil
 }

@@ -4,6 +4,7 @@ package rex
 
 import (
 	"bytes"
+	"context"
 	"encoding/binary"
 	"io"
 	"net"
@@ -24,16 +25,21 @@ const scrollback = 8 << 20
 
 // session is a pseudo-terminal of the server and its shell.
 type session struct {
-	resumed       bool
-	id            string
-	shell         string
-	created       time.Time
-	p             *pty
-	agentToken    string
-	agent         agentTracker
-	programStatus programStatusTracker
+	hookExecutable   string // immutable path injected when this session started
+	resumed          bool
+	id               string
+	shell            string
+	created          time.Time
+	p                *pty
+	agentToken       string
+	agent            agentTracker
+	programStatus    programStatusTracker
+	gitTurn          string // expected snapshot identity; guarded by mu
+	gitCaptureCancel context.CancelFunc
+	gitCaptureMu     sync.Mutex
 
-	mu sync.Mutex
+	mu      sync.Mutex
+	inputMu sync.Mutex
 	// vt is the session's screen, kept by the terminal emulator of the
 	// app's terminals without a view: a window attaching gets a snapshot
 	// of it at its size, as the session shows it now.
@@ -42,6 +48,7 @@ type session struct {
 	finalScreen    []byte // failed resumed CLI output, retained until retry/close
 	finalTitle     string
 	finalViewport  []byte
+	finalGraphics  []byte
 	screenRevision uint64
 	screenClients  map[*screenPeer]struct{}
 	output         uint64
@@ -122,7 +129,7 @@ func newSessionForServer(id string, o CreateOptions, serverToken string) (*sessi
 	token := newID() + newID()
 	env := sessionEnv(id, o.Env)
 	exe, _ := os.Executable()
-	env = append(env, "RETTY_SESSION="+id, "RETTY_AGENT_TOKEN="+token, "RETTY_AGENT_SOCKET="+SocketPath(), "RETTY_HOOK="+exe)
+	env = append(env, "RETTY_SESSION="+id, "RETTY_AGENT_TOKEN="+token, "RETTY_AGENT_SOCKET="+SocketPath(), "RETTY_HOOK="+exe, "RETTY_DIR="+Dir())
 	env = append(env, "RETTY_AGENT_SERVER_TOKEN="+serverToken)
 	env, codexDir, err := codexEnv(env, agents.InspectHooks("codex").Installed)
 	if err != nil {
@@ -149,8 +156,9 @@ func newSessionForServer(id string, o CreateOptions, serverToken string) (*sessi
 		return nil, err
 	}
 	s := &session{
-		resumed: o.resumed,
-		id:      id, shell: name, created: time.Now(), p: p, agentToken: token,
+		hookExecutable: exe,
+		resumed:        o.resumed,
+		id:             id, shell: name, created: time.Now(), p: p, agentToken: token,
 		clients: map[*attached]struct{}{},
 		cols:    cols, rows: rows, done: make(chan struct{}),
 	}
@@ -186,6 +194,7 @@ func newSessionForServer(id string, o CreateOptions, serverToken string) (*sessi
 		s.mu.Lock()
 		s.exited, s.code = true, code
 		s.finalViewport = s.vt.SnapshotRecent(-1)
+		s.finalGraphics = s.graphicsSnapshotLocked(-1)
 		s.finalTitle = s.vt.Title()
 		if len(s.screenClients) > 0 {
 			s.finalScreen = s.vt.SnapshotRecent(8192)
@@ -304,7 +313,7 @@ func (s *session) read() {
 // what it sends is typed.
 func (s *session) attach(conn net.Conn, cols, rows int) { s.attachScreen(conn, cols, rows, false) }
 
-func (s *session) attachScreen(conn net.Conn, cols, rows int, frames bool) {
+func (s *session) attachScreen(conn net.Conn, cols, rows int, frames bool, graphics ...bool) {
 	a := &attached{conn: conn, out: make(chan []byte, 2048), screenFrames: frames}
 	s.mu.Lock()
 	if cols > 0 && rows > 0 && s.sizeLock == "" {
@@ -314,6 +323,13 @@ func (s *session) attachScreen(conn net.Conn, cols, rows int, frames bool) {
 	snap := s.finalScreen
 	if snap == nil {
 		snap = s.vt.Snapshot()
+	}
+	if len(graphics) > 0 && graphics[0] {
+		if s.exited && len(s.finalGraphics) > 0 {
+			snap = s.finalGraphics
+		} else if !s.exited {
+			snap = s.graphicsSnapshotLocked(0)
+		}
 	}
 	if s.shell == "zsh" {
 		snap = append([]byte(promptRedraw), snap...)
@@ -355,7 +371,16 @@ func (s *session) attachScreen(conn net.Conn, cols, rows int, frames bool) {
 	s.mu.Unlock()
 }
 
+func (s *session) graphicsSnapshotLocked(rows int) []byte {
+	if source, ok := s.vt.(interface{ SnapshotGraphicsRecent(int) []byte }); ok {
+		return source.SnapshotGraphicsRecent(rows)
+	}
+	return s.vt.SnapshotRecent(rows)
+}
+
 func (s *session) input(p []byte) {
+	s.inputMu.Lock()
+	defer s.inputMu.Unlock()
 	s.mu.Lock()
 	s.lastInput = time.Now()
 	exited := s.exited
@@ -591,6 +616,9 @@ func (s *session) broadcastLocked(p []byte) {
 func (s *session) kill() {
 	s.mu.Lock()
 	exited := s.exited
+	if s.gitCaptureCancel != nil {
+		s.gitCaptureCancel()
+	}
 	s.mu.Unlock()
 	if !exited {
 		s.p.hangup()
@@ -609,7 +637,9 @@ func (s *session) info() SessionInfo {
 	s.mu.Lock()
 	s.expireSizeLockLocked(time.Now())
 	in := SessionInfo{
-		ID: s.id, Shell: s.shell, Created: s.created,
+		HookExecutable: s.hookExecutable,
+		GitTurn:        s.gitTurn,
+		ID:             s.id, Shell: s.shell, Created: s.created,
 		Title: s.vt.Title(), LastOutput: s.lastOutput, LastInput: s.lastInput,
 		Output: s.output, Bells: int(s.bells.Load()), Exited: s.exited, ExitCode: s.code,
 		Attached: len(s.clients) + len(s.screenClients), Cols: s.cols, Rows: s.rows,

@@ -2,6 +2,7 @@ package main
 
 import (
 	"cmp"
+	"context"
 	"encoding/json"
 	"iter"
 	"log"
@@ -17,6 +18,9 @@ import (
 	"retty/internal/terminal"
 
 	"retty/internal/agents"
+	"retty/internal/desktopcontrol"
+	"retty/internal/diagnostics"
+	"retty/internal/files"
 	"retty/internal/rex"
 )
 
@@ -49,6 +53,8 @@ type Node struct {
 
 // Pane is a terminal attached to a session of the server.
 type Pane struct {
+	devServers                *paneDevServers
+	browser                   *browserPane
 	host                      *desktopHost
 	ID                        int
 	SID                       string
@@ -96,6 +102,13 @@ type Pane struct {
 
 // App is the state of Retty's window.
 type App struct {
+	devScanFixture   bool // opt in to background discovery in headless UI tests
+	diagnostics      *desktopDiagnostics
+	diagnosticRead   func(context.Context, *rex.Client, diagnostics.Request) (diagnostics.Report, error)
+	browserFactory   func(*Pane) (browserView, error) // isolated UI fixtures
+	control          *desktopcontrol.Server
+	gitStatus        *desktopGitState
+	gitRead          func(context.Context, *rex.Client, string) (files.Result, error) // isolated fixtures
 	agentHistory     *sidebarAgentHistory
 	remoteUpdate     *remoteUpdateDialog
 	desktopUpdater   *desktopUpdateService
@@ -276,6 +289,7 @@ func (a *App) attach(p *Pane, cols, rows int) {
 		CopyRawText:    prefs.CopyRawText,
 		OnSplit:        onSplit,
 		OnOpenLink:     func(link terminal.Link) { a.openTerminalLink(p, link) },
+		OnPreviewLink:  func(link terminal.Link) *terminal.LinkPreviewSource { return a.terminalImagePreview(p, link) },
 	}
 	if p.SID == "" {
 		term, err := terminal.New(options)
@@ -453,6 +467,12 @@ func (a *App) split(vertical bool) {
 		return
 	}
 	old := t.Focus
+	if old.browser != nil {
+		if _, err := a.openBrowser(old, "about:blank", old.host, vertical); err != nil {
+			a.err = err.Error()
+		}
+		return
+	}
 	if t.Host != nil {
 		a.createDesktopSession(t.Host, a.currentDir(), old, vertical)
 		return
@@ -505,7 +525,7 @@ func (a *App) allPanes() iter.Seq2[*Tab, *Pane] {
 func (a *App) hostPanes(h *desktopHost) iter.Seq[*Pane] {
 	return func(yield func(*Pane) bool) {
 		for t, p := range a.allPanes() {
-			if t.Host == h && !yield(p) {
+			if t.Host == h && p.browser == nil && !yield(p) {
 				return
 			}
 		}
@@ -518,6 +538,10 @@ func (a *App) hostPanes(h *desktopHost) iter.Seq[*Pane] {
 // window closes, the session goes on.
 func (a *App) endPane(p *Pane, end bool) {
 	p.closed = true
+	if p.browser != nil {
+		p.browser.stop()
+		return
+	}
 	if end {
 		a.markPaneClosed(p)
 	}
@@ -760,6 +784,9 @@ func (a *App) toggleZoom() {
 // label returns how a pane names itself: its program, or the title the
 // program set, and the directory it works in.
 func (p *Pane) label() (name, detail string) {
+	if p.browser != nil {
+		return browserTitle(p.browser)
+	}
 	in := p.info
 	prog := paneProgram(p)
 	dir := shortDir(in.Dir)
@@ -864,14 +891,15 @@ type savedTab struct {
 }
 
 type savedNode struct {
-	SID      string     `json:"sid,omitempty"`
-	Dir      string     `json:"dir,omitempty"`
-	Cols     int        `json:"cols,omitempty"`
-	Rows     int        `json:"rows,omitempty"`
-	Vertical bool       `json:"vertical,omitempty"`
-	Ratio    float32    `json:"ratio,omitempty"`
-	A        *savedNode `json:"a,omitempty"`
-	B        *savedNode `json:"b,omitempty"`
+	Browser  *savedBrowser `json:"browser,omitempty"`
+	SID      string        `json:"sid,omitempty"`
+	Dir      string        `json:"dir,omitempty"`
+	Cols     int           `json:"cols,omitempty"`
+	Rows     int           `json:"rows,omitempty"`
+	Vertical bool          `json:"vertical,omitempty"`
+	Ratio    float32       `json:"ratio,omitempty"`
+	A        *savedNode    `json:"a,omitempty"`
+	B        *savedNode    `json:"b,omitempty"`
 }
 
 func (a *App) snapshot() savedLayout { return a.snapshotHost(nil) }
@@ -881,6 +909,9 @@ func (a *App) snapshotHost(host *desktopHost) savedLayout {
 	var save func(n *Node) *savedNode
 	save = func(n *Node) *savedNode {
 		if p := n.Pane; p != nil {
+			if p.browser != nil {
+				return &savedNode{Dir: p.info.Dir, Browser: &savedBrowser{ID: p.browser.id, URL: p.browser.url}}
+			}
 			s := &savedNode{SID: p.SID, Dir: p.info.Dir}
 			if s.SID == "" {
 				s.SID = p.recoverySID
@@ -956,6 +987,16 @@ func (a *App) restore() bool {
 	load = func(s *savedNode, t *Tab, parent *Node) *Node {
 		n := &Node{ID: a.id(), Parent: parent}
 		if s.A == nil || s.B == nil {
+			if s.Browser != nil {
+				p, err := a.newBrowserPane(s.Browser.ID, s.Browser.URL, nil)
+				if err != nil {
+					p, _ = a.newBrowserPane(s.Browser.ID, "about:blank", nil)
+				}
+				p.Tab, p.Node = t, n
+				p.info.Dir, p.startDir = s.Dir, s.Dir
+				n.Pane = p
+				return n
+			}
 			var p *Pane
 			if in, ok := live[s.SID]; ok && !used[s.SID] {
 				used[s.SID] = true

@@ -15,7 +15,9 @@ import (
 	"syscall"
 	"time"
 
+	"retty/internal/controlcli"
 	"retty/internal/rex"
+	"retty/internal/runtimeinfo"
 	"retty/internal/terminal/screen"
 )
 
@@ -23,6 +25,7 @@ var version = "dev"
 var commit = "unknown"
 
 func main() {
+	runtimeinfo.Version = version
 	log.SetOutput(os.Stderr)
 	log.SetPrefix("[retty] ")
 	if handled, err := helper(os.Args[1:], os.Stdin); handled {
@@ -35,7 +38,7 @@ func main() {
 	defer stop()
 	if err := run(ctx, os.Args[1:], os.Stdout, os.Stderr); err != nil {
 		fmt.Fprintln(os.Stderr, "retty:", err)
-		os.Exit(1)
+		os.Exit(controlcli.ExitCode(err))
 	}
 }
 

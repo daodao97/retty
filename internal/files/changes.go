@@ -4,31 +4,18 @@ import (
 	"context"
 	"errors"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
 	"time"
+
+	"retty/internal/gitstate"
 )
 
 // All Git operations are bounded and read-only. In particular status must not
 // refresh/write the real index or invoke a repository's fsmonitor executable.
 func runGit(ctx context.Context, dir string, args ...string) ([]byte, error) {
-	cmd := exec.CommandContext(ctx, "git", append([]string{"--no-pager", "--no-optional-locks", "--literal-pathspecs", "-c", "core.fsmonitor=false", "-c", "diff.external="}, args...)...)
-	cmd.Dir = dir
-	for _, value := range os.Environ() {
-		if !strings.HasPrefix(value, "GIT_") {
-			cmd.Env = append(cmd.Env, value)
-		}
-	}
-	out := &limitedBuffer{limit: MaxRead}
-	cmd.Stdout = out
-	cmd.Stderr = &limitedBuffer{limit: 4096}
-	err := cmd.Run()
-	if ctx.Err() != nil {
-		return nil, ctx.Err()
-	}
-	return out.Bytes(), err
+	return gitstate.ReadCommand(ctx, dir, args...)
 }
 
 func existingGitDirectory(dir string) string {

@@ -4,6 +4,7 @@ go 1.27.1
 
 require (
 	github.com/Heyana/typesetting-go v0.3.5-heyana.4
+	github.com/anmitsu/go-shlex v0.0.0-20200514113438-38f4b401e2be
 	github.com/coder/websocket v1.8.14
 	github.com/ebitengine/purego v0.11.1
 	github.com/egoist/mygo v0.2.15
@@ -18,13 +19,15 @@ require (
 require (
 	filippo.io/edwards25519 v1.2.0 // indirect
 	github.com/akutz/memconn v0.1.0 // indirect
-	github.com/anmitsu/go-shlex v0.0.0-20200514113438-38f4b401e2be // indirect
+	github.com/axiomhq/hyperloglog v0.0.0-20240319100328-84253e514e02 // indirect
 	github.com/creachadair/msync v0.8.1 // indirect
 	github.com/creack/pty v1.1.24 // indirect
 	github.com/dblohm7/wingoes v0.0.0-20240119213807-a09d6be7affa // indirect
+	github.com/dgryski/go-metro v0.0.0-20180109044635-280f6062b5bc // indirect
 	github.com/fxamacker/cbor/v2 v2.9.0 // indirect
 	github.com/gaissmai/bart v0.26.1 // indirect
 	github.com/go-json-experiment/json v0.0.0-20260623181947-01eb4420fa68 // indirect
+	github.com/go4org/hashtriemap v0.0.0-20260824042624-45fcf11fca0e // indirect
 	github.com/godbus/dbus/v5 v5.2.2 // indirect
 	github.com/golang/groupcache v0.0.0-20241129210726-2c02b8208cf8 // indirect
 	github.com/google/btree v1.1.3 // indirect
@@ -64,4 +67,4 @@ require (
 tool github.com/egoist/mygo/cmd/mygo
 
 // MyGo source branch: github.com/daodao97/mygo@main.
-replace github.com/egoist/mygo => github.com/daodao97/mygo v0.0.0-20261023022524-5e44f43cd033
+replace github.com/egoist/mygo => github.com/daodao97/mygo v0.0.0-20261023094631-376f50a86890

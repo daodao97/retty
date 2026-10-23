@@ -44,6 +44,8 @@ import (
 
 // Options configure a terminal.
 type Options struct {
+	// ImageLimit bounds Kitty image storage; zero defaults to 8 MiB, negative disables it.
+	ImageLimit int64
 	// Command is the program the terminal runs and its arguments. Empty
 	// runs the user's shell as a login shell, as terminal apps do: $SHELL,
 	// else /bin/zsh on macOS and /bin/sh elsewhere; PowerShell on Windows.
@@ -141,6 +143,8 @@ type Options struct {
 	// OnOpenLink runs on the UI thread, without holding the emulator lock.
 	// It receives a Command-clicked URL or printed file path and location.
 	OnOpenLink func(Link)
+	// OnPreviewLink prepares an optional image hover reader on the UI thread.
+	OnPreviewLink func(Link) *LinkPreviewSource
 	// OnSplit runs on the UI thread when a context-menu split is chosen.
 	// down is false for side-by-side panes and true for stacked panes.
 	OnSplit func(down bool)
@@ -164,9 +168,10 @@ const (
 // Terminal is a terminal emulator and the program it runs. Its methods are
 // safe from any goroutine.
 type Terminal struct {
-	opts    Options
-	in      inputQueue
-	context inputContext
+	previewState *linkPreview // guarded by mu
+	opts         Options
+	in           inputQueue
+	context      inputContext
 
 	// mu guards the emulator, which the reader changes and frames read.
 	mu                             sync.Mutex
@@ -270,6 +275,13 @@ func New(opts Options) (*Terminal, error) {
 	})
 	if err != nil {
 		return nil, err
+	}
+	if opts.ImageLimit >= 0 {
+		limit := uint64(opts.ImageLimit)
+		if limit == 0 {
+			limit = 8 << 20
+		}
+		t.term.SetImageLimit(limit)
 	}
 	t.term.SetTerminfoName("xterm-256color")
 	// Grapheme clusters take the cells of their width, as in Ghostty:
@@ -823,6 +835,7 @@ func (t *Terminal) Close() error {
 		return nil
 	}
 	t.closed = true
+	t.cancelLinkPreviewLocked()
 	src, proc, waiting := t.src, t.proc, t.launch != nil
 	t.launch = nil
 	if t.timer != nil {

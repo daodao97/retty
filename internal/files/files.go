@@ -12,6 +12,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"retty/internal/gitstate"
 )
 
 const MaxRead = 4 << 20
@@ -19,6 +21,12 @@ const MaxEntries = 5000
 const MaxPreviewRows = 20000
 
 type Request struct {
+	Base    string `json:"base,omitempty"`
+	Session string `json:"session,omitempty"`
+	Root    string `json:"root,omitempty"`
+	OldTree string `json:"oldTree,omitempty"`
+	NewTree string `json:"newTree,omitempty"`
+	Turn    string `json:"turn,omitempty"`
 	Op      string `json:"op"`
 	Kind    string `json:"kind"`
 	Path    string `json:"path,omitempty"`
@@ -40,13 +48,15 @@ type Entry struct {
 }
 
 type Result struct {
-	Version   int     `json:"version,omitempty"`
-	Path      string  `json:"path"`
-	Entries   []Entry `json:"entries,omitempty"`
-	Entry     *Entry  `json:"entry,omitempty"`
-	Data      []byte  `json:"data,omitempty"`
-	Offset    int64   `json:"offset,omitempty"`
-	Truncated bool    `json:"truncated,omitempty"`
+	Comparison *gitstate.Comparison `json:"comparison,omitempty"`
+	Git        *gitstate.Status     `json:"git,omitempty"`
+	Version    int                  `json:"version,omitempty"`
+	Path       string               `json:"path"`
+	Entries    []Entry              `json:"entries,omitempty"`
+	Entry      *Entry               `json:"entry,omitempty"`
+	Data       []byte               `json:"data,omitempty"`
+	Offset     int64                `json:"offset,omitempty"`
+	Truncated  bool                 `json:"truncated,omitempty"`
 }
 
 func infoEntry(info os.FileInfo) Entry {
@@ -83,6 +93,17 @@ func Do(ctx context.Context, req Request) (Result, error) {
 	}
 	r := Result{Path: path, Version: 1}
 	switch req.Kind {
+	case "git-changes", "git-diff":
+		return snapshotRequest(ctx, req, path)
+	case "git-status":
+		status, err := gitstate.Read(ctx, path)
+		if errors.Is(err, gitstate.ErrNotRepository) {
+			return r, nil
+		}
+		if err == nil {
+			r.Git = &status
+		}
+		return r, err
 	case "list":
 		f, err := openRead(path)
 		if err != nil {

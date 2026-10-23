@@ -13,6 +13,7 @@ import (
 	"hash/fnv"
 	"os"
 	"path/filepath"
+	"retty/internal/runtimeinfo"
 	"time"
 )
 
@@ -59,6 +60,15 @@ type Request struct {
 	ETag string `json:"etag,omitempty"`
 	// HistoryRows bounds an independent history snapshot request.
 	HistoryRows int `json:"history_rows,omitempty"`
+	// Input is explicit automation input, independent of attachment and size.
+	Input  *InputRequest  `json:"input,omitempty"`
+	Status *ProgramStatus `json:"programStatus,omitempty"`
+}
+
+// InputRequest writes once. An optional output revision rejects stale reads.
+type InputRequest struct {
+	Data     []byte  `json:"data"`
+	IfOutput *uint64 `json:"ifOutput,omitempty"`
 }
 
 // Response answers the Request with the same ID.
@@ -87,10 +97,12 @@ type CreateOptions struct {
 
 // SessionInfo describes a session and what runs in it now.
 type SessionInfo struct {
-	ID      string    `json:"id"`
-	PID     int       `json:"pid"`
-	Shell   string    `json:"shell"`
-	Created time.Time `json:"created"`
+	HookExecutable string    `json:"hookExecutable,omitempty"`
+	GitTurn        string    `json:"gitTurn,omitempty"`
+	ID             string    `json:"id"`
+	PID            int       `json:"pid"`
+	Shell          string    `json:"shell"`
+	Created        time.Time `json:"created"`
 	// Program is the name of the program in the foreground, and Args its
 	// arguments; Idle tells that it is the shell itself, at its prompt.
 	Program string   `json:"program"`
@@ -132,18 +144,22 @@ type RestoreResult struct {
 
 // Hello is the server's answer to "hello".
 type Hello struct {
-	Version int       `json:"version"`
-	PID     int       `json:"pid"`
-	Started time.Time `json:"started"`
-	Host    HostInfo  `json:"host"`
+	Build   runtimeinfo.Info `json:"build,omitzero"`
+	Version int              `json:"version"`
+	PID     int              `json:"pid"`
+	Started time.Time        `json:"started"`
+	Host    HostInfo         `json:"host"`
 	// Exe is the server's executable, and ExeTime when it was modified
 	// last as the server started: a development build compares them with
 	// its own, to replace a server of an older build.
-	Exe           string    `json:"exe,omitempty"`
-	ExeTime       time.Time `json:"exeTime,omitzero"`
-	AgentRecovery bool      `json:"agentRecovery,omitempty"`
-	Attention     bool      `json:"attention,omitempty"`
-	ScreenSync    bool      `json:"screen_sync,omitempty"`
+	Exe            string    `json:"exe,omitempty"`
+	ExeTime        time.Time `json:"exeTime,omitzero"`
+	AgentRecovery  bool      `json:"agentRecovery,omitempty"`
+	Attention      bool      `json:"attention,omitempty"`
+	ScreenSync     bool      `json:"screen_sync,omitempty"`
+	ScreenGraphics bool      `json:"screen_graphics,omitempty"`
+	TurnDiff       bool      `json:"turn_diff,omitempty"`
+	SessionControl bool      `json:"session_control,omitempty"`
 }
 
 // HostInfo describes the machine the server runs on.
@@ -202,6 +218,8 @@ type Attach struct {
 	// ScreenSync negotiates acknowledged viewport states instead of output
 	// bytes, including framed input/acks. Ignored by older servers.
 	ScreenSync bool `json:"screen_sync,omitempty"`
+	// ScreenGraphics negotiates bounded Kitty pixels in restored snapshots.
+	ScreenGraphics bool `json:"screen_graphics,omitempty"`
 	// InputOnly suppresses live screen updates on a separate ownership stream.
 	InputOnly bool `json:"input_only,omitempty"`
 	// Owner, with version 6, takes the session's size lock for a device
@@ -228,7 +246,12 @@ func Dir() string {
 // SocketPath returns the path of the server's socket: in Dir, unless that
 // is too long a path for a socket, then in the temporary directory.
 func SocketPath() string {
-	p := filepath.Join(Dir(), "server.sock")
+	return SocketPathForDir(Dir())
+}
+
+// SocketPathForDir resolves a namespace without changing process environment.
+func SocketPathForDir(dir string) string {
+	p := filepath.Join(dir, "server.sock")
 	if len(p) < 100 {
 		return p
 	}

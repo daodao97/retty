@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"retty/internal/atomicfile"
+	"retty/internal/controlcli"
 	"retty/internal/remote"
 	"retty/internal/rex"
 	"retty/internal/terminal/screen"
@@ -47,11 +48,18 @@ Use --qr with serve/link to print a QR code even when output is redirected.
 `
 
 func run(ctx context.Context, args []string, output, diagnostics io.Writer) error {
+	if controlcli.Handles(args) {
+		base, err := os.UserConfigDir()
+		if err != nil {
+			return err
+		}
+		return controlcli.Run(ctx, args, os.Stdin, output, diagnostics, controlcli.Options{DefaultDir: filepath.Join(base, "RettyServer")})
+	}
 	if len(args) == 0 {
 		args = []string{"serve"}
 	}
 	if args[0] == "help" || args[0] == "--help" || args[0] == "-h" {
-		_, err := io.WriteString(output, usage)
+		_, err := io.WriteString(output, usage+"\n"+controlcli.Usage)
 		return err
 	}
 	if args[0] == "version" || args[0] == "--version" {

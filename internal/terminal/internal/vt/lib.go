@@ -47,6 +47,9 @@ var (
 
 	fnGridRefHyperlinkURI, fnGridRefGraphemes, fnGridRefCell, fnTypeJSON, fnFormatterFormatAlloc, fnFormatterFree uintptr
 
+	fnKittyGet, fnKittyImage, fnKittyImageGet, fnPlacementIteratorNew, fnPlacementIteratorFree,
+	fnPlacementNext, fnPlacementGet, fnPlacementRenderInfo, fnSysSet, fnAlloc uintptr
+
 	// Bound with registerFunc below: they take structs or floats.
 	fnTerminalScrollViewport, fnTerminalGridRef, fnMouseEventSetPosition, fnSelectionFormatAlloc, fnFormatterTerminalNew uintptr
 )
@@ -121,6 +124,16 @@ var symbols = []struct {
 	{"ghostty_paste_encode", &fnPasteEncode},
 	{"ghostty_paste_is_safe", &fnPasteIsSafe},
 	{"ghostty_free", &fnFree},
+	{"ghostty_kitty_graphics_get", &fnKittyGet},
+	{"ghostty_kitty_graphics_image", &fnKittyImage},
+	{"ghostty_kitty_graphics_image_get", &fnKittyImageGet},
+	{"ghostty_kitty_graphics_placement_iterator_new", &fnPlacementIteratorNew},
+	{"ghostty_kitty_graphics_placement_iterator_free", &fnPlacementIteratorFree},
+	{"ghostty_kitty_graphics_placement_next", &fnPlacementNext},
+	{"ghostty_kitty_graphics_placement_get", &fnPlacementGet},
+	{"ghostty_kitty_graphics_placement_render_info", &fnPlacementRenderInfo},
+	{"ghostty_sys_set", &fnSysSet},
+	{"ghostty_alloc", &fnAlloc},
 	{"ghostty_selection_gesture_new", &fnGestureNew},
 	{"ghostty_selection_gesture_free", &fnGestureFree},
 	{"ghostty_selection_gesture_reset", &fnGestureReset},
@@ -172,6 +185,7 @@ func load(path string) error {
 	registerFunc(&selectionFormatAlloc, fnSelectionFormatAlloc)
 	registerFunc(&formatterTerminalNew, fnFormatterTerminalNew)
 	makeCallbacks()
+	decodePNG()
 	return nil
 }
 

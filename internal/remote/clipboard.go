@@ -59,6 +59,14 @@ func (b *Bridge) serveConnection(conn net.Conn, socket string) {
 		b.serveFiles(conn, line)
 		return
 	}
+	if req.Op == "port-forward" {
+		b.servePort(conn, reader, line)
+		return
+	}
+	if req.Op == "host-diagnostics" {
+		b.serveHostDiagnostics(conn, line)
+		return
+	}
 	if req.Op == "self-update" {
 		b.serveUpdate(conn, line)
 		return

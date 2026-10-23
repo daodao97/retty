@@ -16,6 +16,8 @@ import (
 // AgentState is owned by the session server, so reconnecting a window does
 // not lose a pending question. WaitRevision counts distinct waiting periods.
 type AgentState struct {
+	CWD                string    `json:"cwd,omitempty"`
+	HookEvent          string    `json:"hookEvent,omitempty"`
 	ID                 string    `json:"id,omitempty"`
 	SessionID          string    `json:"sessionID,omitempty"`
 	ConfigDir          string    `json:"configDir,omitempty"`
@@ -235,7 +237,11 @@ func (t *agentTracker) apply(e AgentEvent) {
 			configDir = filepath.Join(h.CWD, configDir)
 		}
 	}
-	t.state = AgentState{ID: e.Agent, SessionID: h.SessionID, ConfigDir: configDir, State: state, Reason: reason, Updated: e.At, WaitRevision: revision, CompletionRevision: completion, Summary: summary}
+	cwd := h.CWD
+	if cwd == "" && t.state.ID == e.Agent && t.state.SessionID == h.SessionID {
+		cwd = t.state.CWD
+	}
+	t.state = AgentState{CWD: cwd, HookEvent: h.Event, ID: e.Agent, SessionID: h.SessionID, ConfigDir: configDir, State: state, Reason: reason, Updated: e.At, WaitRevision: revision, CompletionRevision: completion, Summary: summary}
 	if state == agents.Ended {
 		t.state.State = ""
 	}
@@ -304,7 +310,11 @@ func ReportAgent(socket, sid, token string, event AgentEvent) error {
 		return err
 	}
 	defer conn.Close()
-	conn.SetDeadline(time.Now().Add(750 * time.Millisecond))
+	deadline := 750 * time.Millisecond
+	if agents.NormalizeHook(event.Agent, event.Input).Event == "UserPromptSubmit" {
+		deadline = 3 * time.Second // allow the bounded pre-turn Git baseline
+	}
+	conn.SetDeadline(time.Now().Add(deadline))
 	if err := json.NewEncoder(conn).Encode(Request{ID: 1, Op: "agentEvent", SID: sid, Token: token, AgentEvent: &event}); err != nil {
 		return err
 	}

@@ -21,6 +21,9 @@ import (
 )
 
 type Session struct {
+	// Project identity groups linked worktrees; Dir remains the exact resume
+	// directory. These fields are enriched by the sidebar's background scan.
+	ProjectID, ProjectDir, Branch     string
 	Agent, ID, Dir, Title, ConfigDir  string
 	Provider, AccountID, AccountLabel string
 	ResumeError                       string

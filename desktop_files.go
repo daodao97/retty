@@ -11,18 +11,26 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 	"github.com/egoist/mygo/ui/editor"
 	"retty/internal/files"
+	"retty/internal/gitstate"
 	"retty/internal/remote"
 	"retty/internal/rex"
 	"retty/internal/terminal"
 )
 
 type desktopFiles struct {
+	base                                             string
+	comparison                                       *gitstate.Comparison
+	turn                                             string
+	turnRetry                                        int
+	turnRetryAt                                      time.Time
 	host                                             *desktopHost
 	pane                                             *Pane
 	client                                           *rex.Client
@@ -77,6 +85,9 @@ func (b *desktopFiles) stop() {
 
 func (a *App) toggleFiles() {
 	prefs.FilesOpen = !prefs.FilesOpen
+	if !prefs.FilesOpen {
+		prefs.FilesSidePanel = false
+	}
 	saveSettings()
 	if prefs.FilesOpen {
 		a.focusReq = nil
@@ -111,12 +122,18 @@ func (a *App) syncFiles() {
 		client = p.host.client
 	}
 	if b := a.files; b != nil && b.pane == p && b.host == p.host && b.client == client && b.cwd == cwd {
+		if b.diff && b.base == "turn" && b.turn != p.info.GitTurn {
+			a.loadFileDirectory(b, cwd)
+		}
 		return
 	}
 	if a.files != nil {
 		a.files.stop()
 	}
-	b := &desktopFiles{pane: p, host: p.host, client: client, cwd: cwd, diff: prefs.FilesDiff}
+	b := &desktopFiles{pane: p, host: p.host, client: client, cwd: cwd, diff: prefs.FilesDiff, base: prefs.FilesDiffBase}
+	if b.base != "turn" && b.base != "branch" {
+		b.base = "head"
+	}
 	a.files = b
 	a.loadFileDirectory(b, cwd)
 }
@@ -125,7 +142,7 @@ func fileRequest(ctx context.Context, client *rex.Client, req files.Request) (fi
 	if client != nil {
 		return remote.BrowseFiles(ctx, client, req)
 	}
-	return files.Do(ctx, req)
+	return files.Do(files.WithSnapshotStore(ctx, filepath.Join(rex.Dir(), "git-snapshots")), req)
 }
 
 func (a *App) filesCurrent(b *desktopFiles) bool {
@@ -141,6 +158,7 @@ func (a *App) openTerminalFile(p *Pane, link terminal.Link) {
 		return
 	}
 	prefs.FilesOpen = true
+	prefs.FilesSidePanel = false
 	a.focusReq = nil
 	saveSettings()
 	a.syncFiles()
@@ -198,6 +216,7 @@ func (a *App) loadFileDirectory(b *desktopFiles, path string) {
 	b.entries = nil
 	b.dirs = map[string]*fileDirectory{}
 	b.truncated = false
+	b.comparison = nil
 	b.list = ui.ListState{}
 	if b.pane.host != nil && !b.pane.host.connected() {
 		b.loading = false
@@ -211,13 +230,21 @@ func (a *App) loadFileDirectory(b *desktopFiles, path string) {
 	client := b.client
 	hidden := prefs.FilesHidden
 	diff := b.diff
+	base, sid, turn := b.base, b.pane.SID, b.pane.info.GitTurn
+	if b.turn != turn {
+		b.turnRetry = 0
+	}
+	b.turn, b.turnRetryAt = turn, time.Time{}
 	win := a.win
 	go func() {
 		kind := "list"
 		if diff {
 			kind = "changes"
 		}
-		r, err := fileRequest(ctx, client, files.Request{Kind: kind, Path: path, Hidden: hidden})
+		if diff && base != "head" {
+			kind = "git-changes"
+		}
+		r, err := fileRequest(ctx, client, files.Request{Kind: kind, Path: path, Hidden: hidden, Base: base, Session: sid, Turn: turn})
 		a.post(func() {
 			if !a.filesCurrent(b) || b.epoch != epoch {
 				return
@@ -225,11 +252,15 @@ func (a *App) loadFileDirectory(b *desktopFiles, path string) {
 			b.loading = false
 			if err != nil {
 				b.err = err.Error()
+				if base == "turn" && turn != "" && b.turnRetry < 2 && (strings.Contains(b.err, "本轮快照未记录成功") || strings.Contains(b.err, "本轮基线尚未就绪")) {
+					b.turnRetryAt = time.Now().Add(time.Second)
+				}
 				return
 			}
 			b.dir, b.pathInput = r.Path, r.Path
 			b.entries = r.Entries
 			b.truncated = r.Truncated
+			b.comparison = r.Comparison
 			if diff {
 				b.dirs = changedFileTree(r.Path, r.Entries)
 			} else {
@@ -269,13 +300,18 @@ func (a *App) previewFileAt(b *desktopFiles, path string, diff bool, limit, line
 	ctx, cancel := context.WithCancel(context.Background())
 	b.previewCancel = cancel
 	client, win := b.client, a.win
+	comparison := b.comparison
 	go func() {
 		defer cancel()
 		kind := "read"
 		if diff {
 			kind = "diff"
 		}
-		r, err := fileRequest(ctx, client, files.Request{Kind: kind, Path: path, Length: limit})
+		req := files.Request{Kind: kind, Path: path, Length: limit}
+		if diff && comparison != nil {
+			req.Kind, req.Root, req.OldTree, req.NewTree = "git-diff", comparison.Root, comparison.Base, comparison.Current.Tree
+		}
+		r, err := fileRequest(ctx, client, req)
 		var bitmap *ui.Bitmap
 		var code *editor.State
 		var changes *editor.DiffState

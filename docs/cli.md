@@ -4,6 +4,10 @@ Retty 的含义是 **Reconnect TTY / Relay TTY**：重新连接持续运行的�
 
 CLI 让没有图形界面的 Linux/macOS 服务器也能提供 Retty 会话。桌面端和手机端使用已有的加密连接、会话列表与尺寸接管机制，服务器不需要安装桌面环境，也不需要开放公网终端端口。
 
+脚本和 Agent 的 `list/status/read/new/split/send/wait/report`、稳定 Action ID 与内嵌使用 skill 见 [会话与 GUI 自动化](session-control.md)。这些命令连接现有服务，不启动网关或替换运行中的 daemon。
+
+`retty browser` 通过桌面 GUI 控制浏览器窗格，包含远端开发端口、DOM 操作和截图，见 [浏览器窗格](browser-panes.md)。
+
 ## 安装与连接
 
 下载对应平台的 CLI 压缩包；支持 Linux/macOS 的 amd64、arm64。解压后保留 `retty` 与同目录的 `libghostty-vt.so`（Linux）或 `libghostty-vt.dylib`（macOS）：
