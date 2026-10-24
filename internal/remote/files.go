@@ -36,6 +36,9 @@ func (b *Bridge) serveFiles(conn net.Conn, line []byte) {
 	stop := context.AfterFunc(ctx, func() { conn.Close() })
 	defer stop()
 	conn.SetDeadline(time.Now().Add(15 * time.Second))
+	// gVisor's deadline callbacks otherwise keep their channels until the
+	// timeout, even after a short-lived file connection has closed.
+	defer conn.SetDeadline(time.Time{})
 	go func() { var extra [1]byte; _, _ = conn.Read(extra[:]); cancel() }()
 	var req files.Request
 	var result files.Result
@@ -52,7 +55,14 @@ func (b *Bridge) serveFiles(conn net.Conn, line []byte) {
 	} else {
 		res.Data, _ = json.Marshal(result)
 	}
-	_ = json.NewEncoder(conn).Encode(res)
+	if err := json.NewEncoder(conn).Encode(res); err == nil {
+		// Let the requester close after decoding the complete response. An
+		// active server close leaves TIME-WAIT on this host while the peer
+		// can immediately reuse its source port for the next file request.
+		// The reader above cancels on peer close, and the deadline still
+		// bounds clients that stop reading or never close their connection.
+		<-ctx.Done()
+	}
 }
 
 // BrowseFiles uses a separate authenticated stream and never attaches or
@@ -64,7 +74,10 @@ func BrowseFiles(ctx context.Context, client *rex.Client, req files.Request) (fi
 	if err != nil {
 		return files.Result{}, err
 	}
-	defer conn.Close()
+	defer func() {
+		conn.SetDeadline(time.Time{})
+		conn.Close()
+	}()
 	stop := context.AfterFunc(ctx, func() { conn.Close() })
 	defer stop()
 	deadline, _ := ctx.Deadline()

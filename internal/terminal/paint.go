@@ -256,6 +256,27 @@ type resolved struct {
 	strike, overline bool
 }
 
+type rowStyle struct {
+	id uint16
+	r  resolved
+}
+
+// Row construction is serial within a view. Scratch slices never escape to a
+// cached row or a scene, and oversized Unicode/style input is not retained.
+type rowBuildScratch struct {
+	text, graphemes []rune
+	cols            []int16
+	widths          []int8
+	styles          []rowStyle
+}
+
+func retainRowScratch[T any](buf []T, limit int) []T {
+	if cap(buf) > limit {
+		return nil
+	}
+	return buf[:0]
+}
+
 func (v *view) resolve(s vt.Style) resolved {
 	pal := &v.colors.Palette
 	col := func(c vt.Color, def vt.RGB) (ui.Color, bool) {
@@ -291,14 +312,13 @@ func (v *view) resolve(s vt.Style) resolved {
 
 // buildRow makes the cache of the render state's current row.
 func (v *view) buildRow(line *rowCache, rs *vt.RenderState, cols int) {
+	previousRuns := len(line.runs)
 	*line = rowCache{ok: true, bgs: line.bgs[:0], runs: line.runs[:0], decos: line.decos[:0], boxes: line.boxes[:0], wide: line.wide[:0]}
 	cells := rs.RowCells()
 	line.selA, line.selB, line.sel = rs.RowSelection()
 	def := resolved{fg: color(v.colors.Foreground), bg: color(v.colors.Background)}
-	var styles []struct {
-		id uint16
-		r  resolved
-	}
+	scratch := &v.rowScratch
+	styles := scratch.styles[:0]
 	styleOf := func(c vt.Cell, x int) resolved {
 		if c.Style == 0 {
 			return def
@@ -309,10 +329,7 @@ func (v *view) buildRow(line *rowCache, rs *vt.RenderState, cols int) {
 			}
 		}
 		r := v.resolve(rs.CellStyle(x))
-		styles = append(styles, struct {
-			id uint16
-			r  resolved
-		}{c.Style, r})
+		styles = append(styles, rowStyle{c.Style, r})
 		return r
 	}
 	var run struct {
@@ -322,11 +339,12 @@ func (v *view) buildRow(line *rowCache, rs *vt.RenderState, cols int) {
 		fg      ui.Color
 		variant int
 	}
+	run.text, run.cols, run.widths = scratch.text[:0], scratch.cols[:0], scratch.widths[:0]
 	flush := func() {
 		v.shapeRun(line, run.text, run.cols, run.widths, run.fg, run.variant)
 		run.text, run.cols, run.widths = run.text[:0], run.cols[:0], run.widths[:0]
 	}
-	var buf []rune
+	buf := scratch.graphemes[:0]
 	for x := 0; x < len(cells) && x < cols; x++ {
 		c := cells[x]
 		if c.Wide == vt.SpacerTail || c.Wide == vt.SpacerHead {
@@ -410,6 +428,16 @@ func (v *view) buildRow(line *rowCache, rs *vt.RenderState, cols int) {
 		}
 	}
 	flush()
+	// Runs belong to this row. Keep buffers for the runs reused next frame,
+	// and release those removed by a shorter line or fewer style changes.
+	if len(line.runs) < previousRuns {
+		clear(line.runs[len(line.runs):previousRuns])
+	}
+	scratch.text = retainRowScratch(run.text, 8192)
+	scratch.cols = retainRowScratch(run.cols, 8192)
+	scratch.widths = retainRowScratch(run.widths, 8192)
+	scratch.graphemes = retainRowScratch(buf, 8192)
+	scratch.styles = retainRowScratch(styles, 1024)
 }
 
 func (r resolved) ulColor() ui.Color {
@@ -441,7 +469,21 @@ func (v *view) shapeRun(line *rowCache, text []rune, cols []int16, widths []int8
 	}
 	shaped := v.shape(string(text), variant, 1)
 	cw := float32(v.cellW) / v.scale
-	out := glyphRun{glyphs: make([]ui.Glyph, 0, len(shaped)), cols: make([]int16, 0, len(shaped)), c: fg}
+	var out glyphRun
+	if n := len(line.runs); n < cap(line.runs) {
+		out = line.runs[:cap(line.runs)][n]
+	}
+	// A very wide remote row may later become only a short prompt. Keep
+	// ordinary capacity amortized without retaining its oversized buffers.
+	if cap(out.glyphs) > max(1024, 4*len(shaped)) {
+		out.glyphs = nil
+	}
+	if cap(out.cols) > max(1024, 4*len(shaped)) {
+		out.cols = nil
+	}
+	out.glyphs, out.cols, out.c = out.glyphs[:0], out.cols[:0], fg
+	out.glyphs = slices.Grow(out.glyphs, len(shaped))
+	out.cols = slices.Grow(out.cols, len(shaped))
 	// The glyphs of a cell, or of the cells a ligature spans, keep their
 	// places relative to each other and are centered in the cells, as the
 	// glyphs of fallback fonts, wider or narrower than a cell, are. Those

@@ -124,7 +124,9 @@ func (a *App) findBar(c *ui.Context, k *colors, t *Tab, p *Pane) {
 					status = "Searching…"
 				}
 			}
-			if p.find.query != "" {
+			// Output and navigation already invalidate the view. Only an
+			// unfinished incremental scan needs another scheduled frame.
+			if state.Busy {
 				c.After(100 * time.Millisecond)
 			}
 			ui.Text(c, status).FontSize(11).TextColor(k.textFaint).Shrink(0).SingleLine().Role(ui.RoleStatus)

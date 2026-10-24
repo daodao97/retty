@@ -3,9 +3,49 @@ package main
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/egoist/mygo/ui"
 )
+
+// Advance the UI's virtual clock rather than sleeping: a completed search must
+// stop requesting frames, while new output and navigation still update results.
+func TestCompletedFindStopsPollingAndAcceptsNewMatches(t *testing.T) {
+	a, _ := newStaticTestApp(t)
+	tab := a.tab()
+	p := tab.Focus
+	p.term.Feed([]byte("\x1b[?25l\r\nquiet-target one\r\nquiet-target two\r\n"))
+	p.find.open, p.find.query = true, "quiet-target"
+	if err := p.term.SetSearch(p.find.query); err != nil {
+		t.Fatal(err)
+	}
+	frames := 0
+	tt := ui.NewTester(func(c *ui.Context) {
+		frames++
+		a.findBar(c, colorsOf(c), tab, p)
+	}, 600, 36)
+	tt.Advance(time.Second)
+	if s := p.term.SearchState(); s.Busy || s.Total != 2 {
+		t.Fatalf("search did not finish: %+v", s)
+	}
+	settled := frames
+	tt.Advance(2 * time.Second)
+	if frames != settled {
+		t.Fatalf("completed search requested %d idle frames", frames-settled)
+	}
+	p.term.Feed([]byte("quiet-target three\r\n"))
+	tt.Frame()
+	if s := p.term.SearchState(); s.Busy || s.Total != 3 {
+		t.Fatalf("new output was not searched: %+v", s)
+	}
+	previous := p.term.SearchState().Current
+	if err := tt.Click("Find Next"); err != nil {
+		t.Fatal(err)
+	}
+	if s := p.term.SearchState(); s.Current == previous {
+		t.Fatalf("navigation did not advance: %+v", s)
+	}
+}
 
 func TestFindShortcutsAndPaneIsolation(t *testing.T) {
 	a, tt := newTestApp(t)

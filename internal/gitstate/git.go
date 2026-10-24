@@ -213,10 +213,16 @@ func Read(ctx context.Context, dir string) (Status, error) {
 		s.Default = strings.TrimPrefix(strings.TrimSpace(string(b)), "ref: refs/remotes/origin/")
 	}
 	if s.Default == "" {
-		for _, branch := range []string{"main", "master"} {
-			if _, err := run(ctx, r.Root, "show-ref", "--verify", "--quiet", "refs/heads/"+branch); err == nil {
-				s.Default = branch
-				break
+		// A committed main was already identified by status. Avoid starting
+		// another Git process just to confirm the branch we are on exists.
+		if s.Branch == "main" && s.Head != "" {
+			s.Default = "main"
+		} else {
+			for _, branch := range []string{"main", "master"} {
+				if _, err := run(ctx, r.Root, "show-ref", "--verify", "--quiet", "refs/heads/"+branch); err == nil {
+					s.Default = branch
+					break
+				}
 			}
 		}
 	}

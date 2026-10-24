@@ -5,6 +5,7 @@ package runtimeinfo
 import (
 	"runtime"
 	"runtime/debug"
+	"sync"
 )
 
 // Version is initialized by the desktop/CLI entrypoint before starting workers.
@@ -18,8 +19,18 @@ type Info struct {
 	Go       string `json:"go,omitempty"`
 }
 
+// Build metadata belongs to the executable and cannot change while it runs.
+// Keep the entrypoint's Version separate: it can be set after an early query.
+var executableInfo = sync.OnceValue(readExecutableInfo)
+
 func Current() Info {
-	r := Info{Version: Version, Go: runtime.Version()}
+	r := executableInfo()
+	r.Version = Version
+	return r
+}
+
+func readExecutableInfo() Info {
+	r := Info{Go: runtime.Version()}
 	if b, ok := debug.ReadBuildInfo(); ok {
 		for _, s := range b.Settings {
 			switch s.Key {

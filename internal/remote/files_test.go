@@ -78,6 +78,41 @@ func TestBrowseFilesUsesBridgeWithoutDaemonOrInput(t *testing.T) {
 
 }
 
+func TestFileResponseStaysOpenUntilRequesterCloses(t *testing.T) {
+	t.Setenv("RETTY_DIR", t.TempDir())
+	c, _, _, _ := fileUploadFixture(t)
+	path := filepath.Join(t.TempDir(), "fixture.txt")
+	if err := os.WriteFile(path, []byte("fixture"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	conn, err := c.DialExtension(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	conn.SetDeadline(time.Now().Add(time.Second))
+	if err := json.NewEncoder(conn).Encode(files.Request{Op: "files-browse", Kind: "read", Path: path, Length: 4}); err != nil {
+		t.Fatal(err)
+	}
+	var response rex.Response
+	if err := json.NewDecoder(conn).Decode(&response); err != nil || response.Error != "" {
+		t.Fatalf("response: %v, %s", err, response.Error)
+	}
+	var result files.Result
+	if err := json.Unmarshal(response.Data, &result); err != nil || string(result.Data) != "fixt" {
+		t.Fatalf("payload: %q: %v", result.Data, err)
+	}
+	// Keep the requesting end open after decoding. The responder must not
+	// actively close first and leave a TIME-WAIT tuple on the remote host.
+	conn.SetReadDeadline(time.Now().Add(30 * time.Millisecond))
+	var extra [1]byte
+	_, err = conn.Read(extra[:])
+	var timeout net.Error
+	if !errors.As(err, &timeout) || !timeout.Timeout() {
+		t.Fatalf("responder closed before its requester: %v", err)
+	}
+}
+
 func TestBrowseFilesLegacyAndCancellation(t *testing.T) {
 	for _, legacy := range []bool{true, false} {
 		control, peer := net.Pipe()

@@ -238,7 +238,10 @@ func TestSidebarProjectHistoryDisclosureAndResume(t *testing.T) {
 	if err := tt.Click("恢复 Codex 会话 " + sessions[0].Title); err != nil {
 		t.Fatal(err)
 	}
-	tt.Frame()
+	// Codex resolution is asynchronous even when its tab already exists.
+	waitFor(t, tt, "reactivate local history from remote tab", func() bool {
+		return a.tab().Host == nil && a.tab().Name == sessions[0].Title
+	})
 	if len(a.tabs) != 3 || a.tab().Host != nil || a.tab().Name != sessions[0].Title {
 		t.Fatal("local history did not reactivate its local tab from a remote tab")
 	}

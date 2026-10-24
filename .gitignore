@@ -10,3 +10,6 @@ mygo_windows_*.syso
 /.asc/*
 !/.asc/workflow.json
 !/.asc/toolchain.json
+
+# Python tooling caches
+__pycache__/

@@ -63,6 +63,37 @@ func infoEntry(info os.FileInfo) Entry {
 	return Entry{Name: info.Name(), Directory: info.IsDir(), Regular: info.Mode().IsRegular(), Size: info.Size(), Modified: info.ModTime().Unix(), Version: fmt.Sprintf("%d:%d:%d", info.Size(), info.ModTime().UnixNano(), info.Mode())}
 }
 
+// Keep keys aligned with entries while sorting. Computing Unicode lower-case
+// names in Less would allocate again for every comparison in a large directory.
+type entryOrder struct {
+	entries []Entry
+	folded  []string
+}
+
+func (s entryOrder) Len() int { return len(s.entries) }
+func (s entryOrder) Less(i, j int) bool {
+	a, b := s.entries[i], s.entries[j]
+	if a.Directory != b.Directory {
+		return a.Directory
+	}
+	if s.folded[i] == s.folded[j] {
+		return a.Name < b.Name
+	}
+	return s.folded[i] < s.folded[j]
+}
+func (s entryOrder) Swap(i, j int) {
+	s.entries[i], s.entries[j] = s.entries[j], s.entries[i]
+	s.folded[i], s.folded[j] = s.folded[j], s.folded[i]
+}
+
+func sortEntries(entries []Entry) {
+	keys := make([]string, len(entries))
+	for i := range entries {
+		keys[i] = strings.ToLower(entries[i].Name)
+	}
+	sort.Sort(entryOrder{entries, keys})
+}
+
 func absolute(name string) (string, error) {
 	if name == "" || name == "~" {
 		return os.UserHomeDir()
@@ -146,17 +177,7 @@ func Do(ctx context.Context, req Request) (Result, error) {
 			}
 			r.Entries = append(r.Entries, e)
 		}
-		sort.Slice(r.Entries, func(i, j int) bool {
-			a, b := r.Entries[i], r.Entries[j]
-			if a.Directory != b.Directory {
-				return a.Directory
-			}
-			aa, bb := strings.ToLower(a.Name), strings.ToLower(b.Name)
-			if aa == bb {
-				return a.Name < b.Name
-			}
-			return aa < bb
-		})
+		sortEntries(r.Entries)
 		return r, nil
 	case "stat":
 		st, err := os.Stat(path)

@@ -131,9 +131,13 @@ func (c *Client) Restart(pid int) (*Client, error) {
 func (c *Client) Closed() <-chan struct{} { return c.closed }
 
 func (c *Client) read() {
-	r := bufio.NewReaderSize(c.conn, 1<<20)
+	// Control replies are normally small. Large replies, including history
+	// and session lists, are assembled without imposing a message-size limit.
+	r := bufio.NewReaderSize(c.conn, 64<<10)
+	var scratch []byte
 	for {
-		line, err := r.ReadBytes('\n')
+		line, storage, err := readControlLine(r, scratch)
+		scratch = storage
 		if err != nil {
 			c.mu.Lock()
 			c.err = err
@@ -146,7 +150,13 @@ func (c *Client) read() {
 			return
 		}
 		var res Response
-		if json.Unmarshal(line, &res) != nil {
+		decodeErr := json.Unmarshal(line, &res)
+		// Unmarshal owns Response strings and RawMessage data. The receive
+		// buffer can be reused while the caller decodes the delivered reply.
+		if cap(scratch) > 256<<10 {
+			scratch = nil
+		}
+		if decodeErr != nil {
 			continue
 		}
 		c.mu.Lock()
@@ -157,6 +167,21 @@ func (c *Client) read() {
 			ch <- res
 		}
 	}
+}
+
+// ReadSlice avoids copying ordinary replies. Large lines assemble into one
+// reusable buffer instead of allocating a copy of every reader-sized fragment.
+func readControlLine(r *bufio.Reader, scratch []byte) (line, storage []byte, err error) {
+	line, err = r.ReadSlice('\n')
+	if err != bufio.ErrBufferFull {
+		return line, scratch, err
+	}
+	scratch = append(scratch[:0], line...)
+	for err == bufio.ErrBufferFull {
+		line, err = r.ReadSlice('\n')
+		scratch = append(scratch, line...)
+	}
+	return scratch, scratch, err
 }
 
 // call sends a request and decodes the response's data into out.
@@ -371,6 +396,7 @@ type Stream struct {
 	conn                            net.Conn
 	err                             error
 	closed                          bool
+	readAttachStarted               bool // guarded by mu; one read-triggered viewer attach
 	// cols and rows are the terminal's size; sentCols and sentRows the
 	// size the server was told last.
 	cols, rows         int
@@ -602,6 +628,13 @@ func readAttachOK(conn net.Conn) (attachResponse, error) {
 func (s *Stream) wait() (net.Conn, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	// A read-only viewer has no initial layout to collect. Start on demand
+	// instead of waiting for the fallback timer. Dial asynchronously so Close
+	// can still release a blocked reader while the connection is in flight.
+	if s.preserveSize && s.c != nil && !s.readAttachStarted && s.conn == nil && s.err == nil && !s.closed {
+		s.readAttachStarted = true
+		go s.attach()
+	}
 	for s.conn == nil && s.err == nil && !s.closed {
 		s.cond.Wait()
 	}

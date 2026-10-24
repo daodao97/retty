@@ -125,6 +125,7 @@ type view struct {
 	searchMatches []vt.Selection
 	searchRects   []vt.MatchRect
 	lines         []rowCache
+	rowScratch    rowBuildScratch
 	shaped        lru
 	contrast      map[contrastPair]ui.Color
 

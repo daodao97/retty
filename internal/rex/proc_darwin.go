@@ -25,6 +25,13 @@ const (
 	maxPathLen    = 1024
 )
 
+type processPathBuffer [2 * (vnodeInfoSize + maxPathLen)]byte
+
+// Passing the buffer to libproc makes it escape. Reuse scratch storage rather
+// than allocating it for every session in every poll; returned strings own
+// their bytes, and every use still queries libproc for the current directory.
+var processPathBuffers = sync.Pool{New: func() any { return new(processPathBuffer) }}
+
 func loadLibproc() {
 	lib, err := purego.Dlopen("/usr/lib/libSystem.B.dylib", purego.RTLD_NOW|purego.RTLD_GLOBAL)
 	if err != nil {
@@ -66,7 +73,8 @@ func inspect(pid int) (p procInfo) {
 	}
 	procOnce.Do(loadLibproc)
 	if procPidinfo != nil {
-		var buf [2 * (vnodeInfoSize + maxPathLen)]byte
+		buf := processPathBuffers.Get().(*processPathBuffer)
+		clear(buf[:])
 		if procPidinfo(int32(pid), procPidVnodePathInfo, 0, unsafe.Pointer(&buf[0]), int32(len(buf))) > 0 {
 			path := buf[vnodeInfoSize : vnodeInfoSize+maxPathLen]
 			if i := bytes.IndexByte(path, 0); i >= 0 {
@@ -74,6 +82,7 @@ func inspect(pid int) (p procInfo) {
 			}
 			p.dir = string(path)
 		}
+		processPathBuffers.Put(buf)
 	}
 	return p
 }

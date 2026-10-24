@@ -77,6 +77,30 @@ func TestStatusPreservesUserIndexAndIgnoresGitOverrides(t *testing.T) {
 	}
 }
 
+func TestDefaultBranchForUnbornCurrentAndFallbackBranches(t *testing.T) {
+	dir, git := gitFixture(t)
+	check := func(want string) {
+		t.Helper()
+		s, err := Read(context.Background(), dir)
+		if err != nil || s.Default != want {
+			t.Fatalf("default branch: got %q, want %q: %v", s.Default, want, err)
+		}
+	}
+	check("") // An unborn HEAD named main does not yet create refs/heads/main.
+	write(t, filepath.Join(dir, "fixture.txt"), "base\n")
+	git("add", ".")
+	git("commit", "-qm", "fixture")
+	check("main")
+	git("branch", "-m", "topic")
+	check("")
+	git("branch", "master")
+	check("master")
+	git("branch", "main")
+	check("main")
+	git("checkout", "--detach", "-q")
+	check("main")
+}
+
 func TestWorktreesShareProjectButKeepTheirBranchAndDirectory(t *testing.T) {
 	dir, git := gitFixture(t)
 	write(t, filepath.Join(dir, "file"), "base\n")

@@ -16,6 +16,8 @@ python3 -B scripts/performance-baseline.py
 
 默认每个场景预热 10 秒、采样 30 秒、每 0.5 秒读一次进程计数。运行会短暂打开测试窗口；保持机器接电、屏幕唤醒，尽量停止其他重负载工作，并在同一显示器上执行。窗口为 1000 × 620 DIP、深色、11.6 字号；截图尺寸、终端网格、窗口是否聚焦和系统 load average 都写进报告。测试 GUI 使用临时 MyGo 用户数据路径，避免读取或写回真实窗口位置与设置。
 
+默认 `--focus-mode foreground` 通过专用 fixture 接口激活测试窗口，并在采样前后检查焦点；失去焦点则拒绝该次测量。旧二进制不支持激活接口时可以显式使用 `--focus-mode as-is`，但两种模式不能混合比较。受控基线可以仅补入相同的测试激活接口，保留补丁和构建来源。
+
 仅用于检查工具是否可运行的短验证：
 
 ```sh
@@ -86,10 +88,75 @@ python3 -B scripts/performance-baseline.py --duration 120 --warmup 20 --scenario
 
 比较时保持机器、系统、显示倍率、窗口、字体、场景参数及预热/采样时长一致，至少独立重跑三次；结合系统负载、聚焦状态、峰值和稳定值判断。当前阶段记录事实，不设置尚无依据的性能门禁。后续优化应同时保留改动前后的完整报告，解释取舍。
 
+## 前后对比接口
+
+`scripts/performance-compare.py` 接受完整应用报告、Go 微基准原始输出，生成
+`report.json`、`report.md` 和可筛选的离线 `report.html`。输出目录必须不存在，
+已有证据不会被覆盖。stdout 返回输出目录、指标数量与是否为初步结果的 JSON，
+可由其他工具调用。
+
+```sh
+python3 -B scripts/performance-compare.py \
+  --before build/performance/before-01/report.json build/performance/before-02/report.json build/performance/before-03/report.json \
+  --after build/performance/after-01/report.json build/performance/after-02/report.json build/performance/after-03/report.json \
+  --output build/performance/comparison
+
+python3 -B scripts/performance-compare.py \
+  --before-bench before-bench.txt --after-bench after-bench.txt \
+  --output build/performance/benchmark-comparison
+```
+
+按单个场景分别采样时，给对比命令加 `--split-scenarios`，并把每侧各场景的所有有效报告传入。工具按场景核对条件，按每项指标的实际重复数判断是否为初步结果；缺少另一侧的场景会报错。失焦或其他失败报告仍不能参与聚合。
+
+两类输入也可以在一次调用中同时提供。应用报告会核对机器、负载、采样参数、
+网格、窗口大小、焦点与场景覆盖；不匹配或失败的测量会被拒绝。微基准保留包名、
+子基准和 CPU 并行度，并核对系统、架构和 CPU；同一路径不能重复计作多个样本。
+每侧输出各轮的中位数、最小值、最大值和原始值，任一指标少于三轮则标为初步结果。
+CPU 的小绝对值变化、同一进程内重复的微基准、少量请求的 P99 都不能直接视为
+稳定或显著的提升。原始构建信息、二进制 SHA-256 和运行负载保留在 JSON 中。
+
+当前优化调查与验收清单见 [性能优化调查](performance-optimization.md)。
+
+## 真实控制接口延迟
+
+`scripts/performance-api.py` 在独立临时目录启动指定的生产二进制，为每个会话规模创建确定性 PTY，测量真实 Unix 控制接口的 hello、完整列表、ETag 列表、新连接列表和历史读取。工具记录原始请求耗时、P50/P95/P99、传输字节、二进制 SHA 和服务构建信息，不连接已安装应用的会话。
+
+```sh
+python3 -B scripts/performance-api.py \
+  --binary build/darwin-arm64/Retty.app/Contents/MacOS/Retty \
+  --sessions 1 8 64 --samples 200 --warmup 20 \
+  --output build/performance/api-before-01
+
+python3 -B scripts/performance-compare.py \
+  --before build/performance/api-before-01/report.json \
+  --after build/performance/api-after-01/report.json \
+  --output build/performance/api-comparison
+```
+
+前后使用同一版本的驱动及参数；驱动文件的 SHA 也参与条件校验。请求计时包含 Python JSON 编解码；新连接计时还包含连接建立，持久连接计时不包含。200 次请求的尾部值仅是初步观测，至少三次独立测量后再判断；这些数据不代表画面呈现、无线链路或 Go Client 独有开销。
+
+## 实际加密画面流
+
+`TestEncryptedStreamPerformance` 使用自己创建的会话和两端 Tailcat 身份，在真实加密连接中协商 `screen_sync`，测量首屏、约 1 MiB/s 输出和 20 次输入回显。三个场景为快速接收、1 Mbps 接收加每次更新 200 ms 处理延迟、双查看器（第二个接收端限制为 1 Mbps）。它不模拟丢包或真实手机 GPU。
+
+```sh
+RETTY_REMOTE_E2E=1 RETTY_PERF_STREAM_OUTPUT="$PWD/build/performance/stream-after-01.json" \
+  GOWORK=off go test ./internal/remote \
+  -run '^TestEncryptedStreamPerformance$' -count=1 -timeout=2m
+
+python3 -B scripts/performance-compare.py \
+  --before build/performance/stream-before-01.json \
+  --after build/performance/stream-after-01.json \
+  --output build/performance/stream-comparison
+```
+
+输出父目录需已存在，JSON 路径必须为绝对路径且尚不存在。前后复用相同夹具源码和 Go 版本，至少各三次独立进程；对比接口会核对驱动 SHA、负载参数、平台及直连/中继类型，失败或请求样本缺失时拒绝比较。原始 JSON 还保留第二查看器的解密后协议字节和重建状态字节；它们不代表无线流量。测试检查慢端持续收到更新、会话进程和网格不变，并只清理自己的服务、PTY 和临时目录。
+
 ## 工具检查
 
 ```sh
 python3 -B -m unittest discover -s scripts -p 'test_performance_baseline.py'
+python3 -B -m unittest discover -s scripts -p 'test_performance_compare.py'
 GOWORK=off go test . -run '^TestPerformanceFixture' -count=1
 ```
 

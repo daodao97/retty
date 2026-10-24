@@ -285,6 +285,9 @@ class Fixture:
         ]})
         self.start("gui", [], {"RETTY_PERF_SOCKET": str(self.gui_socket)})
         wait_for(lambda: self.gui().get("tabs") == count, on_wait=lambda: self.sample("startup"))
+        if self.args.focus_mode == "foreground":
+            self.gui("focus")
+            wait_for(lambda: self.gui().get("focused"), on_wait=lambda: self.sample("startup"))
         self.gui("capture")
         self.hold(self.args.warmup, "startup")
         if scenario == "history_search":
@@ -322,6 +325,8 @@ class Fixture:
             self.workload(sid, f"OUTPUT {self.args.output_rate}", b"OUTPUT_STARTED")
         self.hold(1, "settle")
         gui_before = self.gui()
+        if self.args.focus_mode == "foreground" and not gui_before["focused"]:
+            raise RuntimeError("fixture lost foreground focus before measurement; do not compare this run")
         load_before = os.getloadavg()
         before = self.request("list")[0]["output"]
         viewer_before = [viewer.bytes for viewer in self.viewers]
@@ -330,6 +335,11 @@ class Fixture:
         elapsed = time.monotonic() - start
         after = self.request("list")
         gui_after = self.gui()
+        if self.args.focus_mode == "foreground" and not gui_after["focused"]:
+            (self.output / "invalid-focus.json").write_text(json.dumps({"before": gui_before, "after": gui_after}, indent=2))
+            self.gui("capture")
+            shutil.copyfile(self.data / "capture.png", self.output / "invalid-focus.png")
+            raise RuntimeError("fixture lost foreground focus during measurement; do not compare this run")
         throughput = (after[0]["output"] - before) / elapsed
         viewer_bytes = [viewer.bytes - initial for viewer, initial in zip(self.viewers, viewer_before)]
         if scenario in ("output", "dual_viewers"):
@@ -465,6 +475,7 @@ def main():
     parser.add_argument("--output-rate", type=int, default=MIB)
     parser.add_argument("--scenarios", nargs="+", choices=SCENARIOS, default=list(SCENARIOS))
     parser.add_argument("--skip-benchmarks", action="store_true")
+    parser.add_argument("--focus-mode", choices=("foreground", "as-is"), default="foreground")
     args = parser.parse_args()
     def interrupted(signum, frame):
         raise KeyboardInterrupt(f"received signal {signum}")

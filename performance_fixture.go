@@ -52,6 +52,10 @@ func (a *App) performanceFixture() {
 	}
 	win := a.win
 	win.OnClosed(func() { ln.Close(); os.Remove(path) })
+	win.OnFocus(func() { log.Print("performance fixture gained focus") })
+	win.OnBlur(func() {
+		log.Printf("performance fixture lost focus (visible=%v minimized=%v)", win.IsVisible(), win.IsMinimized())
+	})
 	go func() {
 		for {
 			conn, err := ln.Accept()
@@ -93,6 +97,9 @@ func (a *App) performanceFixture() {
 						p := t.Focus
 						switch req.Op {
 						case "status":
+						case "focus":
+							mygo.App.Focus()
+							win.Focus()
 						case "diagnostics":
 							if req.Value == "open" {
 								a.openDiagnostics()
