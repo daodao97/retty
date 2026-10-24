@@ -48,14 +48,27 @@ func (m *mobileApp) pasteClipboardImage(image []byte) {
 	m.error = ""
 	m.imagePasteEpoch++
 	epoch := m.imagePasteEpoch
-	client, sid := m.client, m.selected.ID
+	client, sid, term, generation := m.client, m.selected.ID, m.term, m.generation
+	codex := sessionProgramName(m.selected) == "codex"
+	thread := sessionAgentState(m.selected).SessionID
 	ctx, cancel := context.WithCancel(context.Background())
 	m.imagePasteCancel = cancel
 	m.invalidate()
+	post := mygo.RunOnMain
+	if m.imagePastePost != nil {
+		post = m.imagePastePost
+	}
 	go func() {
 		defer cancel()
-		err := client.PasteImage(ctx, sid, image)
-		mygo.RunOnMain(func() {
+		var err error
+		var path string
+		if codex {
+			path, err = client.UploadClipboardImage(ctx, sid, image, nil)
+		} else {
+			err = client.PasteImage(ctx, sid, image)
+		}
+		completed := err == nil && ctx.Err() == nil
+		post(func() {
 			if m.imagePasteEpoch != epoch {
 				return
 			}
@@ -63,6 +76,8 @@ func (m *mobileApp) pasteClipboardImage(image []byte) {
 			m.imagePasteCancel = nil
 			if err != nil {
 				m.error = err.Error()
+			} else if codex && completed && m.client == client && m.generation == generation && m.selected.ID == sid && m.term == term && !m.background && !m.needsRecovery() && sessionProgramName(m.selected) == "codex" && sessionAgentState(m.selected).SessionID == thread {
+				m.term.Paste(droppedFilePaths([]string{path}))
 			}
 			m.invalidate()
 		})

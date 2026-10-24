@@ -69,6 +69,11 @@ rather than a `*ui.Context`, and `OnPaste`/`OnSubmit` receive services,
 because input handlers run outside a build pass. `view.painted` records the
 box of the last paint for caret tests, as elements expire with their pass.
 
+Retty also consults `OnPaste` for desktop Ctrl+V before encoding a raw key.
+The host consumes it only for clipboard PNGs targeting a remote Codex pane,
+uploading the file and pasting its remote path. A false return preserves the
+ordinary Ctrl+V key; standard text paste and iOS paste behavior are unchanged.
+
 The MyGo v0.3.6 fork upgrade (7cdc2f22b829) has no changes to the upstream
 terminal plugin relative to the previously pinned fork commit 0663ec5c09b1.
 The local terminal additions and Ghostty library pin remain applicable.

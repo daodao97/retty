@@ -232,15 +232,6 @@ func (a *App) preferenceItems() []preferenceItem {
 					}
 				}
 			}},
-		{id: "dev-servers", title: "发现开发地址", label: "Discover development URLs", detail: "从终端最近输出识别 localhost 等开发地址，点击后在同一主机的浏览器窗格中打开。不会自动打开或探测端口。", group: "链接", section: 1,
-			modified: prefs.HideDevServers, reset: func() { prefs.HideDevServers = false; saveSettings() },
-			control: func(c *ui.Context) {
-				show := !prefs.HideDevServers
-				if settingsSwitch(c, &show, "Discover development URLs").Changed() {
-					prefs.HideDevServers = !show
-					saveSettings()
-				}
-			}},
 		{id: "desktop-notifications", title: "桌面通知", label: "Desktop notifications", detail: "在此电脑显示系统通知，包括任务完成、等待输入和终端提醒。", group: "通知", section: 2,
 			modified: prefs.HideDesktopNotifications,
 			reset:    func() { a.setDesktopNotifications(true) },

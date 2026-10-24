@@ -1,6 +1,8 @@
 # 会话与 GUI 自动化
 
-桌面可执行文件与无图形界面的 `retty` CLI 共用会话控制命令。查看完整参数使用 `retty session help`。桌面应用没有安装 PATH 入口时，在它创建的终端里可用 `"$RETTY_HOOK"` 替代下面的 `retty`。
+桌面可执行文件与无图形界面的 `retty` CLI 共用会话控制命令。在 macOS 正式桌面应用中按 `⌘⇧P`，搜索 **Install CLI** 并执行，或使用 Retty 菜单的同名入口，将 `/usr/local/bin/retty` 链接到应用内的可执行文件。目录需要权限时弹出系统管理员授权；取消不安装，同名文件或其他目标的链接不会被覆盖。应用在原位置更新后，命令继续使用新版。
+
+安装后使用 `retty session help` 查看完整参数。没有安装 PATH 入口时，在 Retty 创建的终端里可用 `"$RETTY_HOOK"` 替代下面的 `retty`。此入口提供桌面会话和浏览器控制；服务器的 `serve/link/update` 命令仍来自独立 CLI 包。
 
 浏览器使用独立的 `retty browser` 命令与持久 `web-…` ID，支持读取、点击、输入、等待、截图和远端开发页，详见 [浏览器窗格](browser-panes.md)。
 

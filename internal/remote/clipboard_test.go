@@ -183,3 +183,23 @@ func TestTruncatedPNGDoesNotReachDesktopClipboard(t *testing.T) {
 		t.Fatal("truncated image applied", err)
 	}
 }
+
+func TestHeadlessCodexImageUploadUsesFileChannelWithoutClipboardOrPTY(t *testing.T) {
+	c, _, _, _ := fileUploadFixture(t)
+	data := clipboardPNG(t)
+	path, err := c.UploadClipboardImage(context.Background(), "pane", data, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	received, err := os.ReadFile(path)
+	if err != nil || !bytes.Equal(data, received) {
+		t.Fatal("remote PNG differs", err)
+	}
+	st, err := os.Stat(path)
+	if err != nil || st.Mode().Perm() != 0600 || filepath.Base(path) != "clipboard.png" {
+		t.Fatal("image file is not private", err)
+	}
+	if _, err := c.UploadClipboardImage(context.Background(), "pane", data[:len(data)-12], nil); err == nil {
+		t.Fatal("truncated PNG uploaded")
+	}
+}

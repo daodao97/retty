@@ -1,5 +1,18 @@
 # 终端图片
 
+## 向远端 Codex 粘贴图片
+
+桌面连接远端 Retty 会话，在 Codex 内按 `⌘V`、`Ctrl+V` 或使用粘贴菜单时，Retty 先读取本机 PNG 剪贴板，通过已有独立文件通道上传到会话所在主机，收到完整确认后再以 bracketed paste 插入远端图片路径。手机的 Codex 图片粘贴使用同一通道。不会向远端发送 Ctrl+V，不读取远端 X11/Wayland 剪贴板，也不提交回车；用户仍可补充说明后自行发送。
+
+上传遵守 PNG 32 MB / 3200 万像素限制并检查完整解码。本机临时文件权限 0600，操作结束后只清理本次临时目录；远端图片使用既有私有上传批次，保留给 Agent 读取。取消、切换窗格、切换 Agent 对话、重连或手机进入后台后不插入迟到路径。普通 Ctrl+V 在没有图片处理时继续传给终端；其他程序原有粘贴行为保留。
+
+远端需支持已有的 `upload-files` 扩展；不支持时显示网关升级提示，不尝试粘贴本机路径或回退到远端剪贴板。此修复只更新客户端，不要求重启远端 Codex、共享 daemon 或 PTY。普通 ssh/mosh 嵌套连接仍不具备 Retty 文件通道，不能把本机路径当成远端路径使用。
+
+```sh
+GOWORK=off go test . ./internal/remote ./internal/terminal \
+  -run 'TestRemoteCodexImage|TestMobileCodexImage|TestHeadlessCodexImage|TestCtrlVImage|TestRemoteFileDrop' -race -count=1
+```
+
 ## 图片路径悬停
 
 鼠标停留在终端打印的图片路径上约 350ms，Retty 在终端旁显示预览，不需要按 Command。原有 Command 点击、文本选择和终端鼠标输入保持原来的行为。支持 PNG、JPEG、GIF 首帧、WebP 和 BMP；HTTP 图片 URL 不会自动下载，SVG 不作为图片执行。

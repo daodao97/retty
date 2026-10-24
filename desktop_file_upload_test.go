@@ -65,7 +65,11 @@ func remoteUploadPaneFixture(t *testing.T, failure string) (*App, *Pane, *ui.Tes
 			case <-stop:
 				return
 			}
-			data, _ := json.Marshal(rex.FileUploadReply{Paths: []string{"/srv/Retty/uploads/batch-123/001/a'b.txt"}})
+			path := "/srv/Retty/uploads/batch-123/001/a'b.txt"
+			if len(req.Roots) == 1 && strings.HasSuffix(req.Roots[0], "/clipboard.png") {
+				path = "/srv/Retty/uploads/batch-123/001/clipboard.png"
+			}
+			data, _ := json.Marshal(rex.FileUploadReply{Paths: []string{path}})
 			json.NewEncoder(remote).Encode(rex.Response{Data: data})
 		}()
 		return local, nil

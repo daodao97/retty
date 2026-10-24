@@ -247,9 +247,13 @@ func (t *agentTracker) apply(e AgentEvent) {
 	}
 }
 
-// RunAgentHook never writes model-visible output, starts a server or changes
-// an approval decision. A failed report cannot hold up the agent.
+// Lifecycle hooks are silent and bounded. A Claude PermissionRequest can also
+// return the user's explicit structured decision while a phone views its pane.
 func RunAgentHook(agent string, stdin io.Reader) {
+	RunAgentHookWithOutput(agent, stdin, os.Stdout)
+}
+
+func RunAgentHookWithOutput(agent string, stdin io.Reader, out io.Writer) {
 	sid, token, socket := os.Getenv("RETTY_SESSION"), os.Getenv("RETTY_AGENT_TOKEN"), os.Getenv("RETTY_AGENT_SOCKET")
 	if agent == "codex" && os.Getenv("RETTY_AGENT_SERVER_TOKEN") != "" {
 		token = os.Getenv("RETTY_AGENT_SERVER_TOKEN")
@@ -285,6 +289,9 @@ func RunAgentHook(agent string, stdin io.Reader) {
 	event := AgentEvent{Agent: agent, Input: h, At: time.Now()}
 	if ReportAgent(socket, sid, token, event) == nil {
 		_ = agents.SaveHookTask(Dir(), agent, h, data, event.At)
+	}
+	if agent == "claude" {
+		runClaudeApproval(data, out)
 	}
 }
 

@@ -131,7 +131,7 @@ func newSessionForServer(id string, o CreateOptions, serverToken string) (*sessi
 	exe, _ := os.Executable()
 	env = append(env, "RETTY_SESSION="+id, "RETTY_AGENT_TOKEN="+token, "RETTY_AGENT_SOCKET="+SocketPath(), "RETTY_HOOK="+exe, "RETTY_DIR="+Dir())
 	env = append(env, "RETTY_AGENT_SERVER_TOKEN="+serverToken)
-	env, codexDir, err := codexEnv(env, agents.InspectHooks("codex").Installed)
+	env, codexDir, err := codexEnv(env)
 	if err != nil {
 		return nil, err
 	}

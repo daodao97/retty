@@ -9,7 +9,7 @@ import (
 // A pane-local launcher observes the existing shared daemon through a private
 // relay. The CLI still uses that daemon; no daemon environment is required.
 // PATH injection works with login shells as well as direct Codex sessions.
-func codexEnv(env []string, bridge bool) ([]string, string, error) {
+func codexEnv(env []string) ([]string, string, error) {
 	dir, err := os.MkdirTemp(Dir(), "codex-")
 	if err != nil {
 		return nil, "", err
@@ -27,11 +27,7 @@ func codexEnv(env []string, bridge bool) ([]string, string, error) {
 			clean = append(clean, kv)
 		}
 	}
-	mode := "0"
-	if bridge {
-		mode = "1"
-	}
-	return append(clean, "PATH="+dir+string(os.PathListSeparator)+path, "RETTY_CODEX_BIN="+dir, "RETTY_CODEX_BRIDGE="+mode), dir, nil
+	return append(clean, "PATH="+dir+string(os.PathListSeparator)+path, "RETTY_CODEX_BIN="+dir, "RETTY_CODEX_BRIDGE=1"), dir, nil
 }
 
 const codexLauncher = `#!/bin/sh
@@ -52,8 +48,6 @@ codex_exe=${RETTY_CODEX_EXE-}
 if [ -z "$codex_exe" ]; then
   codex_exe=$(PATH=$real_path command -v codex) || exit 127
 fi
-
-[ "${RETTY_CODEX_BRIDGE-0}" = 1 ] || exec "$codex_exe" "$@"
 
 # Preserve explicit server connections, daemon management and utility commands.
 for arg do

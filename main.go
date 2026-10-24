@@ -23,6 +23,7 @@ import (
 	updatenative "github.com/egoist/mygo/plugins/updater/native"
 	"github.com/egoist/mygo/ui"
 
+	"retty/internal/agents"
 	"retty/internal/controlcli"
 	"retty/internal/push"
 	"retty/internal/remote"
@@ -34,6 +35,13 @@ func main() {
 	runtimeinfo.Version = mygo.App.Version()
 	if runtime.GOOS == "ios" {
 		mobileMain()
+		return
+	}
+	if len(os.Args) == 2 && os.Args[1] == "-install-cli" {
+		if err := installCurrentCLILink(); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
 		return
 	}
 	if len(os.Args) == 4 && os.Args[1] == "-push-service" {
@@ -60,8 +68,8 @@ func main() {
 		json.NewEncoder(os.Stdout).Encode(status)
 		return
 	}
-	// Hooks are silent, bounded CLI calls and never initialize AppKit or
-	// spawn a server when run in another terminal.
+	// Hook helpers never initialize AppKit. Only an explicit Claude permission
+	// request with a foreground phone viewer may wait for a structured reply.
 	if len(os.Args) == 3 && os.Args[1] == "-agent-hook" {
 		rex.RunAgentHook(os.Args[2], os.Stdin)
 		return
@@ -122,6 +130,9 @@ func main() {
 	loadSettings()
 	// Only the desktop GUI owns updates. Daemons, hooks and iOS return above.
 	if !performanceRun {
+		if err := agents.UpgradeApprovalHook(); err != nil {
+			log.Print("无法更新 Retty Claude 授权 Hook：", err)
+		}
 		mygo.Updater.SetKeepPreviousBundles(true)
 		mygo.Use(updatenative.Plugin)
 	}

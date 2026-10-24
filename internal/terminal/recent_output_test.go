@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"strings"
 	"testing"
-
-	"retty/internal/devserver"
 )
 
 func TestRecentOutputBoundsUnwrapsAndDoesNotMoveViewport(t *testing.T) {
@@ -28,9 +26,8 @@ func TestRecentOutputBoundsUnwrapsAndDoesNotMoveViewport(t *testing.T) {
 	if !changed || len(text) > 64<<10 || strings.Contains(text, "old row 000") || strings.Contains(text, "\x1b") {
 		t.Fatal("tail is unbounded or undecoded", text, rev, changed)
 	}
-	urls := devserver.Extract(text)
-	if len(urls) != 1 || urls[0].URL != "http://localhost:5173/a/long/path" {
-		t.Fatal("wrapped advertised URL not restored", text, urls)
+	if !strings.Contains(text, "http://localhost:5173/a/long/path") {
+		t.Fatal("wrapped text not restored", text)
 	}
 	term.mu.Lock()
 	after := term.term.Scrollbar()

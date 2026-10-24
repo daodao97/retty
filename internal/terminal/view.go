@@ -406,6 +406,8 @@ func (v *view) keyDown(ev ui.InputEvent) bool {
 	case runtime.GOOS == "ios" && mods == ui.Ctrl && key == ui.KeyV && t.opts.OnPaste != nil:
 		v.paste()
 		return true
+	case runtime.GOOS != "ios" && mods == ui.Ctrl && key == ui.KeyV && t.opts.OnPaste != nil && t.opts.OnPaste(v.services):
+		return true // A host may transfer a clipboard image before raw Ctrl+V.
 	case mods == ui.Shift && (key == ui.KeyPageUp || key == ui.KeyPageDown) && v.scrollPage(key == ui.KeyPageUp):
 		return true
 	case mods&ui.Super != 0 && !ev.Software:

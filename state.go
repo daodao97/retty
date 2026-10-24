@@ -53,7 +53,6 @@ type Node struct {
 
 // Pane is a terminal attached to a session of the server.
 type Pane struct {
-	devServers                *paneDevServers
 	browser                   *browserPane
 	host                      *desktopHost
 	ID                        int
@@ -102,7 +101,7 @@ type Pane struct {
 
 // App is the state of Retty's window.
 type App struct {
-	devScanFixture   bool // opt in to background discovery in headless UI tests
+	cliInstaller     *desktopCLIInstaller
 	diagnostics      *desktopDiagnostics
 	diagnosticRead   func(context.Context, *rex.Client, diagnostics.Request) (diagnostics.Report, error)
 	browserFactory   func(*Pane) (browserView, error) // isolated UI fixtures
@@ -288,6 +287,7 @@ func (a *App) attach(p *Pane, cols, rows int) {
 		Transparent:    true,
 		CopyRawText:    prefs.CopyRawText,
 		OnSplit:        onSplit,
+		OnPaste:        func(s ui.Services) bool { return a.pastePaneClipboard(p, s) },
 		OnOpenLink:     func(link terminal.Link) { a.openTerminalLink(p, link) },
 		OnPreviewLink:  func(link terminal.Link) *terminal.LinkPreviewSource { return a.terminalImagePreview(p, link) },
 	}

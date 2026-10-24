@@ -115,3 +115,34 @@ func TestHookCommandIsSilentOutsideRetty(t *testing.T) {
 		t.Fatalf("quoted executable: %q/%v", output, err)
 	}
 }
+
+func TestApprovalHookUpgradePreservesOtherConfiguration(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", dir)
+	path := filepath.Join(dir, "settings.json")
+	original := []byte(`{"custom":"keep","hooks":{"PermissionRequest":[{"matcher":"Bash","hooks":[{"type":"command","command":"user-handler","timeout":2},{"type":"command","command":` + quotedHookCommand() + `,"timeout":2}]}]}}`)
+	if err := os.WriteFile(path, original, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := UpgradeApprovalHook(); err != nil {
+		t.Fatal(err)
+	}
+	first, _ := os.ReadFile(path)
+	var root map[string]any
+	json.Unmarshal(first, &root)
+	hooks := root["hooks"].(map[string]any)
+	group := hooks["PermissionRequest"].([]any)[0].(map[string]any)
+	entries := group["hooks"].([]any)
+	if root["custom"] != "keep" || group["matcher"] != "Bash" || entries[0].(map[string]any)["timeout"] != float64(2) || entries[1].(map[string]any)["timeout"] != float64(120) {
+		t.Fatal(string(first))
+	}
+	if err := UpgradeApprovalHook(); err != nil {
+		t.Fatal(err)
+	}
+	second, _ := os.ReadFile(path)
+	backup, _ := os.ReadFile(path + ".retty-backup")
+	if !bytes.Equal(first, second) || !bytes.Equal(original, backup) {
+		t.Fatal("upgrade not idempotent or backup changed")
+	}
+}
+func quotedHookCommand() string { b, _ := json.Marshal(HookCommand("claude")); return string(b) }

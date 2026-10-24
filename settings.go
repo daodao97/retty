@@ -25,7 +25,6 @@ type settings struct {
 	FilesSidePanel                   bool    `json:"filesSidePanel,omitempty"`
 	FilesWidth                       float32 `json:"filesWidth,omitempty"`
 	HideGitStatus                    bool    `json:"hideGitStatus,omitempty"`
-	HideDevServers                   bool    `json:"hideDevServers,omitempty"`
 	FontSize                         float32 `json:"fontSize,omitempty"`
 	LinkEditor                       string  `json:"linkEditor,omitempty"`
 	CopyRawText                      bool    `json:"copyRawText,omitempty"`

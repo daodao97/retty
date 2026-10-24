@@ -8,6 +8,8 @@ import (
 	"image/png"
 	"io"
 	"net"
+	"os"
+	"path/filepath"
 	"time"
 )
 
@@ -35,6 +37,34 @@ func ValidateClipboardImage(data []byte) error {
 		return errors.New("图片尺寸过大，请裁剪后重试")
 	}
 	return nil
+}
+
+// UploadClipboardImage uses the existing file channel. The returned path is
+// on the session's host, so a headless Codex TUI can attach it without X11.
+// It never sends Ctrl+V, submits a prompt, or retries terminal input.
+func (c *Client) UploadClipboardImage(ctx context.Context, sid string, data []byte, progress func(int64, int64)) (string, error) {
+	if err := ValidateClipboardImage(data); err != nil {
+		return "", err
+	}
+	if _, err := png.Decode(bytes.NewReader(data)); err != nil {
+		return "", errors.New("剪贴板图片不完整，请重新复制后再试")
+	}
+	ctx, cancel := context.WithTimeout(ctx, ImagePasteTimeout)
+	defer cancel()
+	dir, err := os.MkdirTemp("", "retty-clipboard-")
+	if err != nil {
+		return "", err
+	}
+	defer os.RemoveAll(dir)
+	path := filepath.Join(dir, "clipboard.png")
+	if err = os.WriteFile(path, data, 0600); err != nil {
+		return "", err
+	}
+	paths, err := c.UploadFiles(ctx, sid, []string{path}, progress)
+	if err != nil {
+		return "", err
+	}
+	return paths[0], nil
 }
 
 // PasteImage copies an image to the desktop clipboard and sends Ctrl+V to sid.

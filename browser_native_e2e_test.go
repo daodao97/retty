@@ -23,7 +23,6 @@ import (
 	"github.com/coder/websocket"
 	"retty/internal/browsercontrol"
 	"retty/internal/desktopcontrol"
-	"retty/internal/devserver"
 	"retty/internal/diagnostics"
 	"retty/internal/push"
 	"retty/internal/remote"
@@ -255,29 +254,13 @@ func TestBrowserNativeAutomationAndRestore(t *testing.T) {
 		t.Fatal("native GUI diagnostics did not read its isolated hook profile/build")
 	}
 	fixtureCall("diagnostics", "close")
-	deadline = time.Now().Add(5 * time.Second)
-	advertised := false
-	for time.Now().Before(deadline) {
-		var urls []devserver.URL
-		json.Unmarshal(fixtureCall("development", "")["urls"], &urls)
-		for _, u := range urls {
-			advertised = advertised || sameBrowserPage(u.URL, fixture.URL)
-		}
-		if advertised {
-			break
-		}
-		time.Sleep(50 * time.Millisecond)
+	var opened browsercontrol.Result
+	if err := json.Unmarshal(cli("browser", "open", fixture.URL, "--beside", session.ID), &opened); err != nil || opened.Browser == nil {
+		t.Fatal("manual browser open failed", opened, err)
 	}
-	if !advertised {
-		t.Fatal("native terminal did not discover its advertised HTTP development page")
-	}
-	opened := fixtureCall("open-development", fixture.URL)
-	var id string
-	if json.Unmarshal(opened["browser"], &id) != nil || id == "" {
-		t.Fatal("development URL did not open browser pane")
-	}
+	id := opened.Browser.ID
 	var inspected browsercontrol.Result
-	if err := json.Unmarshal(cli("browser", "status", id), &inspected); err != nil || inspected.Browser == nil || !sameBrowserPage(inspected.Browser.URL, fixture.URL) {
+	if err := json.Unmarshal(cli("browser", "status", id), &inspected); err != nil || inspected.Browser == nil || strings.TrimSuffix(inspected.Browser.URL, "/") != fixture.URL {
 		t.Fatal(inspected, err)
 	}
 	call(browsercontrol.Request{Command: "wait", ID: id, Selector: "#name", TimeoutMS: 10000})

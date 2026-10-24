@@ -6,11 +6,47 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/egoist/mygo"
+	"github.com/egoist/mygo/transfer"
+	"github.com/egoist/mygo/ui"
 	"io"
 	"net"
 	"retty/internal/rex"
+	"slices"
 	"time"
 )
+
+func (a *App) pastePaneClipboard(p *Pane, _ ui.Services) bool {
+	if p.host == nil || sessionProgramName(p.info) != "codex" || !slices.Contains(mygo.Clipboard.Formats(), transfer.PNG) {
+		return false
+	}
+	data, err := mygo.Clipboard.ReadFormat(transfer.PNG)
+	if err != nil {
+		a.err = "无法读取剪贴板图片：" + err.Error()
+		return true
+	}
+	a.uploadPaneClipboardImage(p, data)
+	return true
+}
+
+func (a *App) uploadPaneClipboardImage(p *Pane, data []byte) {
+	if !p.acceptsFileDrop() || p.host == nil {
+		return
+	}
+	if err := rex.ValidateClipboardImage(data); err != nil {
+		a.err = err.Error()
+		return
+	}
+	thread := sessionAgentState(p.info).SessionID
+	a.uploadPaneData(p.Tab, p, func(ctx context.Context, client *rex.Client, sid string, progress func(int64, int64)) ([]string, error) {
+		path, err := client.UploadClipboardImage(ctx, sid, data, progress)
+		if err != nil {
+			return nil, err
+		}
+		return []string{path}, nil
+	}, func() bool {
+		return sessionProgramName(p.info) == "codex" && sessionAgentState(p.info).SessionID == thread
+	})
+}
 
 func pasteRemoteImage(ctx context.Context, sid string, image []byte) error {
 	return pasteImageIntoSession(ctx, rex.SocketPath(), sid, image, mygo.Clipboard.WriteImage)

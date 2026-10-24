@@ -22,6 +22,7 @@ import (
 )
 
 type mobileApp struct {
+	approval                           *mobileApproval
 	terminalHistory                    *terminalHistory
 	readReceipts                       readReceiptState
 	win                                *mygo.Window
@@ -91,6 +92,7 @@ type mobileApp struct {
 	imagePasteBusy                     bool
 	imagePasteCancel                   context.CancelFunc
 	imagePasteEpoch                    int
+	imagePastePost                     func(func()) // main-thread fixture; nil uses MyGo
 	keyboardLatch                      ui.ModifierLatch
 	connectionIssue                    *mobileConnectionIssue
 	connectionDetailsOpen              bool
@@ -592,6 +594,7 @@ func (m *mobileApp) contentView(c *ui.Context) {
 	m.connectionDialog(c)
 	m.connectionDiagnosticsDialog(c)
 	m.terminalHistory.view(c)
+	m.syncApproval(c)
 	if page := m.navigation.Path(); page != m.navigationPage {
 		// A completed edge gesture changes history. Release resources only
 		// after the new page has built; a cancelled preview keeps them alive.
@@ -692,6 +695,9 @@ func (m *mobileApp) header(c *ui.Context, title string, back func(), terminalPag
 				ui.Text(c, status).Label(label).FontSize(11).TextColor(c.Theme().TextMuted).TextAlign(align).FillWidth().SingleLine().Ellipsis("…").PassThrough()
 			}
 		})
+		if terminalPage {
+			m.approvalAction(c)
+		}
 		if terminalPage && m.term != nil && m.needsRecovery() {
 			if ui.ButtonBase(c).Label("连接恢复操作").Role(ui.RoleButton).Size(44, 44).Children(func() {
 				ui.Text(c, "•••").FontSize(16).TextColor(c.Theme().TextMuted)

@@ -1,6 +1,39 @@
 import XCTest
 
 final class RettyUITests: XCTestCase {
+    func testNativeAgentApproval() throws {
+        continueAfterFailure = false
+        let app = XCUIApplication(bundleIdentifier: "com.daodao.retty")
+        app.launchEnvironment["RETTY_UI_TEST"] = "1"
+        app.terminate()
+        app.launch()
+        XCTAssertTrue(app.buttons["扫码连接桌面"].waitForExistence(timeout: 15))
+        if #available(iOS 16.4, *) { app.open(URL(string: Fixture.link)!) }
+        else { throw XCTSkip("URL opening requires iOS 16.4") }
+        let session = app.buttons["打开会话 " + Fixture.existing]
+        XCTAssertTrue(session.waitForExistence(timeout: 45), app.debugDescription)
+        session.tap()
+        let cancel = app.buttons["返回终端"]
+        XCTAssertTrue(cancel.waitForExistence(timeout: 15), app.debugDescription)
+        XCTAssertTrue(app.sheets.firstMatch.exists, "Approval must use a native action sheet")
+        screenshot("native-agent-approval-codex")
+        cancel.tap()
+        let reopen = app.buttons["处理授权"]
+        XCTAssertTrue(reopen.waitForExistence(timeout: 5))
+        reopen.tap()
+        let deny = app.buttons["拒绝"]
+        XCTAssertTrue(deny.waitForExistence(timeout: 5))
+        deny.tap()
+        let allowSession = app.buttons["允许并应用建议 1（仅本会话）"]
+        XCTAssertTrue(allowSession.waitForExistence(timeout: 15), app.debugDescription)
+        screenshot("native-agent-approval-claude")
+        allowSession.tap()
+        let terminal = app.descendants(matching: .any).matching(identifier: "Terminal").firstMatch
+        let completed = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value CONTAINS %@", "APPROVAL_FIXTURE_PASSED"), object: terminal)
+        XCTAssertEqual(XCTWaiter.wait(for: [completed], timeout: 15), .completed, app.debugDescription)
+        screenshot("native-agent-approval-completed")
+    }
+
     func testBackgroundConnectionRetention() throws {
         continueAfterFailure = false
         let app = XCUIApplication(bundleIdentifier: "com.daodao.retty")

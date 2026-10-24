@@ -88,3 +88,38 @@ func TestSoftwareCmdSelectionAndBracketedPaste(t *testing.T) {
 		t.Fatal("Cmd+V bypassed bracketed paste", got)
 	}
 }
+
+func TestCtrlVImageHandlerSuppressesRemoteClipboardKey(t *testing.T) {
+	for _, handled := range []bool{false, true} {
+		name := "ordinary Ctrl+V"
+		if handled {
+			name = "image consumed"
+		}
+		t.Run(name, func(t *testing.T) {
+			loadLib(t)
+			conn := newPipe()
+			calls := 0
+			term, err := New(Options{Conn: conn, OnPaste: func(ui.Services) bool { calls++; return handled }})
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer term.Close()
+			v := &view{t: term}
+			if !v.keyDown(ui.InputEvent{Mods: ui.Ctrl, Key: ui.KeyV}) {
+				t.Fatal("Ctrl+V not handled")
+			}
+			if calls != 1 {
+				t.Fatal("image hook not consulted")
+			}
+			if handled {
+				if got := conn.take(1); got != "" {
+					t.Fatal("handled image sent terminal bytes", got)
+				}
+			} else {
+				if got := conn.take(1); got != "\x16" {
+					t.Fatal("ordinary Ctrl+V changed", got)
+				}
+			}
+		})
+	}
+}

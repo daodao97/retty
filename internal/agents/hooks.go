@@ -188,7 +188,11 @@ func MergeHooks(agent string, b []byte, install bool) ([]byte, error) {
 		} // Gemini uses milliseconds.
 		for _, event := range events {
 			groups, _ := hooks[event].([]any)
-			group := map[string]any{"hooks": []any{map[string]any{"type": "command", "command": HookCommand(agent), "timeout": timeout}}}
+			eventTimeout := timeout
+			if agent == "claude" && event == "PermissionRequest" {
+				eventTimeout = 120
+			}
+			group := map[string]any{"hooks": []any{map[string]any{"type": "command", "command": HookCommand(agent), "timeout": eventTimeout}}}
 			hooks[event] = append(groups, group)
 		}
 	}
@@ -222,6 +226,55 @@ func SetHooks(agent string, install bool) error {
 	if err != nil {
 		return err
 	}
+	return writeHookConfig(path, original, updated)
+}
+
+// UpgradeApprovalHook changes only the old Retty-owned two-second Claude
+// permission handler. It does not enable hooks or touch other handlers/settings.
+func UpgradeApprovalHook() error {
+	path, err := HookPath("claude")
+	if err != nil {
+		return err
+	}
+	if real, e := filepath.EvalSymlinks(path); e == nil {
+		path = real
+	}
+	original, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	root, err := readHookConfig(original)
+	if err != nil {
+		return err
+	}
+	hooks, _ := root["hooks"].(map[string]any)
+	groups, _ := hooks["PermissionRequest"].([]any)
+	changed := false
+	for _, value := range groups {
+		group, _ := value.(map[string]any)
+		entries, _ := group["hooks"].([]any)
+		for _, v := range entries {
+			entry, _ := v.(map[string]any)
+			if ownedHook("claude", entry) && fmt.Sprint(entry["timeout"]) == "2" {
+				entry["timeout"] = 120
+				changed = true
+			}
+		}
+	}
+	if !changed {
+		return nil
+	}
+	updated, err := json.MarshalIndent(root, "", "  ")
+	if err != nil {
+		return err
+	}
+	return writeHookConfig(path, original, append(updated, '\n'))
+}
+
+func writeHookConfig(path string, original, updated []byte) error {
 	if bytes.Equal(updated, original) {
 		return nil
 	}

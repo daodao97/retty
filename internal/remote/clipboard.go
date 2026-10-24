@@ -72,6 +72,10 @@ func (b *Bridge) serveConnection(conn net.Conn, socket string) {
 		return
 	}
 	conn.SetReadDeadline(time.Time{})
+	if req.Op == "agent-approval" {
+		b.serveApproval(conn, socket, line)
+		return
+	}
 	local, err := net.DialTimeout("unix", socket, 5*time.Second)
 	if err != nil {
 		return

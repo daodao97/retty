@@ -1,4 +1,4 @@
-# Hook 诊断与开发地址发现
+# Hook 与版本诊断
 
 ## Hook 与版本诊断
 
@@ -21,25 +21,17 @@
 
 刷新取消前一次检查，关闭设置取消未完成请求；源会话关闭或主机连接变化后丢弃旧结果。远端读取走独立认证扩展流，不要求更新或附着 PTY 服务。复制诊断只写入本机剪贴板，包含配置路径和 Hook 命令，不附带会话提示词、Agent 回复摘要或终端文本；分享前可自行检查命令内容。
 
-## 开发地址发现
-
-终端输出例如 `Local: http://localhost:5173/` 后，窗格上方出现「开发地址」。选中地址点击「打开」，在该终端旁打开浏览器；重复点击复用同一主机、同一页面，包括 WebView 加载后补上根路径 `/` 的情况。
-
-支持 http/https 和省略 scheme 的显式端口地址，识别 localhost、127.0.0.0/8、`[::1]`。服务器打印的 `0.0.0.0`、`[::]` 转换为可访问的 localhost。不同 scheme 保持区分；最近出现的同源地址优先，最多显示八个。带凭据、外部主机、伪造 localhost 后缀和无效端口不会成为候选。
-
-后台从 Ghostty 已解码的最近 128 个物理行提取文本，最多 64 KiB，拼接软换行并去除终端颜色控制。只在输出 revision 改变时扫描，繁忙输出最多每秒扫描一次，全应用最多四个工作线程。读取不滚动、附着或调整终端尺寸，静止输出不会持续唤醒空闲窗口。关闭设置 → 终端 → 发现开发地址，可停止扫描并隐藏入口。
-
-候选表示终端曾展示这个地址，不代表服务仍在监听。Retty 不主动探测端口，也不自动打开网页。远端终端点击后沿用源主机的浏览器和端口转发；同名本机地址不会被复用。点击后的布局变化会按普通分屏调整可见终端区域。
-
 ## 隔离验证
 
 ```sh
 MYGO_TEST_IMAGES="$PWD/.mygo/kero-adoption" GOWORK=off go test . \
-  ./internal/diagnostics ./internal/devserver ./internal/remote ./internal/rex ./internal/terminal \
-  -run 'TestDevelopment|TestDiagnostics|TestDiagnose|TestHostDiagnostics|TestRecentOutput|TestAdvertised|TestDoesNotExtract|TestCandidate|TestLimitsInvalid|TestAgentDiagnostics' -count=1
+  ./internal/diagnostics ./internal/remote ./internal/rex ./internal/terminal \
+  -run 'TestDiagnostics|TestDiagnose|TestHostDiagnostics|TestRecentOutput|TestAgentDiagnostics' -count=1
 ```
 
-原生浏览器验收也覆盖新功能：隔离服务启动真实 HTTP/WebSocket 页面并在 PTY 输出 URL，GUI 识别后通过与「打开」按钮相同的处理函数创建原生浏览器；独立配置中的缺失 Hook 在诊断页被检出。随后验证浏览、输入、截图、远端页和 GUI 重开，核对服务 PID、会话 ID、shell PID、终端尺寸不变。运行方式见 [浏览器窗格](browser-panes.md)。测试诊断/开发地址探针只在带私有标记及认证 token 的既有 fixture 端点中启用。
+原生浏览器验收也覆盖诊断：隔离服务启动真实 HTTP/WebSocket 页面，经 CLI 手动打开浏览器；独立配置中的缺失 Hook 在诊断页被检出。随后验证浏览、输入、截图、远端页和 GUI 重开，核对服务 PID、会话 ID、shell PID、终端尺寸不变。运行方式见 [浏览器窗格](browser-panes.md)。测试诊断探针只在带私有标记及认证 token 的既有 fixture 端点中启用。
+
+终端“开发地址”栏、自动发现扫描和设置开关已按用户要求移除。下方保留当时的历史验收记录，不代表当前仍提供该入口。
 
 ### 2026-10-23 验收记录
 

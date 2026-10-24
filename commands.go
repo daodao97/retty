@@ -71,6 +71,7 @@ var (
 
 // paletteCommands are those the command palette lists, before the tabs.
 var paletteCommands = []*command{
+	&cmdInstallCLI,
 	&cmdDiagnostics,
 	&cmdBrowser,
 	&cmdFiles,
@@ -108,6 +109,7 @@ func (a *App) menu() *mygo.Menu {
 			item(&cmdCheckUpdates),
 			mygo.Separator(),
 			item(&cmdSettings),
+			item(&cmdInstallCLI),
 			item(&cmdDiagnostics),
 			mygo.Separator(),
 			{Role: mygo.RoleServices},

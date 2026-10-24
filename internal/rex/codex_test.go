@@ -9,8 +9,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"retty/internal/agents"
 )
 
 func TestCodexLauncherPreservesPaneAndExplicitConnections(t *testing.T) {
@@ -28,7 +26,6 @@ func TestCodexLauncherPreservesPaneAndExplicitConnections(t *testing.T) {
 		{"daemon management", true, []string{"app-server", "daemon", "start"}, "app-server\ndaemon\nstart\n", true},
 		{"exec", true, []string{"exec", "hello"}, "exec\nhello\n", true},
 		{"old cli", false, []string{"resume", "thread"}, "resume\nthread\n", true},
-		{"disabled integration", true, []string{"resume", "thread"}, "resume\nthread\n", true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Setenv("RETTY_DIR", t.TempDir())
@@ -44,7 +41,7 @@ func TestCodexLauncherPreservesPaneAndExplicitConnections(t *testing.T) {
 			}
 			fake := "#!/bin/sh\nprintf '%s\\n' \"$@\"\nprintf 'pane:%s token:%s shared:%s\\n' \"$RETTY_SESSION\" \"$RETTY_AGENT_TOKEN\" \"${RETTY_AGENT_SERVER_TOKEN-unset}\"\n"
 			os.WriteFile(filepath.Join(bin, "codex"), []byte(fake), 0o700)
-			env, dir, err := codexEnv([]string{"PATH=" + bin + ":/usr/bin:/bin", "RETTY_SESSION=pane", "RETTY_AGENT_TOKEN=private", "RETTY_AGENT_SERVER_TOKEN=shared", "RETTY_HOOK=" + helper}, tc.name != "disabled integration")
+			env, dir, err := codexEnv([]string{"PATH=" + bin + ":/usr/bin:/bin", "RETTY_SESSION=pane", "RETTY_AGENT_TOKEN=private", "RETTY_AGENT_SERVER_TOKEN=shared", "RETTY_HOOK=" + helper})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -81,9 +78,6 @@ func TestCodexLauncherSurvivesLoginPathReset(t *testing.T) {
 	}
 	t.Setenv("RETTY_DIR", t.TempDir())
 	t.Setenv("CODEX_HOME", t.TempDir())
-	if err := agents.SetHooks("codex", true); err != nil {
-		t.Fatal(err)
-	}
 	config := t.TempDir()
 	bin := t.TempDir()
 	os.WriteFile(filepath.Join(bin, "codex"), []byte("#!/bin/sh\nprintf 'bridge:%s:%s:%s\\n' \"$1\" \"$2\" \"${RETTY_AGENT_SERVER_TOKEN-unset}\"\n"), 0o700)

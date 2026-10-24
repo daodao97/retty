@@ -21,6 +21,7 @@ import (
 
 	"github.com/coder/websocket"
 	"retty/internal/agents"
+	"retty/internal/approval"
 )
 
 func codexSocket() (string, error) {
@@ -110,9 +111,9 @@ func osPaneContextMissing() bool {
 	return os.Getenv("RETTY_SESSION") == "" || os.Getenv("RETTY_AGENT_TOKEN") == "" || os.Getenv("RETTY_AGENT_SOCKET") == ""
 }
 
-// RunCodexProxy relays frames unchanged. It observes only lifecycle metadata
-// for threads opened by this CLI and a bounded final reply excerpt. It never
-// retains approvals, prompts, reasoning or streaming deltas.
+// RunCodexProxy relays the CLI transport and arbitrates structured approval
+// responses. Pending requests stay in memory; transcripts and streaming deltas
+// are never retained. The shared Codex daemon is never restarted.
 func RunCodexProxy(dir string, parent int, socket string) error {
 	defer os.RemoveAll(dir)
 	ln, err := net.Listen("unix", filepath.Join(dir, "bridge.sock"))
@@ -154,6 +155,16 @@ func RunCodexProxy(dir string, parent int, socket string) error {
 		connection, end := context.WithCancel(ctx)
 		defer end()
 		observer := newCodexObserver(connection)
+		store := approval.NewStore()
+		if closeApprovals, err := approval.Listen(connection, Dir(), os.Getenv("RETTY_SESSION"), store); err == nil {
+			defer closeApprovals()
+		}
+		approvals := newCodexApprovals(os.Getenv("RETTY_SESSION"), store, func(raw []byte) error {
+			writeCtx, cancel := context.WithTimeout(connection, 3*time.Second)
+			defer cancel()
+			return back.Write(writeCtx, websocket.MessageText, raw)
+		})
+		defer approvals.close()
 		copy := func(from, to *websocket.Conn, client bool) {
 			defer end()
 			for {
@@ -165,6 +176,16 @@ func RunCodexProxy(dir string, parent int, socket string) error {
 				// before forwarding so subsequent CLI turns have an established owner.
 				if kind == websocket.MessageText {
 					observer.message(raw, client)
+					if client {
+						if approvals.send(raw) != nil {
+							return
+						}
+						continue
+					}
+					observer.mu.Lock()
+					owner := observer.thread.ID
+					observer.mu.Unlock()
+					approvals.receive(raw, owner)
 				}
 				if to.Write(connection, kind, raw) != nil {
 					return

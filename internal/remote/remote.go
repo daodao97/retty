@@ -59,6 +59,7 @@ func ParseLink(raw string) (tailcat.Addr, error) {
 // Bridge exposes session transport and uploads to paired clients. Closing it
 // disconnects phones without forgetting a persisted identity or ending sessions.
 type Bridge struct {
+	approvalDir  string
 	server       *tailcat.Server
 	listener     net.Listener
 	mu           sync.Mutex
@@ -110,7 +111,7 @@ type Options struct {
 }
 
 func Start(ctx context.Context, socket string, options Options) (*Bridge, error) {
-	b := &Bridge{server: &tailcat.Server{Logf: quiet, Region: options.BootstrapRegion}, conns: make(map[net.Conn]bool), devices: make(map[net.Conn]ConnectedDevice)}
+	b := &Bridge{approvalDir: rex.Dir(), server: &tailcat.Server{Logf: quiet, Region: options.BootstrapRegion}, conns: make(map[net.Conn]bool), devices: make(map[net.Conn]ConnectedDevice)}
 	stateDir := options.StateDir
 	if stateDir != "" {
 		identity, lock, err := loadIdentity(ctx, stateDir)

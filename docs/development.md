@@ -45,7 +45,9 @@ zsh 会话在返回提示符时清空遗留的 Kitty 键盘协议栈，防止 TU
 
 浏览器分屏、布局恢复、CLI 自动化、远端开发端口及原生隔离验收见 [浏览器窗格](browser-panes.md)。
 
-Hook/版本诊断与终端开发地址发现的范围、只读检查及回归入口见 [诊断与开发地址](diagnostics-and-devservers.md)。
+Hook/版本诊断的范围、只读检查及回归入口见 [Hook 与版本诊断](diagnostics-and-devservers.md)。
+
+手机通过 Codex app-server / Claude PermissionRequest Hook 处理结构化授权、原生确认面板和隔离真机测试见 [手机原生 Agent 授权](mobile-approvals.md)。
 
 可重复的生产版性能测量见 [性能基线](performance.md)。工具为每个场景创建独立会话与 GUI 数据目录，报告 GUI、会话服务、推送 worker 的 CPU、物理内存、RSS、启动峰值及原始样本。
 

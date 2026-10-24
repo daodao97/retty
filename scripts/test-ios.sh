@@ -1,7 +1,7 @@
 #!/bin/bash
 # Exercise an installed iOS app against isolated desktop sessions over Tailcat.
 set -euo pipefail
-ROOT=$(cd "$(dirname "$0")/.." && pwd)
+ROOT=$(cd "$(dirname "$0")/.." && pwd -P)
 cd "$ROOT"
 : "${IOS_TEAM:?Set IOS_TEAM to your Apple development team}"
 : "${IOS_DEVICE:?Set IOS_DEVICE to the connected iPhone UDID}"
@@ -14,6 +14,11 @@ work=Path(sys.argv[1])
 for name in ('fixture.json','ios-finished'): (work/name).unlink(missing_ok=True)
 PYCODE
 case "${IOS_TEST_FLOW:-full}" in
+ approval)
+  TEST_CASE=RettyUITests/RettyUITests/testNativeAgentApproval
+  RETTY_IOS_APPROVAL_FIXTURE="$WORK/fixture.json" \
+   go test ./internal/remote -run '^TestTailcatIOSNativeApproval$' -v -timeout 6m > "$WORK/host.log" 2>&1 &
+  ;;
  full)
   TEST_CASE=RettyUITests/RettyUITests/testRemoteSessionFlow
   RETTY_REMOTE_E2E=1 RETTY_IOS_FIXTURE="$WORK/fixture.json" \
@@ -29,7 +34,7 @@ case "${IOS_TEST_FLOW:-full}" in
   RETTY_IOS_INPUT_FIXTURE="$WORK/fixture.json" \
    go test ./internal/remote -run '^TestTailcatIOSInputContinuation$' -v -timeout 5m > "$WORK/host.log" 2>&1 &
   ;;
- *) echo "IOS_TEST_FLOW must be full, background or input" >&2; exit 1 ;;
+ *) echo "IOS_TEST_FLOW must be full, background, input or approval" >&2; exit 1 ;;
 esac
 HOST_PID=$!
 finish() {
@@ -57,12 +62,16 @@ os.chmod(path,0o600)
 PY
 xcrun devicectl device install app --device "$IOS_DEVICE" build/ios-arm64/Retty.app
 RESULT="$WORK/$(date +%Y%m%d-%H%M%S).xcresult"
+SIGNING_ARGS=("DEVELOPMENT_TEAM=$IOS_TEAM" -allowProvisioningUpdates -allowProvisioningDeviceRegistration)
+if [[ -n "${IOS_TEST_PROVISIONING_PROFILE:-}" ]]; then
+ SIGNING_ARGS=("DEVELOPMENT_TEAM=$IOS_TEAM" CODE_SIGN_STYLE=Manual "PROVISIONING_PROFILE_SPECIFIER=$IOS_TEST_PROVISIONING_PROFILE" "CODE_SIGN_IDENTITY=${IOS_TEST_SIGNING_IDENTITY:-Apple Development}")
+fi
 xcodebuild -quiet -project tests/ios/Tests.xcodeproj -scheme RettyUITests \
  -sdk iphoneos -destination "id=$IOS_DEVICE" -derivedDataPath "$WORK/derived" \
  -only-testing:"$TEST_CASE" \
  -resultBundlePath "$RESULT" -collect-test-diagnostics never \
  -test-timeouts-enabled YES -maximum-test-execution-time-allowance 180 \
- "DEVELOPMENT_TEAM=$IOS_TEAM" -allowProvisioningUpdates -allowProvisioningDeviceRegistration test
+ "${SIGNING_ARGS[@]}" test
 touch "$WORK/ios-finished"
 wait "$HOST_PID"
 rm -f tests/ios/Fixture.swift

@@ -160,7 +160,7 @@ func gitSummary(s *gitstate.Status) string {
 
 func (a *App) paneGitBar(c *ui.Context, k *colors, t *Tab, p *Pane) {
 	s := a.paneGit(p)
-	if s == nil {
+	if s == nil || s.Files == 0 {
 		return
 	}
 	label := gitSummary(s)

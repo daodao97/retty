@@ -105,7 +105,7 @@ func helper(args []string, input io.Reader) (bool, error) {
 		if len(args) != 2 {
 			return true, errors.New("invalid hook arguments")
 		}
-		rex.RunAgentHook(args[1], input)
+		rex.RunAgentHookWithOutput(args[1], input, os.Stdout)
 		return true, nil
 	case "-codex-bridge", "-codex-proxy":
 		if len(args) != 4 {

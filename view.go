@@ -18,7 +18,6 @@ func (a *App) view(c *ui.Context) {
 	a.services = c.Services()
 	a.runPosted()
 	a.syncBrowsers()
-	a.syncDevServers(c)
 	a.syncGitStatus(c)
 	a.syncFiles()
 	a.cancelHiddenImagePreviews(a.desktopContentWidth(c) < 720)
@@ -188,7 +187,6 @@ func (a *App) paneCard(c *ui.Context, k *colors, t *Tab, p *Pane) ui.Element {
 			return
 		}
 		a.paneGitBar(c, k, t, p)
-		a.devServerBar(c, k, p)
 		if p.find.open {
 			a.findBar(c, k, t, p)
 		}

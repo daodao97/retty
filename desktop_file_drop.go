@@ -10,6 +10,7 @@ import (
 	"unicode"
 
 	"github.com/egoist/mygo/ui"
+	"retty/internal/rex"
 )
 
 func (p *Pane) acceptsFileDrop() bool {
@@ -51,6 +52,13 @@ func (a *App) uploadDroppedFiles(t *Tab, p *Pane, paths []string) {
 	if droppedFilePaths(paths) == "" {
 		return
 	}
+	paths = append([]string(nil), paths...)
+	a.uploadPaneData(t, p, func(ctx context.Context, client *rex.Client, sid string, progress func(int64, int64)) ([]string, error) {
+		return client.UploadFiles(ctx, sid, paths, progress)
+	}, nil)
+}
+
+func (a *App) uploadPaneData(t *Tab, p *Pane, send func(context.Context, *rex.Client, string, func(int64, int64)) ([]string, error), valid func() bool) {
 	if p.upload != nil {
 		a.err = "当前窗格正在上传文件，请等待完成或取消"
 		return
@@ -61,7 +69,6 @@ func (a *App) uploadDroppedFiles(t *Tab, p *Pane, paths []string) {
 	ctx, cancel := context.WithCancel(context.Background())
 	upload := &paneUpload{cancel: cancel}
 	p.upload = upload
-	paths = append([]string(nil), paths...)
 	client, generation, sid, term, stream := p.host.client, p.host.generation, p.SID, p.term, p.stream
 	win := a.win
 	invalidate := func() {
@@ -72,7 +79,7 @@ func (a *App) uploadDroppedFiles(t *Tab, p *Pane, paths []string) {
 	invalidate()
 	go func() {
 		defer cancel()
-		remotePaths, err := client.UploadFiles(ctx, sid, paths, func(sent, total int64) {
+		remotePaths, err := send(ctx, client, sid, func(sent, total int64) {
 			upload.sent.Store(sent)
 			upload.total.Store(total)
 			upload.prepared.Store(true)
@@ -94,7 +101,7 @@ func (a *App) uploadDroppedFiles(t *Tab, p *Pane, paths []string) {
 				return
 			}
 			// Never focus another pane or paste through a replacement connection.
-			if !completed || p.host.client != client || p.host.generation != generation || p.SID != sid || p.term != term || p.stream != stream || a.tab() != t || t.Focus != p || !p.acceptsFileDrop() {
+			if !completed || p.host.client != client || p.host.generation != generation || p.SID != sid || p.term != term || p.stream != stream || a.tab() != t || t.Focus != p || !p.acceptsFileDrop() || valid != nil && !valid() {
 				return
 			}
 			p.term.Paste(droppedFilePaths(remotePaths))
