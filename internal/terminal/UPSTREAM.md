@@ -250,3 +250,9 @@ buffers, improves caret lookup and optimizes continuous Metal shadows.
 The terminal plugin, Ghostty manifest and public UI APIs are unchanged
 from `5e44f43cd033`; Retty retains its local terminal additions and
 independent CLI/iOS packaging.
+
+Fork commit `27615b686564` supplies Android's EGL `hasContext` implementation
+and merges upstream through `26a1300f`, including GTK context recovery and
+text-selection fixes. The terminal plugin adds overlay-scrollbar hover and
+drag behavior; Retty retains its vendored scrolling and input implementation.
+The public UI APIs and Ghostty library pin remain compatible.
