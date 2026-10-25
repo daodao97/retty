@@ -166,17 +166,18 @@ func (a *App) sidebarTab(c *ui.Context, k *colors, i int, t *Tab) {
 				ui.Text(c, meta).FontSize(10.5).TextColor(k.textFaint).SingleLine().Ellipsis("…").FillWidth()
 			}
 		})
-		if p, state := tabAgentState(t); p != nil {
-			a.agentIndicator(c, k, p, state)
-		} else if t.attention() {
-			ui.Box(c).Size(5, 5).Radius(3).Background(k.attention).Shrink(0)
-		} else if a.tabBusy(c, t) {
-			ui.Box(c).Size(5, 5).Radius(3).Background(k.busy).Shrink(0)
-		}
-		if row.Hovered() && len(a.tabs) > 1 {
-			if iconButton(c.Key("close-tab"), k, "x", "Close Tab", 18, 11).Shrink(0).Tooltip("Close Tab").Clicked() {
-				a.later(c, func() { a.closeTab(t) })
+		ui.Box(c.Key("tab-action")).Size(18, 18).Shrink(0).Center().Children(func() {
+			if row.Hovered() && len(a.tabs) > 1 {
+				if iconButton(c.Key("close-tab"), k, "x", "Close Tab", 18, 11).Shrink(0).Tooltip("Close Tab").Clicked() {
+					a.later(c, func() { a.closeTab(t) })
+				}
+			} else if p, state := tabAgentState(t); p != nil {
+				a.agentIndicator(c, k, p, state)
+			} else if t.attention() {
+				ui.Box(c).Size(5, 5).Radius(3).Background(k.attention).Shrink(0)
+			} else if a.tabBusy(c, t) {
+				ui.Box(c).Size(5, 5).Radius(3).Background(k.busy).Shrink(0)
 			}
-		}
+		})
 	})
 }
