@@ -155,3 +155,116 @@ func TestProgramStatusRejectedHookCannotClearRecords(t *testing.T) {
 		t.Fatal("rejected old hook cleared a new protocol result")
 	}
 }
+
+func TestCodexLifecycleSummarySurvivesProgramStatus(t *testing.T) {
+	t.Setenv("RETTY_DIR", t.TempDir())
+	s, err := newSession("codex-summary", CreateOptions{Dir: t.TempDir(), Command: []string{"/bin/sh"}, Cols: 80, Rows: 24})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(s.kill)
+	now := time.Now()
+	report := func(event, turn, summary string) {
+		t.Helper()
+		now = now.Add(time.Millisecond)
+		_, accepted, err := s.reportAgent(s.agentToken, &AgentEvent{Agent: "codex", At: now, Input: agents.HookInput{
+			Event: event, SessionID: "root-thread", TurnID: turn, Source: agents.CodexLifecycleSource, Summary: summary,
+		}})
+		if err != nil || !accepted {
+			t.Fatal("lifecycle event rejected", accepted, err)
+		}
+	}
+	status := func(state string) {
+		now = now.Add(time.Millisecond)
+		s.mu.Lock()
+		s.programStatus.feed([]byte(statusOSC("state="+state+":app=codex")), now)
+		s.mu.Unlock()
+	}
+	report("UserPromptSubmit", "first", "")
+	status("working")
+	status("done")
+	if in := s.info(); agents.Finished(in.Agent.State) {
+		t.Fatal("OSC completion raced ahead of the structured final answer", in.Agent)
+	}
+	report("Stop", "first", "已修复通知摘要。测试通过。")
+	completed := s.info()
+	if body := AgentNoticeBody("", completed); body != "已修复通知摘要。" {
+		t.Fatal("OSC status discarded the final answer", body, completed.Agent)
+	}
+	if completed.Agent.SessionID != "root-thread" || completed.Agent.HookEvent != "Stop" {
+		t.Fatal("structured completion identity was lost", completed.Agent)
+	}
+	// Text-only OSC updates and idle must not create a second completion.
+	for _, state := range []string{"done", "idle"} {
+		status(state)
+		if next := s.info(); AgentNoticeID("host", next) != AgentNoticeID("host", completed) || AgentNoticeTransition(completed, next) {
+			t.Fatal("OSC update repeated the completion", next.Agent)
+		}
+	}
+	// The terminal stream can precede the asynchronous lifecycle report.
+	// Without a structured new turn it must not announce the old reply
+	// again, even when OSC has already reported another completion.
+	status("working")
+	status("done")
+	if in := s.info(); AgentNoticeTransition(completed, in) || AgentNoticeID("host", in) != AgentNoticeID("host", completed) {
+		t.Fatal("new OSC output repeated an older completion", in.Agent)
+	}
+	report("UserPromptSubmit", "second", "")
+	if in := s.info(); in.Agent.Summary != "" || in.Agent.State != agents.Running {
+		t.Fatal("new structured turn retained an older reply", in.Agent)
+	}
+	status("working")
+	report("Stop", "second", "第二轮已完成。")
+	status("done")
+	next := s.info()
+	if AgentNoticeBody("", next) != "第二轮已完成。" || AgentNoticeID("host", next) == AgentNoticeID("host", completed) {
+		t.Fatal("new turn did not get its own summary and notice", next.Agent)
+	}
+	// The two transports can be read in either order, including a delayed
+	// working report arriving after the structured completion.
+	status("working")
+	status("done")
+	if delayed := s.info(); !delayed.Agent.Equal(next.Agent) {
+		t.Fatal("delayed PTY reports displaced a confirmed final answer", delayed.Agent)
+	}
+}
+
+func TestCodexLifecycleProgramStatusScope(t *testing.T) {
+	now := time.Now()
+	for _, tc := range []struct {
+		name, app, id, source string
+		reset                 bool
+		structured            bool
+	}{
+		{name: "connected root", app: "codex", source: agents.CodexLifecycleSource, structured: true},
+		{name: "native only", app: "codex"},
+		{name: "other program", app: "fixture", source: agents.CodexLifecycleSource},
+		{name: "child status", app: "codex", id: "child", source: agents.CodexLifecycleSource},
+		{name: "new CLI without observer", app: "codex", source: agents.CodexLifecycleSource, reset: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var tracker agentTracker
+			apply := func(event, source string, at time.Time) {
+				tracker.apply(AgentEvent{Agent: "codex", At: at, Input: agents.HookInput{
+					Event: event, SessionID: "root", TurnID: "turn", Source: source, Summary: "最终回复。",
+				}})
+			}
+			apply("UserPromptSubmit", tc.source, now)
+			var statuses programStatusTracker
+			statuses.apply(ProgramStatus{State: "working", App: tc.app, ID: tc.id}, now.Add(time.Millisecond))
+			apply("Stop", tc.source, now.Add(2*time.Millisecond))
+			if tc.reset {
+				apply("SessionStart", "", now.Add(3*time.Millisecond))
+			}
+			statuses.apply(ProgramStatus{State: "done", App: tc.app, ID: tc.id}, now.Add(4*time.Millisecond))
+			got := statuses.agentStateWithLifecycle(&tracker)
+			if tc.structured {
+				if got.Summary != "最终回复。" || got.Source == ProgramStatusSource {
+					t.Fatal("connected root lost its structured completion", got)
+				}
+			} else if !got.Equal(statuses.agentState("")) {
+				t.Fatal("unrelated OSC status changed", got)
+			}
+		})
+	}
+}

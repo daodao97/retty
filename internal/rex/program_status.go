@@ -415,3 +415,17 @@ func (t *programStatusTracker) agentState(fallback string) AgentState {
 	}
 	return a
 }
+
+// Codex's root OSC status is a less detailed view of the same activity as
+// its app-server lifecycle. Prefer the latter when it is connected: it has
+// the real thread/turn identity and includes the final reply at completion.
+// In particular, an OSC done/idle must not send a title-only notice while
+// the observer is still delivering the final answer and confirmed Stop.
+func (t *programStatusTracker) agentStateWithLifecycle(tracker *agentTracker) AgentState {
+	a := t.agentState("")
+	structured := tracker.state
+	if a.ID != "codex" || a.SessionID != "osc7501:" || !tracker.codexLifecycle || structured.ID != "codex" || structured.State == "" {
+		return a
+	}
+	return structured
+}

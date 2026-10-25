@@ -651,7 +651,7 @@ func (s *session) info() SessionInfo {
 		in.Title = s.finalTitle
 	}
 	if len(in.ProgramStatuses) > 0 {
-		in.Agent = s.programStatus.agentState("")
+		in.Agent = s.programStatus.agentStateWithLifecycle(&s.agent)
 	} else if !s.programStatus.lastReport.IsZero() {
 		// Cleared protocol records must not resurrect an older hook badge.
 		in.Agent = AgentState{}

@@ -54,6 +54,10 @@ type agentTracker struct {
 	retired map[string]bool
 	waiting map[string]string // tool -> reason; parallel tools must not clear another question
 	turnID  string
+	// Only the app-server observer can confirm a Codex completion together
+	// with its final answer. Native terminal status carries neither turn ID
+	// nor reply text.
+	codexLifecycle bool
 }
 
 // reportAgent applies an event to the pane. It returns the normalized hook
@@ -137,9 +141,11 @@ func (t *agentTracker) apply(e AgentEvent) {
 		t.retired[t.state.SessionID] = true
 		t.waiting = nil
 		t.turnID = ""
+		t.codexLifecycle = false
 	}
 	if h.Event == "SessionStart" {
 		t.turnID = ""
+		t.codexLifecycle = false
 	}
 	if h.TurnID != "" {
 		if h.Event != "UserPromptSubmit" && t.turnID != "" && h.TurnID != t.turnID {
@@ -156,6 +162,9 @@ func (t *agentTracker) apply(e AgentEvent) {
 		return
 	}
 	t.lastAt = e.At
+	if e.Agent == "codex" && h.Source == agents.CodexLifecycleSource {
+		t.codexLifecycle = true
+	}
 	key := h.Tool
 	if h.ToolID != "" {
 		key += ":" + h.ToolID
