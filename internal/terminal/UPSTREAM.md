@@ -267,3 +267,12 @@ is not carried into this vendor. The Ghostty manifest and binding API are
 unchanged, so Retty retains its independent CLI/iOS packaging and local
 terminal additions, including bounded rendering-buffer reuse. The build-scoped
 UI migration preview reports no changes.
+
+Fork commit `cc1299d9a720` merges upstream through `9c69cf82`. It fixes
+bold/italic editor shaping, Linux tray activation and carries touchpad
+momentum through native UI input. Upstream's terminal uses that signal to
+keep a scrolling gesture from becoming a zoom when Command is pressed
+during momentum. Retty's terminal has no Command-wheel zoom path, so that
+plugin change does not apply to this vendor. The Ghostty manifest/bindings
+and public UI APIs remain compatible; local terminal behavior and independent
+CLI/iOS packaging are retained.
