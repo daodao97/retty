@@ -16,6 +16,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/egoist/mygo"
+	"github.com/egoist/mygo/async"
 	"github.com/egoist/mygo/ui"
 	"github.com/egoist/mygo/ui/editor"
 	"retty/internal/files"
@@ -25,6 +26,9 @@ import (
 	"retty/internal/terminal"
 )
 
+// File tasks use the same MyGo Task core as NewTask with Retty's queued
+// window dispatcher. The browser owns their lifetime, including parallel
+// directory reads; stop closes them before changing or disposing the owner.
 type desktopFiles struct {
 	base                                             string
 	comparison                                       *gitstate.Comparison
@@ -38,13 +42,13 @@ type desktopFiles struct {
 	entries                                          []files.Entry
 	loading, truncated                               bool
 	err                                              string
-	cancel                                           context.CancelFunc
-	epoch                                            uint64
+	directoryTask                                    *async.Task[files.Result]
+	linkTask                                         *async.Task[files.Result]
+	read                                             func(context.Context, *rex.Client, files.Request) (files.Result, error)
 	list                                             ui.ListState
 	filterFocus                                      bool
 	pathEditing                                      bool
 	dirs                                             map[string]*fileDirectory
-	treeContext                                      context.Context
 	preview                                          string
 	previewData                                      []byte
 	previewEntry                                     *files.Entry
@@ -56,8 +60,7 @@ type desktopFiles struct {
 	previewNote                                      string
 	previewLoading, previewTruncated, diff, expanded bool
 	previewLimit                                     int
-	previewCancel                                    context.CancelFunc
-	previewEpoch                                     uint64
+	previewTask                                      *async.Task[desktopFilePreview]
 	downloadCancel                                   context.CancelFunc
 	downloadEpoch                                    uint64
 	downloading                                      bool
@@ -65,22 +68,36 @@ type desktopFiles struct {
 }
 
 func (b *desktopFiles) stop() {
-	if b.cancel != nil {
-		b.cancel()
-		b.cancel = nil
+	if b.directoryTask != nil {
+		b.directoryTask.Close()
+		b.directoryTask = nil
 	}
-	b.epoch++
-	if b.previewCancel != nil {
-		b.previewCancel()
-		b.previewCancel = nil
+	if b.linkTask != nil {
+		b.linkTask.Close()
+		b.linkTask = nil
 	}
-	b.previewEpoch++
+	if b.previewTask != nil {
+		b.previewTask.Close()
+		b.previewTask = nil
+	}
+	for _, d := range b.dirs {
+		if d.task != nil {
+			d.task.Close()
+		}
+	}
 	if b.downloadCancel != nil {
 		b.downloadCancel()
 		b.downloadCancel = nil
 	}
 	b.downloadEpoch++
 	b.downloading = false
+}
+
+func (b *desktopFiles) reader() func(context.Context, *rex.Client, files.Request) (files.Result, error) {
+	if b.read != nil {
+		return b.read
+	}
+	return fileRequest
 }
 
 func (a *App) toggleFiles() {
@@ -169,17 +186,16 @@ func (a *App) openTerminalFile(p *Pane, link terminal.Link) {
 	// File links show the file itself, even when the browser was showing Diff.
 	b.diff = false
 	a.loadFileDirectory(b, filepath.Dir(link.Path))
-	ctx, epoch, previewEpoch, client, win := b.treeContext, b.epoch, b.previewEpoch, b.client, a.win
-	go func() {
-		r, err := fileRequest(ctx, client, files.Request{Kind: "stat", Path: link.Path})
-		a.post(func() {
-			if !a.filesCurrent(b) || b.epoch != epoch || b.previewEpoch != previewEpoch {
-				return
-			}
-			if err != nil {
-				b.err = err.Error()
-				return
-			}
+	read, client := b.reader(), b.client
+	b.linkTask = async.New(a.desktopDispatcher(), func(state async.State[files.Result]) {
+		if !a.filesCurrent(b) {
+			return
+		}
+		switch state.Phase {
+		case async.Failed:
+			b.err = state.Err.Error()
+		case async.Succeeded:
+			r := state.Value
 			if r.Entry == nil || !r.Entry.Directory && !r.Entry.Regular {
 				b.err = "此路径不是普通文件或目录"
 				return
@@ -193,11 +209,15 @@ func (a *App) openTerminalFile(p *Pane, link terminal.Link) {
 				limit = files.MaxRead
 			}
 			a.previewFileAt(b, r.Path, false, limit, link.Line, link.Column)
-		})
-		if win != nil {
-			win.Invalidate()
 		}
-	}()
+	})
+	b.linkTask.Start(context.Background(), func(ctx context.Context, publish func(files.Result)) error {
+		r, err := read(ctx, client, files.Request{Kind: "stat", Path: link.Path})
+		if err == nil {
+			publish(r)
+		}
+		return err
+	})
 }
 
 func (a *App) loadFileDirectory(b *desktopFiles, path string) {
@@ -223,11 +243,7 @@ func (a *App) loadFileDirectory(b *desktopFiles, path string) {
 		b.err = "远端未连接，请先连接这台主机"
 		return
 	}
-	ctx, cancel := context.WithCancel(context.Background())
-	b.cancel = cancel
-	b.treeContext = ctx
-	epoch := b.epoch
-	client := b.client
+	read, client := b.reader(), b.client
 	hidden := prefs.FilesHidden
 	diff := b.diff
 	base, sid, turn := b.base, b.pane.SID, b.pane.info.GitTurn
@@ -235,28 +251,20 @@ func (a *App) loadFileDirectory(b *desktopFiles, path string) {
 		b.turnRetry = 0
 	}
 	b.turn, b.turnRetryAt = turn, time.Time{}
-	win := a.win
-	go func() {
-		kind := "list"
-		if diff {
-			kind = "changes"
+	b.directoryTask = async.New(a.desktopDispatcher(), func(state async.State[files.Result]) {
+		if !a.filesCurrent(b) {
+			return
 		}
-		if diff && base != "head" {
-			kind = "git-changes"
-		}
-		r, err := fileRequest(ctx, client, files.Request{Kind: kind, Path: path, Hidden: hidden, Base: base, Session: sid, Turn: turn})
-		a.post(func() {
-			if !a.filesCurrent(b) || b.epoch != epoch {
-				return
-			}
+		switch state.Phase {
+		case async.Failed:
 			b.loading = false
-			if err != nil {
-				b.err = err.Error()
-				if base == "turn" && turn != "" && b.turnRetry < 2 && (strings.Contains(b.err, "本轮快照未记录成功") || strings.Contains(b.err, "本轮基线尚未就绪")) {
-					b.turnRetryAt = time.Now().Add(time.Second)
-				}
-				return
+			b.err = state.Err.Error()
+			if base == "turn" && turn != "" && b.turnRetry < 2 && (strings.Contains(b.err, "本轮快照未记录成功") || strings.Contains(b.err, "本轮基线尚未就绪")) {
+				b.turnRetryAt = time.Now().Add(time.Second)
 			}
+		case async.Succeeded:
+			b.loading = false
+			r := state.Value
 			b.dir, b.pathInput = r.Path, r.Path
 			b.entries = r.Entries
 			b.truncated = r.Truncated
@@ -266,43 +274,79 @@ func (a *App) loadFileDirectory(b *desktopFiles, path string) {
 			} else {
 				b.dirs[r.Path] = &fileDirectory{open: true, entries: r.Entries}
 			}
-		})
-		if win != nil {
-			win.Invalidate()
 		}
-	}()
+	})
+	b.directoryTask.Start(context.Background(), func(ctx context.Context, publish func(files.Result)) error {
+		kind := "list"
+		if diff {
+			kind = "changes"
+		}
+		if diff && base != "head" {
+			kind = "git-changes"
+		}
+		r, err := read(ctx, client, files.Request{Kind: kind, Path: path, Hidden: hidden, Base: base, Session: sid, Turn: turn})
+		if err == nil {
+			publish(r)
+		}
+		return err
+	})
 }
 
 func (a *App) previewFile(b *desktopFiles, path string, diff bool, limit int) {
 	a.previewFileAt(b, path, diff, limit, 0, 0)
 }
 
+type desktopFilePreview struct {
+	result         files.Result
+	bitmap         *ui.Bitmap
+	code           *editor.State
+	changes        *editor.DiffState
+	note, language string
+	added, removed int
+}
+
 func (a *App) previewFileAt(b *desktopFiles, path string, diff bool, limit, line, column int) {
 	if !a.filesCurrent(b) {
 		return
 	}
-	if b.previewCancel != nil {
-		b.previewCancel()
+	if b.linkTask != nil {
+		b.linkTask.Close()
+		b.linkTask = nil
 	}
-	b.previewEpoch++
-	epoch := b.previewEpoch
 	b.preview, b.diff, b.previewLimit = path, diff, limit
 	b.previewLoading = true
-	b.err = ""
-	b.previewNote = ""
-	b.previewImage = nil
-	b.previewData = nil
+	b.err, b.previewNote = "", ""
+	b.previewImage, b.previewData = nil, nil
 	b.previewCode, b.previewDiff = nil, nil
 	b.previewLanguage = ""
 	b.previewAdded, b.previewRemoved = 0, 0
 	b.previewEntry = nil
 	b.previewTruncated = false
-	ctx, cancel := context.WithCancel(context.Background())
-	b.previewCancel = cancel
-	client, win := b.client, a.win
-	comparison := b.comparison
-	go func() {
-		defer cancel()
+	if b.previewTask == nil {
+		b.previewTask = async.New(a.desktopDispatcher(), func(state async.State[desktopFilePreview]) {
+			if !a.filesCurrent(b) {
+				return
+			}
+			switch state.Phase {
+			case async.Failed:
+				b.previewLoading = false
+				b.err = state.Err.Error()
+			case async.Succeeded:
+				b.previewLoading = false
+				p := state.Value
+				b.previewData = p.result.Data
+				b.previewCode, b.previewDiff = p.code, p.changes
+				b.previewLanguage = p.language
+				b.previewAdded, b.previewRemoved = p.added, p.removed
+				b.previewImage = p.bitmap
+				b.previewEntry = p.result.Entry
+				b.previewTruncated = p.result.Truncated
+				b.previewNote = p.note
+			}
+		})
+	}
+	read, client, comparison := b.reader(), b.client, b.comparison
+	b.previewTask.Start(context.Background(), func(ctx context.Context, publish func(desktopFilePreview)) error {
 		kind := "read"
 		if diff {
 			kind = "diff"
@@ -311,76 +355,70 @@ func (a *App) previewFileAt(b *desktopFiles, path string, diff bool, limit, line
 		if diff && comparison != nil {
 			req.Kind, req.Root, req.OldTree, req.NewTree = "git-diff", comparison.Root, comparison.Base, comparison.Current.Tree
 		}
-		r, err := fileRequest(ctx, client, req)
-		var bitmap *ui.Bitmap
-		var code *editor.State
-		var changes *editor.DiffState
-		var note string
-		if err == nil {
-			if diff {
-				if len(r.Data) == 0 {
-					note = "此文件没有 Git 变更"
-				} else if parsed, parseErr := fileDiffPreview(path, string(r.Data)); parseErr != nil {
-					note = "无法解析 Git 变更：" + parseErr.Error()
-					if text, ok := filePreviewText(r.Data, false); ok {
-						code = fileCodePreview("preview.diff", text)
-					}
-				} else if parsed == nil {
-					note = "此文件包含二进制或文件属性变更，可复制变更内容查看"
-				} else {
-					changes = parsed
-				}
-			}
-			if !diff {
-				config, _, imageErr := image.DecodeConfig(bytes.NewReader(r.Data))
-				if imageErr == nil {
-					if r.Truncated {
-						note = "图片超过预览范围，请加载更多或下载"
-					} else if config.Width <= 0 || config.Height <= 0 || config.Width > 16_000_000/config.Height {
-						note = "图片尺寸过大，请下载查看"
-					} else if img, _, err := image.Decode(bytes.NewReader(r.Data)); err == nil {
-						bitmap = ui.NewBitmap(img)
-					} else {
-						note = "图片无法解码"
-					}
-				} else if _, ok := filePreviewText(r.Data, r.Truncated); !ok {
-					note = "二进制文件，请下载查看"
-				} else {
-					text, _ := filePreviewText(r.Data, r.Truncated)
-					code = fileCodePreview(path, text)
-				}
-			}
+		r, err := read(ctx, client, req)
+		if err != nil {
+			return err
 		}
-		language := filePreviewLanguage(path)
-		if code != nil && line > 0 {
-			code.GoTo(editor.Pos{Line: line - 1, Col: max(0, column-1)})
+		preview := prepareFilePreview(ctx, r, path, diff, line, column)
+		if err := ctx.Err(); err != nil {
+			return err
 		}
-		add, del := 0, 0
-		if changes != nil {
-			add, del = changes.Stats()
-		}
-		a.post(func() {
-			if !a.filesCurrent(b) || b.previewEpoch != epoch {
-				return
+		publish(preview)
+		return nil
+	})
+}
+
+func prepareFilePreview(ctx context.Context, r files.Result, path string, diff bool, line, column int) desktopFilePreview {
+	if ctx.Err() != nil {
+		return desktopFilePreview{}
+	}
+	var bitmap *ui.Bitmap
+	var code *editor.State
+	var changes *editor.DiffState
+	var note string
+	if diff {
+		if len(r.Data) == 0 {
+			note = "此文件没有 Git 变更"
+		} else if parsed, parseErr := fileDiffPreview(path, string(r.Data)); parseErr != nil {
+			note = "无法解析 Git 变更：" + parseErr.Error()
+			if text, ok := filePreviewText(r.Data, false); ok {
+				code = fileCodePreview("preview.diff", text)
 			}
-			b.previewLoading = false
-			if err != nil {
-				b.err = err.Error()
-				return
-			}
-			b.previewData = r.Data
-			b.previewCode, b.previewDiff = code, changes
-			b.previewLanguage = language
-			b.previewAdded, b.previewRemoved = add, del
-			b.previewImage = bitmap
-			b.previewEntry = r.Entry
-			b.previewTruncated = r.Truncated
-			b.previewNote = note
-		})
-		if win != nil {
-			win.Invalidate()
+		} else if parsed == nil {
+			note = "此文件包含二进制或文件属性变更，可复制变更内容查看"
+		} else {
+			changes = parsed
 		}
-	}()
+	}
+	if !diff {
+		config, _, imageErr := image.DecodeConfig(bytes.NewReader(r.Data))
+		if imageErr == nil {
+			if r.Truncated {
+				note = "图片超过预览范围，请加载更多或下载"
+			} else if config.Width <= 0 || config.Height <= 0 || config.Width > 16_000_000/config.Height {
+				note = "图片尺寸过大，请下载查看"
+			} else if img, _, err := image.Decode(bytes.NewReader(r.Data)); err == nil {
+				bitmap = ui.NewBitmap(img)
+			} else {
+				note = "图片无法解码"
+			}
+		} else if _, ok := filePreviewText(r.Data, r.Truncated); !ok {
+			note = "二进制文件，请下载查看"
+		} else {
+			text, _ := filePreviewText(r.Data, r.Truncated)
+			code = fileCodePreview(path, text)
+		}
+	}
+
+	language := filePreviewLanguage(path)
+	if code != nil && line > 0 {
+		code.GoTo(editor.Pos{Line: line - 1, Col: max(0, column-1)})
+	}
+	add, del := 0, 0
+	if changes != nil {
+		add, del = changes.Stats()
+	}
+	return desktopFilePreview{result: r, bitmap: bitmap, code: code, changes: changes, note: note, language: language, added: add, removed: del}
 }
 
 func (a *App) insertFilePath(b *desktopFiles, path string) {

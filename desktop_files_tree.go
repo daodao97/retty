@@ -1,10 +1,12 @@
 package main
 
 import (
+	"context"
 	"path/filepath"
 	"sort"
 	"strings"
 
+	"github.com/egoist/mygo/async"
 	"github.com/egoist/mygo/ui"
 	"retty/internal/files"
 )
@@ -13,6 +15,7 @@ type fileDirectory struct {
 	open, loading, truncated bool
 	entries                  []files.Entry
 	err                      string
+	task                     *async.Task[files.Result]
 }
 type fileTreeEntry struct {
 	path  string
@@ -30,6 +33,9 @@ func (a *App) toggleFileDirectory(b *desktopFiles, path string) {
 			d.open = !d.open
 			return
 		}
+		if d.task != nil {
+			d.task.Close()
+		}
 		delete(b.dirs, path) // Reopening a failed directory retries its read.
 	}
 	d := &fileDirectory{open: true, loading: true}
@@ -38,18 +44,18 @@ func (a *App) toggleFileDirectory(b *desktopFiles, path string) {
 		d.loading, d.err = false, "已加载目录过多，请刷新或切换根目录"
 		return
 	}
-	ctx, client, epoch, hidden, win := b.treeContext, b.client, b.epoch, prefs.FilesHidden, a.win
-	go func() {
-		r, err := fileRequest(ctx, client, files.Request{Kind: "list", Path: path, Hidden: hidden})
-		a.post(func() {
-			if !a.filesCurrent(b) || b.epoch != epoch || b.dirs[path] != d {
-				return
-			}
+	read, client, hidden := b.reader(), b.client, prefs.FilesHidden
+	d.task = async.New(a.desktopDispatcher(), func(state async.State[files.Result]) {
+		if !a.filesCurrent(b) || b.dirs[path] != d {
+			return
+		}
+		switch state.Phase {
+		case async.Failed:
 			d.loading = false
-			if err != nil {
-				d.err = err.Error()
-				return
-			}
+			d.err = state.Err.Error()
+		case async.Succeeded:
+			d.loading = false
+			r := state.Value
 			count := len(r.Entries)
 			for _, cached := range b.dirs {
 				count += len(cached.entries)
@@ -59,11 +65,15 @@ func (a *App) toggleFileDirectory(b *desktopFiles, path string) {
 				return
 			}
 			d.entries, d.truncated = r.Entries, r.Truncated
-		})
-		if win != nil {
-			win.Invalidate()
 		}
-	}()
+	})
+	d.task.Start(context.Background(), func(ctx context.Context, publish func(files.Result)) error {
+		r, err := read(ctx, client, files.Request{Kind: "list", Path: path, Hidden: hidden})
+		if err == nil {
+			publish(r)
+		}
+		return err
+	})
 }
 
 func changedFileTree(root string, entries []files.Entry) map[string]*fileDirectory {

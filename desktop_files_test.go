@@ -37,8 +37,7 @@ func TestDesktopFilesCloseCommandsKeepTerminal(t *testing.T) {
 				tt.Frame()
 				browser := a.files
 				t.Cleanup(browser.stop)
-				ctx, cancel := context.WithCancel(context.Background())
-				browser.previewCancel = cancel
+				ctx := blockedDesktopFilePreview(t, a, browser)
 
 				// Native menu accelerators dispatch these commands outside the tester.
 				cmd.Run(a)
@@ -97,8 +96,7 @@ func TestNewTabLeavesFileWorkspace(t *testing.T) {
 				a.toggleFiles()
 				tt.Frame()
 				browser := a.files
-				ctx, cancel := context.WithCancel(context.Background())
-				browser.previewCancel = cancel
+				ctx := blockedDesktopFilePreview(t, a, browser)
 				if layout == "sidebar" {
 					// Native menu accelerators dispatch commands outside the headless tester.
 					cmdNewTab.Run(a)
