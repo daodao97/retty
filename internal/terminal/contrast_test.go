@@ -173,7 +173,7 @@ func TestMinimumContrastPreservesReadableColorsAndBoundsCache(t *testing.T) {
 	}
 }
 
-func TestMinimumContrastPreservesFontArtwork(t *testing.T) {
+func TestMinimumContrastPreservesArtwork(t *testing.T) {
 	loadLib(t)
 	light := LightTheme()
 	light.MinimumContrast = 4.5
@@ -182,16 +182,24 @@ func TestMinimumContrastPreservesFontArtwork(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer term.Close()
-	// These shapes come from the font rather than drawBox. Their deliberately
-	// low contrast and cached dark background must survive theme adaptation.
-	for _, r := range []rune{'┄', '\U0001fb00', '\ue0b4'} {
-		t.Run(fmt.Sprintf("%U", r), func(t *testing.T) {
-			term.Feed([]byte(fmt.Sprintf("\x1b[H\x1b[2J\x1b[48;2;20;20;20;38;2;30;30;30m%c\x1b[0m", r)))
+	// Font artwork and drawn Powerline caps must retain their deliberately
+	// low contrast and cached dark background through theme adaptation.
+	for _, tc := range []struct {
+		r   rune
+		box bool
+	}{{'┄', false}, {'\U0001fb00', false}, {'\ue0b8', false},
+		{'\ue0b4', true}, {'\ue0b5', true}, {'\ue0b6', true}, {'\ue0b7', true}} {
+		t.Run(fmt.Sprintf("%U", tc.r), func(t *testing.T) {
+			term.Feed([]byte(fmt.Sprintf("\x1b[H\x1b[2J\x1b[48;2;20;20;20;38;2;30;30;30m%c\x1b[0m", tc.r)))
 			tt := ui.NewTester(func(c *ui.Context) { View(c, term).Fill() }, 700, 220)
 			tt.SetDark(false)
 			tt.Frame()
 			line := term.v.lines[0]
-			if len(line.runs) == 0 || line.runs[0].c != ui.RGB(30, 30, 30) {
+			if tc.box {
+				if len(line.boxes) != 1 || line.boxes[0].r != tc.r || line.boxes[0].c != ui.RGB(30, 30, 30) {
+					t.Fatalf("contrast changed drawn artwork: %+v", line.boxes)
+				}
+			} else if len(line.runs) == 0 || line.runs[0].c != ui.RGB(30, 30, 30) {
 				t.Fatalf("contrast changed artwork: %+v", line.runs)
 			}
 			if len(line.bgs) == 0 || line.bgs[0].c != ui.RGB(20, 20, 20) {

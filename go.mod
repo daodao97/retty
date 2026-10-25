@@ -1,6 +1,6 @@
 module retty
 
-go 1.27.2
+go 1.27.3
 
 require (
 	github.com/Heyana/typesetting-go v0.3.5-heyana.4
@@ -68,4 +68,4 @@ require (
 tool github.com/egoist/mygo/cmd/mygo
 
 // MyGo source branch: github.com/daodao97/mygo@main.
-replace github.com/egoist/mygo => github.com/daodao97/mygo v0.0.0-20261023224242-27615b686564
+replace github.com/egoist/mygo => github.com/daodao97/mygo v0.0.0-20261024141513-2c8dcd97db9f

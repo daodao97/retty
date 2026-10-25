@@ -40,7 +40,7 @@ func drawn(r rune) bool {
 		return boxArms[r-0x2500] != "" || 0x256d <= r && r <= 0x2573
 	case 0x2580 <= r && r <= 0x259f:
 		return true
-	case 0xe0b0 <= r && r <= 0xe0b3:
+	case 0xe0b0 <= r && r <= 0xe0b7:
 		return true
 	}
 	return false
@@ -76,6 +76,28 @@ func drawBox(p *ui.Painter, r rune, c ui.Rect, col ui.Color) {
 			path.MoveTo(x1/s, y0/s).LineTo(x0/s, (y0+h/2)/s).LineTo(x1/s, y1/s)
 		}
 		if r == 0xe0b0 || r == 0xe0b2 {
+			path.Close()
+			p.FillPath(&path, col)
+		} else {
+			p.StrokePath(&path, max(1, float32(math.Round(float64(s))))/s, col)
+		}
+		return
+	case 0xe0b4 <= r && r <= 0xe0b7:
+		// Powerline's rounded caps: half an ellipse spanning the cell, as
+		// the triangles do. The font's glyph fell short of the taller cells
+		// a line height above 1 makes, next to the prompt's background.
+		const k = 0.5523 // a quarter circle's cubic control distance
+		ym := y0 + h/2
+		ex, fx := x1, x0 // the cap's tip and its flat side
+		if r >= 0xe0b6 {
+			ex, fx = x0, x1
+		}
+		kx, ky := fx+(ex-fx)*k, h/2*k
+		var path ui.Path
+		path.MoveTo(fx/s, y0/s).
+			CubeTo(kx/s, y0/s, ex/s, (ym-ky)/s, ex/s, ym/s).
+			CubeTo(ex/s, (ym+ky)/s, kx/s, y1/s, fx/s, y1/s)
+		if r == 0xe0b4 || r == 0xe0b6 {
 			path.Close()
 			p.FillPath(&path, col)
 		} else {

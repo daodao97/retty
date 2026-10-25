@@ -16,6 +16,10 @@ func TestFileAndURLMatches(t *testing.T) {
 		{"see ~/work/中文.go#L8C2", "中文", Link{Path: "~/work/中文.go", Line: 8, Column: 2}},
 		{`File "/tmp/my project/中文.go":13:2`, "project", Link{Path: "/tmp/my project/中文.go", Line: 13, Column: 2}},
 		{"(../README.md),", "README", Link{Path: "../README.md"}},
+		{"write(notes.md)", "notes", Link{Path: "notes.md"}},
+		{"notes.md (new file +2)", "notes", Link{Path: "notes.md"}},
+		{"See notes.md.", "notes", Link{Path: "notes.md"}},
+		{"notes.md:2:3", "notes", Link{Path: "notes.md", Line: 2, Column: 3}},
 		{"• 详细规划已写入 docs/automation-plan.md (docs/automation-plan.md)。", "automation", Link{Path: "docs/automation-plan.md"}},
 		{"已保存新版图标 (assets/branding/retty-terminal-v3.png)，使用新版", "retty", Link{Path: "assets/branding/retty-terminal-v3.png"}},
 		{"retty-terminal-v3.prompt.txt)也已保存。", "retty", Link{Path: "retty-terminal-v3.prompt.txt"}},
@@ -240,5 +244,37 @@ func TestCommandClickTUIPaintedFileContinuations(t *testing.T) {
 		if got := click(4, 1); got != tc.want {
 			t.Fatalf("unrelated rows %q/%q became %+v", tc.first, tc.second, got)
 		}
+	}
+}
+
+func TestPathAtSpan(t *testing.T) {
+	text := []rune("write(notes.md)")
+	cols := make([]int, len(text))
+	for i := range cols {
+		cols[i] = i
+	}
+	m := matchLink(text, cols, 8)
+	if !m.valid() {
+		t.Fatal("file reference did not match")
+	}
+	m.setCells(cols, 0)
+	if m.Path != "notes.md" || m.cellA != 6 || m.cellB != 14 {
+		t.Fatalf("path = %q %d..%d, want notes.md 6..14", m.Path, m.cellA, m.cellB)
+	}
+}
+
+func TestURLAtSpan(t *testing.T) {
+	text := []rune("go to https://x.org/a. now")
+	cols := make([]int, len(text))
+	for i := range cols {
+		cols[i] = i
+	}
+	m := matchLink(text, cols, 10)
+	if !m.valid() {
+		t.Fatal("URL did not match")
+	}
+	m.setCells(cols, 0)
+	if m.URL != "https://x.org/a" || m.cellA != 6 || m.cellB != 21 {
+		t.Fatalf("URL = %q %d..%d, want https://x.org/a 6..21", m.URL, m.cellA, m.cellB)
 	}
 }

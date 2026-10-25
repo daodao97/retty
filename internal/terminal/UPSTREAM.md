@@ -256,3 +256,14 @@ and merges upstream through `26a1300f`, including GTK context recovery and
 text-selection fixes. The terminal plugin adds overlay-scrollbar hover and
 drag behavior; Retty retains its vendored scrolling and input implementation.
 The public UI APIs and Ghostty library pin remain compatible.
+
+Fork commit `2c8dcd97db9f` merges upstream through `80499935` and requires
+Go 1.27.3. Retty carries the fixes for filenames wrapped as `write(notes.md)`
+and Powerline rounded caps that fill a taller terminal cell, with upstream
+hit-span and pixel regressions. MyGo's mirror mode-ordering fixes target its
+optional `Mirror`, which Retty does not use; Retty retains its own screen
+transport. Unicode-placeholder image rendering is a new upstream feature and
+is not carried into this vendor. The Ghostty manifest and binding API are
+unchanged, so Retty retains its independent CLI/iOS packaging and local
+terminal additions, including bounded rendering-buffer reuse. The build-scoped
+UI migration preview reports no changes.

@@ -54,6 +54,13 @@ func matchLink(text []rune, cols []int, col int) linkMatch {
 		raw = raw[prefix:]
 		raw = trimLinkToken(raw)
 		raw = strings.TrimRight(raw, ",;.!]")
+		// Programs print references in wrappers such as write(notes.md).
+		// Keep parentheses inside filenames and compiler locations intact.
+		if open := strings.IndexByte(raw, '('); open > 0 && strings.HasSuffix(raw, ")") &&
+			!pathLocationPattern.MatchString(raw) && !strings.ContainsAny(raw[:open], `/.:"'`) {
+			prefix += open + 1
+			raw = raw[open+1:]
+		}
 		// A surrounding closing parenthesis is punctuation, but file.ts(4,2)
 		// is a compiler location and must be parsed before trimming it.
 		if !pathLocationPattern.MatchString(raw) {

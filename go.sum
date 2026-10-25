@@ -64,8 +64,8 @@ github.com/creachadair/taskgroup v0.14.4 h1:ttR8StLWmYA1O6x96YlTpQLXjKyRpO4RBo+O
 github.com/creachadair/taskgroup v0.14.4/go.mod h1:uhCtIEsa7zpeMAFixddhCYjbJi7e4JMyU7OXUygkSsg=
 github.com/creack/pty v1.1.24 h1:bJrF4RRfyJnbTJqzRLHzcGaZK1NeM5kTC9jGgovnR1s=
 github.com/creack/pty v1.1.24/go.mod h1:08sCNb52WyoAwi2QDyzUCTgcvVFhUzewun7wtTfvcwE=
-github.com/daodao97/mygo v0.0.0-20261023224242-27615b686564 h1:ihRbbVasYLd2SHjcJVQU3L7SNN+39tSvQs8+bNam0nE=
-github.com/daodao97/mygo v0.0.0-20261023224242-27615b686564/go.mod h1:mefxAD8YBNqS+UEPyoQQfhhUnvA131FbkR4+0F5MzAM=
+github.com/daodao97/mygo v0.0.0-20261024141513-2c8dcd97db9f h1:UVBerWsZ5powQqCH8yh5NksYJJIWp7ONW5+5THHXxBs=
+github.com/daodao97/mygo v0.0.0-20261024141513-2c8dcd97db9f/go.mod h1:gCKSF7JJlGFDzZ8a31PpnxFyQkuKAwdQdFP+avdXRIg=
 github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc h1:U9qPSI2PIWSS1VwoXQT9A3Wy9MM3WgvqSxFWenqJduM=
 github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/dblohm7/wingoes v0.0.0-20260526185140-fb298caac7ca h1:h1Awca4lQOspNR/2eeo04Ricn5NixDX9mb17WSAgLhQ=
