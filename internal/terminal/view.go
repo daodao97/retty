@@ -1,6 +1,7 @@
 package terminal
 
 import (
+	"bytes"
 	"math"
 	"runtime"
 	"time"
@@ -126,6 +127,10 @@ type view struct {
 	searchRects   []vt.MatchRect
 	lines         []rowCache
 	rowScratch    rowBuildScratch
+	rowLayouts    rowLayoutCache
+	motion        scrollMotion
+	frameNow      time.Time
+	smoothSource  bool
 	shaped        lru
 	contrast      map[contrastPair]ui.Color
 
@@ -182,6 +187,7 @@ type pendingKey struct {
 // build updates the view as a frame builds.
 func (v *view) build(c *ui.Context, e ui.Element) {
 	t := v.t
+	v.frameNow = c.Now()
 	dark := c.Theme().Dark
 	focused := e.Focused()
 	t.mu.Lock()
@@ -264,6 +270,9 @@ func (v *view) build(c *ui.Context, e ui.Element) {
 	if v.ticking {
 		c.After(40 * time.Millisecond)
 	}
+	if v.motion.active(c.Now()) {
+		c.After(min(time.Millisecond, v.motion.started.Add(scrollMotionDuration).Sub(c.Now())))
+	}
 }
 
 const blinkPeriod = 600 * time.Millisecond
@@ -271,6 +280,8 @@ const blinkPeriod = 600 * time.Millisecond
 // release frees what the view made of the library, once the terminal is
 // closed.
 func (v *view) release() {
+	v.motion.stop()
+	v.rowLayouts = rowLayoutCache{}
 	if v.keys != nil {
 		v.keys.Free()
 		v.keys = nil
@@ -379,6 +390,22 @@ func (v *view) input(ev ui.InputEvent) bool {
 		}
 		return true
 	case ui.InputPointerDown, ui.InputPointerUp, ui.InputPointerMove, ui.InputPointerCancel, ui.InputLongPress:
+		if v.motion.swallowClick {
+			if ev.Kind == ui.InputPointerUp || ev.Kind == ui.InputPointerCancel {
+				v.motion.swallowClick = false
+			}
+			return true
+		}
+		if ev.Kind == ui.InputPointerDown && v.motion.active(v.frameNow) && v.cellH > 0 {
+			row := int((ev.Y*v.scale - float32(v.oy)) / float32(v.cellH))
+			if row >= v.motion.top && row < v.motion.bottom {
+				v.motion.stop()
+				v.motion.inputAt = time.Time{}
+				v.motion.swallowClick = true
+				v.services.Invalidate()
+				return true
+			}
+		}
 		return v.pointerEvent(ev)
 	case ui.InputScroll:
 		if v.linkTap != nil {
@@ -932,6 +959,9 @@ func (v *view) scroll(ev ui.InputEvent) bool {
 	}
 	ch := float32(v.cellH) / v.scale
 	dy := ev.DY
+	if t.opts.SmoothScroll && ev.Precise && ev.Mods&ui.Shift == 0 && dy != 0 {
+		v.motion.input(dy, time.Now())
+	}
 	if !ev.Precise {
 		dy = dy / 40 * 3 * ch // a notch scrolls three rows
 	}
@@ -978,10 +1008,11 @@ func (v *view) scroll(ev ui.InputEvent) bool {
 		if rows < 0 {
 			button = vt.WheelUp
 		}
-		for range abs(rows) {
-			if out := v.mouse.Encode(vt.MousePress, button, vtMods(ev.Mods), mx, my); len(out) > 0 {
-				t.in.push(append([]byte(nil), out...))
-			}
+		if out := v.mouse.Encode(vt.MousePress, button, vtMods(ev.Mods), mx, my); len(out) > 0 {
+			// One scroll event can span many rows. Encode its identical reports once
+			// and write them together, so a remote viewer does not send one
+			// framed network message (and PTY write) for every crossed row.
+			t.in.push(bytes.Repeat(out, abs(rows)))
 		}
 	case t.term.AltScreen() && t.term.Mode(vt.ModeAltScroll):
 		// Full-screen programs scroll with the arrows (mode 1007).
@@ -996,8 +1027,8 @@ func (v *view) scroll(ev ui.InputEvent) bool {
 		if rows < 0 {
 			key = vt.KeyArrowUp
 		}
-		for range abs(rows) {
-			t.in.push(append([]byte(nil), v.keys.Encode(vt.KeyEvent{Action: vt.KeyPress, Key: key})...))
+		if out := v.keys.Encode(vt.KeyEvent{Action: vt.KeyPress, Key: key}); len(out) > 0 {
+			t.in.push(bytes.Repeat(out, abs(rows)))
 		}
 	default:
 		t.term.ScrollBy(rows)

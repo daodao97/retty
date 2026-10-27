@@ -15,15 +15,17 @@ const padX, padY = 0, 4
 // rowCache is what a row of the screen draws, made when it changes:
 // backgrounds, runs of glyphs, lines and drawn characters, in cells.
 type rowCache struct {
-	ok    bool
-	bgs   []bgSpan
-	runs  []glyphRun
-	decos []deco
-	boxes []boxCell
-	selA  int
-	selB  int
-	sel   bool
-	wide  []int16 // the columns of wide characters
+	signature string
+	shared    bool // immutable buffers retained by the row layout cache
+	ok        bool
+	bgs       []bgSpan
+	runs      []glyphRun
+	decos     []deco
+	boxes     []boxCell
+	selA      int
+	selB      int
+	sel       bool
+	wide      []int16 // the columns of wide characters
 }
 
 type bgSpan struct {
@@ -197,6 +199,8 @@ func (v *view) paint(p *ui.Painter, r ui.Rect) {
 		t.held = false
 	}
 	held := t.held
+	revision := t.revision
+	v.smoothSource = t.opts.SmoothScroll && !v.reflow && t.term.AltScreen() && t.term.MouseTracking() && !held && !t.opts.Transparent
 	screen := t.term
 	if !held && v.reflow {
 		screen = v.presentation()
@@ -230,18 +234,75 @@ func (v *view) paint(p *ui.Painter, r ui.Rect) {
 	}
 	v.followCursor = false
 	cols, rows := rs.Size()
-	if len(v.lines) != rows {
+	geometryChanged := len(v.lines) != rows
+	if geometryChanged {
 		v.lines = append(v.lines[:0], make([]rowCache, rows)...)
 		full = true
+	}
+	contextChanged := false
+	if t.opts.SmoothScroll {
+		contextChanged = v.rowLayouts.prepare(v)
+		if contextChanged {
+			full = true
+			clear(v.contrast)
+		}
+	}
+	newScreen := revision != v.motion.revision
+	if contextChanged || geometryChanged {
+		v.motion.stop()
+	}
+	if newScreen {
+		wasMoving := v.motion.active(v.frameNow)
+		v.motion.stop()
+		v.motion.revision = revision
+		if !contextChanged && !geometryChanged && !wasMoving && v.smoothSource && time.Since(v.motion.inputAt) < 200*time.Millisecond {
+			immutable := true
+			for _, line := range v.lines {
+				immutable = immutable && line.shared && line.signature != ""
+			}
+			if immutable {
+				v.motion.from = append(v.motion.from[:0], v.lines...)
+			}
+		}
 	}
 	rs.Rows()
 	for y := 0; y < rows && rs.NextRow(); y++ {
 		line := &v.lines[y]
 		if full || !line.ok || rs.RowDirty() {
-			v.buildRow(line, rs, cols)
+			if t.opts.SmoothScroll {
+				v.prepareRow(line, rs, cols)
+			} else {
+				v.buildRow(line, rs, cols)
+			}
 		}
 	}
 	rs.Clean()
+	if newScreen && len(v.motion.from) > 0 {
+		v.startScrollMotion()
+		if v.motion.active(v.frameNow) {
+			// Wake build once so it can arm the bounded animation timer.
+			v.services.Invalidate()
+			if event == nil && t.opts.OnRenderEvent != nil {
+				event = &RenderEvent{Kind: "scroll_transition_start", Duration: scrollMotionDuration}
+			}
+		}
+	}
+	if event == nil && t.opts.OnRenderEvent != nil && v.motion.delta != 0 && v.frameNow.After(v.motion.started) {
+		kind := "scroll_transition_frame"
+		if !v.motion.active(v.frameNow) {
+			kind = "scroll_transition_end"
+		}
+		event = &RenderEvent{Kind: kind, Duration: v.frameNow.Sub(v.motion.started)}
+	}
+	selected := false
+	if v.motion.delta != 0 {
+		for _, row := range v.lines {
+			selected = selected || row.sel
+		}
+	}
+	if !v.smoothSource || !v.motion.active(v.frameNow) || selected || v.selecting || v.touchSelecting || v.preedit != "" || len(v.images) != 0 || len(v.searchRects) != 0 {
+		v.motion.stop()
+	}
 	v.draw(p, r)
 }
 
@@ -312,9 +373,15 @@ func (v *view) resolve(s vt.Style) resolved {
 
 // buildRow makes the cache of the render state's current row.
 func (v *view) buildRow(line *rowCache, rs *vt.RenderState, cols int) {
+	v.buildRowCells(line, rs, cols, rs.RowCells())
+}
+
+func (v *view) buildRowCells(line *rowCache, rs *vt.RenderState, cols int, cells []vt.Cell) {
+	if line.shared {
+		*line = rowCache{}
+	}
 	previousRuns := len(line.runs)
 	*line = rowCache{ok: true, bgs: line.bgs[:0], runs: line.runs[:0], decos: line.decos[:0], boxes: line.boxes[:0], wide: line.wide[:0]}
-	cells := rs.RowCells()
 	line.selA, line.selB, line.sel = rs.RowSelection()
 	def := resolved{fg: color(v.colors.Foreground), bg: color(v.colors.Background)}
 	scratch := &v.rowScratch
@@ -566,20 +633,12 @@ func (v *view) draw(p *ui.Painter, r ui.Rect) {
 		selection = color(v.colors.Foreground).Alpha(0.3)
 	}
 	for y := range v.lines {
+		if v.movingRow(y) {
+			continue
+		}
 		line := &v.lines[y]
 		ry := oy + float32(y)*ch
-		for _, b := range line.bgs {
-			x, end := ox+float32(b.x0)*cw, ox+float32(b.x1)*cw
-			if b.x1 == v.cols {
-				// Columns are whole cells; carry the final cell's background
-				// across the fractional column left at the viewport edge.
-				end = max(end, r.X+r.W)
-			}
-			p.Fill(ui.Rect{X: x, Y: ry, W: end - x, H: ch}, b.c, 0)
-		}
-		if line.sel {
-			p.Fill(ui.Rect{X: ox + float32(line.selA)*cw, Y: ry, W: float32(line.selB-line.selA+1) * cw, H: ch}, selection, 0)
-		}
+		v.drawRowBackground(p, r, line, ox, ry, cw, ch, selection)
 	}
 	v.drawImages(p, belowText, ox, oy)
 	if v.hover.valid() && v.linkMods&ui.Cmd != 0 {
@@ -606,6 +665,9 @@ func (v *view) draw(p *ui.Painter, r ui.Rect) {
 		p.Fill(cur, curColor, 0)
 	}
 	for y := range v.lines {
+		if v.movingRow(y) {
+			continue
+		}
 		line := &v.lines[y]
 		ry := oy + float32(y)*ch
 		text := func(over ui.Color) { v.drawText(p, line, ox, ry, cw, ch, base, over) }
@@ -620,6 +682,7 @@ func (v *view) draw(p *ui.Painter, r ui.Rect) {
 		p.Clip(ui.Rect{X: a, Y: r.Y, W: b - a, H: r.H}, 0, func() { text(v.theme.SelectionText) })
 		p.Clip(ui.Rect{X: b, Y: r.Y, W: r.X + r.W - b, H: r.H}, 0, func() { text(ui.Color{}) })
 	}
+	v.drawScrollMotion(p, r, ox, oy, cw, ch, base)
 	if cur.W > 0 && !block {
 		if v.focused || v.cursor.Style != vt.CursorBlock {
 			p.Fill(cur, curColor, 0)
@@ -658,6 +721,19 @@ func (v *view) draw(p *ui.Painter, r ui.Rect) {
 		v.drawPreedit(p, ox, oy, cw, ch, base)
 	}
 	v.drawScrollbar(p, r)
+}
+
+func (v *view) drawRowBackground(p *ui.Painter, r ui.Rect, line *rowCache, ox, ry, cw, ch float32, selection ui.Color) {
+	for _, b := range line.bgs {
+		x, end := ox+float32(b.x0)*cw, ox+float32(b.x1)*cw
+		if b.x1 == v.cols {
+			end = max(end, r.X+r.W)
+		}
+		p.Fill(ui.Rect{X: x, Y: ry, W: end - x, H: ch}, b.c, 0)
+	}
+	if line.sel {
+		p.Fill(ui.Rect{X: ox + float32(line.selA)*cw, Y: ry, W: float32(line.selB-line.selA+1) * cw, H: ch}, selection, 0)
+	}
 }
 
 // drawText draws the glyphs, drawn characters and lines of a row, in their

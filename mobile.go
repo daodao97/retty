@@ -496,6 +496,14 @@ func (m *mobileApp) openSession(s rex.SessionInfo) {
 	options.AdaptiveColors, options.OptionAsAlt, options.SelectOnDrag, options.CopyRawText = true, true, true, true
 	options.ActiveCursor, options.InputContext, options.OnPaste = true, true, m.pasteClipboard
 	options.OpenLinksOnTap = true
+	options.SmoothScroll = true
+	if os.Getenv("RETTY_DEBUG_SCROLL") == "1" {
+		options.OnRenderEvent = func(event terminal.RenderEvent) {
+			if strings.HasPrefix(event.Kind, "scroll_transition_") {
+				log.Printf("Retty scroll: %s elapsed=%s", event.Kind, event.Duration)
+			}
+		}
+	}
 	options.OnSubmit = m.dismissKeyboard
 	term, err := terminal.New(options)
 	if err != nil {

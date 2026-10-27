@@ -4,6 +4,32 @@ Retty originally kept a local copy because that version did not expose the Ghost
 
 When updating MyGo, compare this package with the framework terminal plugin and carry forward the applicable fixes while preserving Retty's platform packaging.
 
+Mouse-wheel and alternate-scroll arrow reports for one scroll event are encoded
+once and repeated into one queued write. This preserves the exact event bytes,
+row count, coordinates and input ordering while avoiding per-row FFI calls,
+allocations and remote screen-input messages. Fractional movement still
+accumulates before reports are generated; local scrollback is unchanged.
+The input worker also drains an existing backlog into writes of up to 32 KiB
+without waiting for more events. This preserves direction changes and keys
+across touch events, completes short writes and clears consumed queue entries.
+A single larger paste keeps its existing downstream chunking.
+
+Options.SmoothScroll is enabled for the phone's live terminal. After precise
+scroll input, exact rendered-row matches can identify a shifted body region;
+only that region receives a bounded 32 ms presentation transition. Fixed rows,
+program input and PTY geometry remain authoritative. Newer frames interrupt
+an unfinished transition, and reversed input cancels it. Selection, images,
+composition, search, reflow, changed geometry and ambiguous matches fall back
+to immediate presentation. Tapping a moving body stops its transition without
+forwarding a potentially misplaced click. Immutable row layouts are bounded
+to 128 entries / 1 MiB, keyed by actual styles and graphemes rather than IDs
+that native resets can reuse. Desktop terminals retain their default path.
+
+Fork 1eb3968d0ca4 merges upstream through ee5f5374. Upstream terminal changes
+add selection extension, mirror handling and Windows wheel scaling; they do
+not require an API migration of this package. Retty retains its own selection,
+projection and input batching code rather than replacing it wholesale.
+
 Kitty graphics bindings, PNG decoder and layered bitmap painting were adapted
 from the pinned MyGo terminal. Retty caps storage/PNG pixels at 8 MiB, disables
 filesystem/shared-memory media, generates matching iOS symbols, and adds
@@ -276,3 +302,12 @@ during momentum. Retty's terminal has no Command-wheel zoom path, so that
 plugin change does not apply to this vendor. The Ghostty manifest/bindings
 and public UI APIs remain compatible; local terminal behavior and independent
 CLI/iOS packaging are retained.
+
+Fork commit `0ba164b88d00` merges upstream through `15cb4a34` (MyGo 0.6.4)
+and adds the mobile backends' `Page.ProcessID` stubs. This update brings GPU
+damage/repaint improvements, opt-in subtree caching and hidden elements,
+editor range backgrounds and DIP scrolling, menu icons, and updater fixes.
+The terminal plugin and Ghostty manifest/bindings are unchanged from
+`cc1299d9a720`, so no terminal vendor changes are needed. Retty retains its
+local terminal additions and independent CLI/iOS packaging.
+The build-scoped UI migration preview requires no changes.

@@ -91,6 +91,9 @@ type Options struct {
 	// InputContext exposes locally typed, unsubmitted text to native caret
 	// navigation. It never buffers input or changes the terminal rendering.
 	InputContext bool
+	// SmoothScroll interpolates confirmed alternate-screen row shifts after
+	// precise scrolling. It changes presentation only, never program input.
+	SmoothScroll bool
 	// Scrollback is about how many bytes of output the terminal keeps above
 	// the screen: 10 MB when zero, none when negative.
 	Scrollback int
@@ -136,8 +139,8 @@ type Options struct {
 	OnExit   func(code int)
 	OnBell   func()
 	OnNotify func(title, body string)
-	// OnRenderEvent reports slow synchronized updates and watchdog releases,
-	// without terminal contents. It runs on the reader or UI thread after
+	// OnRenderEvent reports synchronized updates, watchdog releases and local
+	// scroll transitions without terminal contents. It runs on the reader or UI thread after
 	// releasing emulator locks; calls back into the terminal are safe.
 	OnRenderEvent func(RenderEvent)
 	// OnOpenLink runs on the UI thread, without holding the emulator lock.
@@ -1065,11 +1068,32 @@ func (q *inputQueue) run(w io.Writer) {
 			return
 		}
 		p := q.queue[0]
-		q.queue = q.queue[1:]
+		// A slow network write can leave many touch events queued. Drain
+		// that backlog together instead of paying another transport write for
+		// every queued event. Do not wait for more input, drop reports or
+		// reorder keys. Match the remote stream's 32 KiB input-frame limit;
+		// a single larger paste retains its existing transport chunking.
+		n, size := 1, len(p)
+		for n < len(q.queue) && len(q.queue[n]) <= (32<<10)-size {
+			size += len(q.queue[n])
+			n++
+		}
+		if n > 1 {
+			p = make([]byte, 0, size)
+			for _, part := range q.queue[:n] {
+				p = append(p, part...)
+			}
+		}
+		clear(q.queue[:n])
+		q.queue = q.queue[n:]
 		q.mu.Unlock()
-		if _, err := w.Write(p); err != nil {
-			q.close()
-			return
+		for len(p) > 0 {
+			n, err := w.Write(p)
+			if err != nil || n <= 0 || n > len(p) {
+				q.close()
+				return
+			}
+			p = p[n:]
 		}
 	}
 }
