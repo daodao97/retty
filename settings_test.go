@@ -157,8 +157,17 @@ func TestDesktopCompactLayoutAndSettingsFocus(t *testing.T) {
 	if p.bounds.X != 0 || p.bounds.Y != compactTitleH || p.bounds.W != 1000 || p.bounds.Y+p.bounds.H != 620 {
 		t.Fatalf("terminal does not reach window edges: %+v", p.bounds)
 	}
-	if tabs, ok := tt.Find("Tabs"); !ok || tabs.X < 80 || tabs.H != compactTitleH || tabs.W < 800 {
+	tabs, ok := tt.Find("Tabs")
+	if !ok || tabs.X < 80 || tabs.H != compactTitleH || tabs.W <= 0 {
 		t.Fatalf("compact tab strip: %+v", tabs)
+	}
+	edge := tabs.X + tabs.W
+	for _, label := range []string{"New Tab", "打开文件浏览器", "打开浏览器窗格", "连接"} {
+		button, ok := tt.Find(label)
+		if !ok || button.X != edge || button.W <= 0 || button.H != compactTitleH || button.X+button.W > 1000 {
+			t.Fatalf("compact toolbar control %q is missing, overlaps or is clipped: %+v", label, button)
+		}
+		edge = button.X + button.W
 	}
 	for _, label := range []string{"Split Right", "Command Palette", "连接手机", "手机已连接"} {
 		if _, ok := tt.Find(label); ok {

@@ -149,7 +149,7 @@ func TestSidebarTabActionsScrollAndSmallWindow(t *testing.T) {
 	}
 	tt.SetTitleBar(ui.TitleBar{Left: 80, Height: 44})
 	tt.SetSize(560, 340)
-	for _, label := range []string{"收起侧边栏", "New Tab", "连接"} {
+	for _, label := range []string{"收起侧边栏", "New Tab", "打开文件浏览器", "打开浏览器窗格", "连接"} {
 		if r, ok := tt.Find(label); !ok || r.W <= 0 || r.X < 0 || r.X+r.W > 560 || r.Y+r.H > 340 {
 			t.Fatalf("small-window control %q is unreachable: %+v", label, r)
 		}
