@@ -15,15 +15,15 @@ func TestSidebarTabsOmitProjectHeadingsAndKeepOriginalSelection(t *testing.T) {
 	a, tt := newStaticTestApp(t)
 	a.agentHistory = &sidebarAgentHistory{loaded: true, nextRead: time.Now().Add(time.Hour), selected: -1}
 	main := a.tab()
-	main.Name, main.Focus.info.Dir = "Main task", "/fixture/repo"
-	main.Focus.term.Feed([]byte("\x1b[H\x1b[2J$ git status --short\r\n M app.go\r\n"))
-	p := &Pane{ID: 2, SID: "linked-pane", info: rex.SessionInfo{Dir: "/fixture/worktree"}}
+	main.Name, main.Focus.terminal().info.Dir = "Main task", "/fixture/repo"
+	main.Focus.terminal().term.Feed([]byte("\x1b[H\x1b[2J$ git status --short\r\n M app.go\r\n"))
+	p := &Pane{ID: 2, content: &terminalPane{SID: "linked-pane", info: rex.SessionInfo{Dir: "/fixture/worktree"}}}
 	linked := &Tab{ID: 2, Name: "Worktree task", Focus: p, Root: &Node{ID: 2, Pane: p}}
 	p.Tab, p.Node = linked, linked.Root
 	a.tabs = append(a.tabs, linked)
 	a.gitStatus = &desktopGitState{entries: make(map[gitScope]*desktopGitEntry)}
 	for _, tab := range a.tabs {
-		a.gitStatus.entries[paneGitScope(tab.Focus)] = &desktopGitEntry{status: &gitstate.Status{Repository: gitstate.Repository{Root: tab.Focus.info.Dir, CommonDir: "/fixture/repo/.git", ProjectDir: "/fixture/repo"}, Branch: "task/fix"}}
+		a.gitStatus.entries[paneGitScope(tab.Focus)] = &desktopGitEntry{status: &gitstate.Status{Repository: gitstate.Repository{Root: tab.Focus.terminal().info.Dir, CommonDir: "/fixture/repo/.git", ProjectDir: "/fixture/repo"}, Branch: "task/fix"}}
 	}
 	tt.Frame()
 	if tt.HasText("repo") {
@@ -34,7 +34,7 @@ func TestSidebarTabsOmitProjectHeadingsAndKeepOriginalSelection(t *testing.T) {
 		t.Fatal(err)
 	}
 	tt.Frame()
-	if a.tab() != linked || a.active != 1 || linked.Focus.SID != "linked-pane" || main.Focus.closed {
+	if a.tab() != linked || a.active != 1 || linked.Focus.terminal().SID != "linked-pane" || main.Focus.closed {
 		t.Fatal("project grouping selected or closed the wrong tab")
 	}
 }
@@ -46,7 +46,7 @@ func TestSidebarProjectsGroupsWorktreesByHostWithoutChangingTabIdentity(t *testi
 	a := &App{gitStatus: &desktopGitState{entries: make(map[gitScope]*desktopGitEntry)}}
 	remote := &desktopHost{key: "remote-fixture", hello: rex.Hello{Host: rex.HostInfo{Name: "devbox"}}}
 	add := func(id int, root string, host *desktopHost) *Tab {
-		p := &Pane{ID: id, host: host, SID: root, info: rex.SessionInfo{Dir: root}}
+		p := &Pane{ID: id, host: host, content: &terminalPane{SID: root, info: rex.SessionInfo{Dir: root}}}
 		tab := &Tab{ID: id, Host: host, Focus: p, Root: &Node{Pane: p}}
 		p.Tab, p.Node = tab, tab.Root
 		a.tabs = append(a.tabs, tab)
@@ -60,7 +60,7 @@ func TestSidebarProjectsGroupsWorktreesByHostWithoutChangingTabIdentity(t *testi
 	if len(groups) != 2 || groups[0].label != "repo" || groups[1].label != "repo · devbox" || groups[0].tabs[0].tab != main || groups[0].tabs[1].tab != linked || groups[1].tabs[0].tab != otherHost {
 		t.Fatalf("incorrect project/host grouping: %+v", groups)
 	}
-	if a.tabs[0] != main || a.tabs[1] != otherHost || a.tabs[2] != linked || groups[0].tabs[1].index != 2 || linked.Focus.SID != "/outside/worktree" {
+	if a.tabs[0] != main || a.tabs[1] != otherHost || a.tabs[2] != linked || groups[0].tabs[1].index != 2 || linked.Focus.terminal().SID != "/outside/worktree" {
 		t.Fatal("presentation grouping changed saved order or resume identity")
 	}
 	// Missing or disabled Git metadata preserves the ordinary tab list.

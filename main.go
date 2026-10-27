@@ -230,9 +230,6 @@ func (a *App) open() {
 		if a.terminalHistory != nil {
 			a.terminalHistory.close()
 		}
-		if a.files != nil {
-			a.files.stop()
-		}
 		a.stopPhonePair()
 		a.saveNow()
 		a.saveDesktopHistory()

@@ -15,7 +15,7 @@ import (
 // after the agent exited. Direct program reports have server-owned lifetimes
 // and also work for programs with no agent-specific integration.
 func paneAgentState(p *Pane) rex.AgentState {
-	return sessionAgentState(p.info)
+	return sessionAgentState(p.sessionInfo())
 }
 
 func sessionAgentState(info rex.SessionInfo) rex.AgentState {
@@ -114,10 +114,10 @@ func (a *App) agentIndicator(c *ui.Context, k *colors, p *Pane, s rex.AgentState
 }
 
 func (a *App) paneIsViewed(p *Pane) bool {
-	if prefs.FilesOpen || a.terminalHistory != nil && a.terminalHistory.open {
+	if a.terminalHistory != nil && a.terminalHistory.open {
 		return false
 	}
-	if p == nil || p.closed {
+	if p == nil || p.closed || p.terminal() == nil {
 		return false
 	}
 	if a.pushPresence != nil && !desktopUserPresent(a.pushPresence.locked, a.pushPresence.sleeping, mygo.Power.IdleTime()) {
@@ -135,7 +135,7 @@ func (a *App) paneIsViewed(p *Pane) bool {
 func (a *App) closeViewedPaneNotice() {
 	if t := a.tab(); t != nil && a.paneIsViewed(t.Focus) {
 		a.closeAgentNotice(t.Focus.noticeKey())
-		if !a.settingsOpen && !a.paletteOpen && !a.desktops.open && (a.files == nil || !a.files.expanded) {
+		if !a.settingsOpen && !a.paletteOpen && !a.desktops.open && (a.focusedFiles() == nil || !a.focusedFiles().expanded) {
 			a.readResult(t.Focus)
 		}
 	}
@@ -159,8 +159,8 @@ func (a *App) updateAgentNotice(p *Pane, previous rex.AgentState) {
 	s := paneAgentState(p)
 	// A completed one-shot agent may already have returned to the shell
 	// before polling. The authenticated event can still announce its result.
-	if s.State == "" && agents.Finished(p.info.Agent.State) {
-		s = p.info.Agent
+	if s.State == "" && agents.Finished(p.terminal().info.Agent.State) {
+		s = p.terminal().info.Agent
 	}
 	finished := agents.Finished(s.State)
 	if s.State != agents.Waiting && !finished {
@@ -214,11 +214,11 @@ func (a *App) updateAgentNotice(p *Pane, previous rex.AgentState) {
 	}
 	body := ""
 	if p.host == nil {
-		body = rex.AgentNoticeBody(rex.Dir(), p.info)
+		body = rex.AgentNoticeBody(rex.Dir(), p.terminal().info)
 	} else {
 		body = p.host.name() + " · " + agentStateLabel(s)
 		if s.Source == rex.ProgramStatusSource || s.Summary != "" {
-			body += " · " + rex.AgentNoticeBody("", p.info)
+			body += " · " + rex.AgentNoticeBody("", p.terminal().info)
 		}
 	}
 	opts := mygo.NotificationOptions{Title: programOf(s.ID).Name + " · " + agentStateLabel(s), Body: body}
@@ -289,11 +289,11 @@ func (a *App) showTerminalNotice(p *Pane, title, body string) {
 
 func (a *App) focusAgentPane(sid string) bool {
 	for t, p := range a.allPanes() {
-		if p.noticeKey() != sid || p.closed {
+		if p.terminal() == nil || p.noticeKey() != sid || p.closed {
 			continue
 		}
 		a.settingsOpen, a.paletteOpen, a.renaming = false, false, nil
-		p.find.open, p.find.focus = false, false
+		p.terminal().find.open, p.terminal().find.focus = false, false
 		if t.Zoom != nil && t.Zoom != p {
 			t.Zoom = nil
 		}

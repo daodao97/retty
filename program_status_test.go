@@ -61,8 +61,8 @@ func TestProgramStatusDesktopNoticesRespectFocusAndClear(t *testing.T) {
 		notices = append(notices, opts)
 		return func() { closed++ }
 	}
-	in := rex.SessionInfo{ID: p.SID, Program: "sh", Shell: "sh", Idle: true, Agent: rex.AgentState{ID: "terraform", Source: rex.ProgramStatusSource, SessionID: "osc7501:", State: agents.Running, Updated: time.Now()}}
-	apply := func() { a.apply(map[string]rex.SessionInfo{p.SID: in}) }
+	in := rex.SessionInfo{ID: p.terminal().SID, Program: "sh", Shell: "sh", Idle: true, Agent: rex.AgentState{ID: "terraform", Source: rex.ProgramStatusSource, SessionID: "osc7501:", State: agents.Running, Updated: time.Now()}}
+	apply := func() { a.apply(map[string]rex.SessionInfo{p.terminal().SID: in}) }
 	apply()
 	in.Agent.State, in.Agent.WaitRevision, in.Agent.Reason = agents.Waiting, 1, "permission"
 	apply()
@@ -135,8 +135,8 @@ func TestProgramStatusDoesNotInferCompletionFromShellReturn(t *testing.T) {
 		t.Fatal("shell return guessed a completion")
 		return nil
 	}
-	in := rex.SessionInfo{ID: p.SID, Program: "cargo", Idle: false, LastInput: time.Now().Add(-time.Minute), Agent: rex.AgentState{ID: "cargo", Source: rex.ProgramStatusSource, State: agents.Running}}
-	a.apply(map[string]rex.SessionInfo{p.SID: in})
+	in := rex.SessionInfo{ID: p.terminal().SID, Program: "cargo", Idle: false, LastInput: time.Now().Add(-time.Minute), Agent: rex.AgentState{ID: "cargo", Source: rex.ProgramStatusSource, State: agents.Running}}
+	a.apply(map[string]rex.SessionInfo{p.terminal().SID: in})
 	in.Program, in.Idle, in.Agent = "zsh", true, rex.AgentState{}
-	a.apply(map[string]rex.SessionInfo{p.SID: in})
+	a.apply(map[string]rex.SessionInfo{p.terminal().SID: in})
 }

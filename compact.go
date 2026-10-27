@@ -39,6 +39,7 @@ func (a *App) compactTitleBar(c *ui.Context, k *colors, bar ui.TitleBar) {
 			a.newTab(a.currentDir())
 		}
 		a.filesToggle(c, k)
+		a.browserButton(c, k)
 		if compactTitleButton(c.Key("desktop-connections"), k, "plug-connected", "连接", a.hasDesktopConnections()).Tooltip("连接").Clicked() {
 			a.showDesktopConnections(nil)
 		}

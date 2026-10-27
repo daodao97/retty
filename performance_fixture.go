@@ -91,7 +91,7 @@ func (a *App) performanceFixture() {
 					response := map[string]any{"pid": os.Getpid(), "tabs": len(a.tabs),
 						"focused": win.IsFocused(), "content_size_dip": []int{width, height}}
 					t := a.tab()
-					if t == nil || t.Focus == nil || t.Focus.term == nil {
+					if t == nil || t.Focus == nil || t.Focus.terminalView() == nil {
 						response["error"] = "terminal not ready"
 					} else {
 						p := t.Focus
@@ -111,8 +111,8 @@ func (a *App) performanceFixture() {
 							}
 						case "search":
 							a.openFind()
-							p.find.query = req.Value
-							if err := p.term.SetSearch(req.Value); err != nil {
+							p.terminal().find.query = req.Value
+							if err := p.terminal().term.SetSearch(req.Value); err != nil {
 								response["error"] = err.Error()
 							}
 						case "preview":
@@ -122,27 +122,27 @@ func (a *App) performanceFixture() {
 								response["error"] = "preview is outside fixture directory"
 								break
 							}
-							if !prefs.FilesOpen {
+							if a.focusedFiles() == nil {
 								a.toggleFiles()
 							}
 							a.syncFiles()
-							if a.files != nil {
-								a.previewFile(a.files, req.Value, false, 1<<20)
+							if a.focusedFiles() != nil {
+								a.previewFile(a.focusedFiles(), req.Value, false, 1<<20)
 							}
 						case "quit":
 							mygo.App.Quit()
 						default:
 							response["error"] = "unknown fixture operation"
 						}
-						search := p.term.SearchState()
+						search := p.terminal().term.SearchState()
 						response["search_busy"], response["search_matches"] = search.Busy, search.Total
 						if search.Err != nil {
 							response["error"] = search.Err.Error()
 						}
-						if a.files != nil {
-							response["preview_ready"] = !a.files.previewLoading && a.files.previewCode != nil
-							if a.files.err != "" {
-								response["error"] = a.files.err
+						if a.focusedFiles() != nil {
+							response["preview_ready"] = !a.focusedFiles().previewLoading && a.focusedFiles().previewCode != nil
+							if a.focusedFiles().err != "" {
+								response["error"] = a.focusedFiles().err
 							}
 						}
 					}

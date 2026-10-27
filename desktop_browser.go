@@ -57,6 +57,17 @@ type savedBrowser struct {
 	URL string `json:"url"`
 }
 
+func (a *App) browserButton(c *ui.Context, k *colors) {
+	b := compactTitleButton(c.Key("open-browser"), k, "globe", cmdBrowser.Title, false).
+		Tooltip(cmdBrowser.Title + "  " + cmdBrowser.Keys)
+	if prefs.DesktopLayout == "sidebar" {
+		b.BorderWidth(0)
+	}
+	if b.Clicked() {
+		cmdBrowser.Run(a)
+	}
+}
+
 func newBrowserState(id, raw string) (*browserPane, error) {
 	u, err := browsercontrol.NormalizeURL(raw)
 	if err != nil {
@@ -115,7 +126,7 @@ func (a *App) newBrowserPane(id, raw string, host *desktopHost) (*Pane, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Pane{ID: a.id(), host: host, browser: b}, nil
+	return &Pane{ID: a.id(), host: host, content: b}, nil
 }
 func (a *App) openBrowser(parent *Pane, raw string, host *desktopHost, down bool) (*Pane, error) {
 	p, err := a.newBrowserPane("", raw, host)
@@ -124,29 +135,18 @@ func (a *App) openBrowser(parent *Pane, raw string, host *desktopHost, down bool
 	}
 	if parent != nil {
 		if parent.closed || parent.Tab == nil || !slices.Contains(a.tabs, parent.Tab) {
-			p.browser.stop()
+			p.browser().stop()
 			return nil, fmt.Errorf("target pane closed")
 		}
-		p.host = parent.host
-		p.info.Dir, p.startDir = parent.info.Dir, parent.startDir
-		a.insertControlSplit(parent, p, down)
-	} else {
-		t := a.singlePaneTab(p)
-		at := min(a.active+1, len(a.tabs))
-		a.tabs = slices.Insert(a.tabs, at, t)
-		a.selectTab(at)
-		a.focusReq = p
-		a.changed()
+		p.host, p.dir = parent.host, parent.directory()
 	}
-	if prefs.FilesOpen {
-		a.toggleFiles()
-	}
+	a.placePane(parent, p, down)
 	return p, nil
 }
 
 func (a *App) syncBrowsers() {
 	for t, p := range a.allPanes() {
-		b := p.browser
+		b := p.browser()
 		if b == nil || p.closed {
 			continue
 		}
@@ -175,14 +175,14 @@ func (a *App) syncBrowsers() {
 }
 
 func (a *App) makeBrowserView(p *Pane) (browserView, error) {
-	b := p.browser
+	b := p.browser()
 	v, err := a.win.NewWebView(mygo.WebViewOptions{BackgroundColor: "#ffffff", Page: mygo.PageOptions{DevTools: mygo.DevToolsEnabled}})
 	if err != nil {
 		return nil, err
 	}
 	n := &nativeBrowserView{v: v}
 	page := v.Page()
-	current := func() bool { return !p.closed && !a.quitting && p.browser == b && b.view == n }
+	current := func() bool { return !p.closed && !a.quitting && p.browser() == b && b.view == n }
 	update := a.desktopDispatcher()
 	page.OnPageTitleUpdated(func(e *mygo.TitleEvent) {
 		e.PreventDefault()
@@ -253,7 +253,7 @@ func (a *App) makeBrowserView(p *Pane) (browserView, error) {
 }
 
 func (a *App) navigateBrowser(p *Pane, raw string) {
-	b := p.browser
+	b := p.browser()
 	if b == nil || p.closed {
 		return
 	}
@@ -328,7 +328,7 @@ func (a *App) navigateBrowser(p *Pane, raw string) {
 }
 
 func (a *App) browserContent(c *ui.Context, k *colors, t *Tab, p *Pane) {
-	b := p.browser
+	b := p.browser()
 	ui.Row(c.Key("browser-toolbar")).Height(36).Padding(4, 8).Gap(4).AlignItems(ui.Center).Background(k.panel).Children(func() {
 		if iconButton(c, k, "chevron-left", "浏览器后退", 24, 13).Clicked() && b.view != nil {
 			b.view.Back()
@@ -347,11 +347,11 @@ func (a *App) browserContent(c *ui.Context, k *colors, t *Tab, p *Pane) {
 				a.focusReq = nil
 			}
 		}
-		if input.Shortcut(0, ui.KeyEnter) {
+		if input.Submitted() {
 			u := b.address
 			a.later(c, func() {
 				a.navigateBrowser(p, u)
-				if b.view != nil {
+				if b.err == "" && b.view != nil {
 					b.view.Focus()
 				}
 			})
@@ -402,4 +402,19 @@ func browserTitle(b *browserPane) (string, string) {
 		return b.title, b.url
 	}
 	return "浏览器", b.url
+}
+
+func (b *browserPane) kind() paneKind               { return paneBrowser }
+func (b *browserPane) label(*Pane) (string, string) { return browserTitle(b) }
+func (b *browserPane) render(a *App, c *ui.Context, k *colors, p *Pane) {
+	a.browserContent(c, k, p.Tab, p)
+}
+func (b *browserPane) dispose(*App, *Pane, bool) { b.stop() }
+func (b *browserPane) snapshot(*Pane) *savedNode {
+	return &savedNode{Browser: &savedBrowser{ID: b.id, URL: b.url}}
+}
+func (b *browserPane) split(a *App, p *Pane, down bool) {
+	if _, err := a.openBrowser(p, "about:blank", p.host, down); err != nil {
+		a.err = err.Error()
+	}
 }

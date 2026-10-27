@@ -21,13 +21,13 @@ func TestRemoteSessionAppearsWithoutChangingDesktopFocus(t *testing.T) {
 	// The first view schedules its stream attachment/resize asynchronously.
 	// Record the settled desktop grid, rather than racing the initial 80×24.
 	waitFor(t, tt, "initial desktop size", func() bool {
-		cols, rows := focus.term.Size()
+		cols, rows := focus.terminal().term.Size()
 		infos, err := a.client.List()
 		if err != nil {
 			return false
 		}
 		for _, in := range infos {
-			if in.ID == focus.SID {
+			if in.ID == focus.terminal().SID {
 				return in.Cols == cols && in.Rows == rows
 			}
 		}
@@ -58,7 +58,7 @@ func TestRemoteSessionAppearsWithoutChangingDesktopFocus(t *testing.T) {
 		t.Fatal("remote session duplicated or changed desktop focus")
 	}
 	p := a.tabs[1].Focus
-	if p.SID != created.ID || p.Tab != a.tabs[1] || p.Node != a.tabs[1].Root {
+	if p.terminal().SID != created.ID || p.Tab != a.tabs[1] || p.Node != a.tabs[1].Root {
 		t.Fatal("remote pane was not attached correctly")
 	}
 	after, err := phone.List()
@@ -74,14 +74,14 @@ func TestRemoteSessionAppearsWithoutChangingDesktopFocus(t *testing.T) {
 		}
 	}
 	waitFor(t, tt, "mobile output in the desktop tab", func() bool {
-		return strings.Contains(p.term.Text(), "phone-created")
+		return strings.Contains(p.terminal().term.Text(), "phone-created")
 	})
 	a.selectTab(1)
 	tt.Frame()
 	tt.Type("printf 'desktop-%s\\n' \"$RETTY_CONTINUATION\"")
 	tt.Key(0, ui.KeyEnter)
 	waitFor(t, tt, "desktop input continuing the mobile shell", func() bool {
-		return strings.Contains(p.term.Text(), "desktop-mobile")
+		return strings.Contains(p.terminal().term.Text(), "desktop-mobile")
 	})
 	layout, err := json.Marshal(a.snapshot())
 	if err != nil {
@@ -98,11 +98,11 @@ func TestRemoteSessionAppearsWithoutChangingDesktopFocus(t *testing.T) {
 		reopened.quitting = true
 		for _, tab := range reopened.tabs {
 			for _, pane := range tab.panes() {
-				pane.term.Close()
+				pane.terminal().term.Close()
 			}
 		}
 	})
-	if len(reopened.tabs) != 2 || reopened.tab().Focus.SID != created.ID || reopened.tab().Focus.info.PID != created.PID {
+	if len(reopened.tabs) != 2 || reopened.tab().Focus.terminal().SID != created.ID || reopened.tab().Focus.terminal().info.PID != created.PID {
 		t.Fatal("desktop reopening duplicated or replaced the mobile session")
 	}
 	stale := map[string]rex.SessionInfo{created.ID: created}
@@ -111,7 +111,7 @@ func TestRemoteSessionAppearsWithoutChangingDesktopFocus(t *testing.T) {
 	if len(a.tabs) != 1 {
 		t.Fatal("stale poll resurrected a closed tab")
 	}
-	if err := phone.Kill(focus.SID); err != nil {
+	if err := phone.Kill(focus.terminal().SID); err != nil {
 		t.Fatal(err)
 	}
 	waitFor(t, tt, "externally ended session to disappear", func() bool { return len(a.tabs) == 0 })
@@ -120,11 +120,11 @@ func TestRemoteSessionAppearsWithoutChangingDesktopFocus(t *testing.T) {
 func TestRestoreAdoptsSessionsWithoutSavedLayout(t *testing.T) {
 	a, _ := newTestApp(t)
 	other := &App{client: a.client}
-	if !other.restore() || len(other.tabs) != 1 || other.tabs[0].Focus.SID != a.tab().Focus.SID {
+	if !other.restore() || len(other.tabs) != 1 || other.tabs[0].Focus.terminal().SID != a.tab().Focus.terminal().SID {
 		t.Fatal("sessions without a layout stayed invisible")
 	}
 	other.quitting = true
-	other.tabs[0].Focus.term.Close()
+	other.tabs[0].Focus.terminal().term.Close()
 }
 
 func TestMobileSessionEndRejectsStaleResultsAndLists(t *testing.T) {
@@ -216,7 +216,7 @@ func TestMobileEndSessionThroughIconControls(t *testing.T) {
 		m.detach()
 	})
 	current, err := phone.List()
-	if err != nil || len(current) != 1 || current[0].ID != a.tab().Focus.SID {
+	if err != nil || len(current) != 1 || current[0].ID != a.tab().Focus.terminal().SID {
 		t.Fatal("end affected another session", current, err)
 	}
 	refresh(a)

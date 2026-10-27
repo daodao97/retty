@@ -14,41 +14,40 @@ import (
 
 func (a *App) filesToggle(c *ui.Context, k *colors) {
 	label := "打开文件浏览器"
-	if prefs.FilesOpen {
+	if a.focusedFiles() != nil {
 		label = "收起文件浏览器"
 	}
-	if compactTitleButton(c.Key("files-toggle"), k, "folder-open", label, prefs.FilesOpen).Tooltip(label + "  ⇧⌘E").Clicked() {
+	if compactTitleButton(c.Key("files-toggle"), k, "folder-open", label, a.focusedFiles() != nil).Tooltip(label + "  ⇧⌘E").Clicked() {
 		a.toggleFiles()
 		c.Invalidate()
 	}
 }
 
-func (a *App) filesPanel(c *ui.Context, k *colors) {
-	if prefs.FilesWidth < 200 || prefs.FilesWidth > 420 {
-		prefs.FilesWidth = 260
+func (a *App) filesPanel(c *ui.Context, k *colors, b *desktopFiles) {
+	if b.width < 160 || b.width > 600 {
+		b.width = 260
 	}
-	// Split preserves the requested width, but its generic 40pt minimum is
-	// too small for the preview toolbar. Keep room for it without replacing
-	// the user's chosen width when the window or tab sidebar shrinks it.
-	available, _ := c.Size()
-	if prefs.DesktopLayout == "sidebar" && !prefs.SidebarCollapsed {
-		if available < 720 {
-			available -= 188
-		} else {
-			available -= 224
-		}
+	available := b.pane.bounds.W
+	if b.pane.Tab.Zoom == b.pane || a.desktopContentWidth(c) < 720 {
+		available = a.desktopContentWidth(c)
 	}
-	shown := min(prefs.FilesWidth, max(160, available-240))
+	if available <= 0 {
+		available = a.desktopContentWidth(c) / 2
+	}
+	shown := min(b.width, max(120, available-240))
 	split := desktopSplit(c.Key("files-split"), k, &shown, false, false, func() {
-		prefs.FilesWidth = 260
+		b.width, prefs.FilesWidth = 260, 260
+		a.changed()
 		saveSettings()
 	}, func() ui.Element {
-		return a.fileTreePanel(c, k)
+		return a.fileTreePanel(c, k, b)
 	}, func() {
-		a.fileContentPanel(c, k)
+		a.fileContentPanel(c, k, b)
 	}).Fill()
 	if split.Changed() {
-		prefs.FilesWidth = min(max(shown, 200), 420)
+		b.width = min(max(shown, 120), 600)
+		prefs.FilesWidth = b.width
+		a.changed()
 		a.filesWidthSaveAt = c.Now().Add(250 * time.Millisecond)
 	}
 }
@@ -58,7 +57,7 @@ func (a *App) saveFileWidth(c *ui.Context) {
 	if a.filesWidthSaveAt.IsZero() {
 		return
 	}
-	if wait := a.filesWidthSaveAt.Sub(c.Now()); wait > 0 && prefs.FilesOpen {
+	if wait := a.filesWidthSaveAt.Sub(c.Now()); wait > 0 {
 		c.After(wait)
 		return
 	}
@@ -66,8 +65,7 @@ func (a *App) saveFileWidth(c *ui.Context) {
 	saveSettings()
 }
 
-func (a *App) fileTreePanel(c *ui.Context, k *colors) ui.Element {
-	b := a.files
+func (a *App) fileTreePanel(c *ui.Context, k *colors, b *desktopFiles) ui.Element {
 	return ui.Column(c.Key("files-tree-panel")).Fill().MinHeight(0).Background(k.track).Children(func() {
 		ui.Row(c).Height(50).Padding(0, 16).Gap(7).AlignItems(ui.Center).Children(func() {
 			ui.Icon(c, icon("folder-open")).Size(15, 15).TextColor(k.iconMuted)
@@ -86,6 +84,13 @@ func (a *App) fileTreePanel(c *ui.Context, k *colors) ui.Element {
 		ui.Row(c).Height(30).Margin(0, 12, 10, 12).Padding(0, 9).Gap(7).Radius(7).Background(k.hover).AlignItems(ui.Center).Children(func() {
 			ui.Icon(c, icon("search")).Size(13, 13).TextColor(k.iconMuted).Shrink(0)
 			input := ui.TextInputBase(c.Key("files-filter"), &b.filter).Label("筛选文件").Placeholder("筛选文件…").FontSize(11.5).Grow(1).MinWidth(0).TextColor(k.text)
+			if input.Changed() {
+				a.changed()
+			}
+			if input.Focused() && b.pane.Tab.Focus != b.pane {
+				b.pane.Tab.setFocus(b.pane)
+				a.changed()
+			}
 			if b.filterFocus {
 				input.Focus()
 				b.filterFocus = false
@@ -119,8 +124,7 @@ func (a *App) fileTreePanel(c *ui.Context, k *colors) ui.Element {
 	})
 }
 
-func (a *App) fileContentPanel(c *ui.Context, k *colors) {
-	b := a.files
+func (a *App) fileContentPanel(c *ui.Context, k *colors, b *desktopFiles) {
 	canvas := k.panel
 	if !c.Theme().Dark {
 		canvas = ui.Hex("#f6f7f9")
@@ -164,7 +168,7 @@ func (a *App) fileContentPanel(c *ui.Context, k *colors) {
 					saveSettings()
 					a.loadFileDirectory(b, b.dir)
 				}
-				if m.Item("回到会话目录").Chosen() {
+				if m.Item("回到初始目录").Chosen() {
 					a.loadFileDirectory(b, b.cwd)
 				}
 				if m.Item("复制目录路径").Chosen() {
@@ -173,10 +177,13 @@ func (a *App) fileContentPanel(c *ui.Context, k *colors) {
 				if b.host == nil && m.Item("在 Finder 中显示").Chosen() {
 					mygo.Shell.ShowItemInFolder(b.dir)
 				}
-				if m.Item("返回终端").Chosen() {
-					a.toggleFiles()
+				if m.Item("关闭窗格").Chosen() {
+					a.later(c, func() { a.closePane(b.pane) })
 				}
 			})
+			if iconButton(c, k, "x", "关闭文件窗格", 24, 12).Clicked() {
+				a.later(c, func() { a.closePane(b.pane) })
+			}
 		})
 		if b == nil {
 			return
@@ -235,6 +242,7 @@ func (a *App) setFileMode(b *desktopFiles, diff bool) {
 	}
 	b.diff = diff
 	prefs.FilesDiff = diff
+	a.changed()
 	saveSettings()
 	a.loadFileDirectory(b, b.dir)
 }
@@ -274,7 +282,7 @@ func (a *App) filePreviewView(c *ui.Context, k *colors, b *desktopFiles) {
 			if m.Item("复制路径").Chosen() {
 				c.Services().WriteClipboard(b.preview)
 			}
-			if m.Item("插入当前终端").Disabled(!b.pane.acceptsFileDrop()).Chosen() {
+			if m.Item("插入当前终端").Disabled(b.sourcePane(a) == nil || !b.sourcePane(a).acceptsFileDrop()).Chosen() {
 				a.insertFilePath(b, b.preview)
 			}
 			if m.Item("另存为…").Disabled(b.downloading).Chosen() {
@@ -340,7 +348,7 @@ func (a *App) fileDownloadView(c *ui.Context, b *desktopFiles) {
 }
 
 func (a *App) expandedFilePreview(c *ui.Context, k *colors) {
-	b := a.files
+	b := a.focusedFiles()
 	if b == nil || !b.expanded || b.preview == "" {
 		return
 	}
@@ -359,7 +367,7 @@ func filePreviewName(b *desktopFiles) string {
 }
 
 func (a *App) fileDirectoryDialog(c *ui.Context, k *colors) {
-	b := a.files
+	b := a.focusedFiles()
 	if b == nil || !b.pathEditing {
 		return
 	}

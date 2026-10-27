@@ -18,10 +18,36 @@ type command struct {
 	Accel, Keys string
 	Run         func(a *App)
 	// Hidden keeps it out of the palette.
-	Hidden bool
+	Hidden   bool
+	Terminal bool // meaningful only for terminal content
+}
+
+func (cmd *command) available(a *App) bool {
+	if !cmd.Terminal {
+		return true
+	}
+	t := a.tab()
+	return t != nil && t.Focus != nil && t.Focus.terminal() != nil
+}
+
+func (a *App) openFileComponent(diff bool) {
+	var parent *Pane
+	if t := a.tab(); t != nil {
+		parent = t.Focus
+	}
+	a.openFilesPane(parent, a.currentDir(), diff, false)
 }
 
 var (
+	cmdFilePane     = command{ID: "files.open", Automation: true, Target: true, Title: "新建文件窗格", Run: func(a *App) { a.openFileComponent(false) }}
+	cmdDiffPane     = command{ID: "diff.open", Automation: true, Target: true, Title: "打开 Diff 窗格", Run: func(a *App) { a.openFileComponent(true) }}
+	cmdTerminalPane = command{ID: "terminal.open", Title: "打开终端窗格", Run: func(a *App) {
+		if a.tab() == nil {
+			a.newTab(a.currentDir())
+		} else {
+			a.splitTerminal(false)
+		}
+	}}
 	cmdBrowser = command{ID: "browser.open", Title: "打开浏览器窗格", Accel: "CmdOrCtrl+Shift+B", Keys: "⇧⌘B", Run: func(a *App) {
 		var parent *Pane
 		if t := a.tab(); t != nil {
@@ -53,14 +79,14 @@ var (
 	cmdGrowRight   = command{ID: "pane.divider-right", Automation: true, Target: true, Title: "Move Divider Right", Accel: "CmdOrCtrl+Ctrl+Right", Keys: "⌃⌘→", Run: func(a *App) { a.resizeFocused(1, 0) }}
 	cmdGrowUp      = command{ID: "pane.divider-up", Automation: true, Target: true, Title: "Move Divider Up", Accel: "CmdOrCtrl+Ctrl+Up", Keys: "⌃⌘↑", Run: func(a *App) { a.resizeFocused(0, -1) }}
 	cmdGrowDown    = command{ID: "pane.divider-down", Automation: true, Target: true, Title: "Move Divider Down", Accel: "CmdOrCtrl+Ctrl+Down", Keys: "⌃⌘↓", Run: func(a *App) { a.resizeFocused(0, 1) }}
-	cmdClear       = command{ID: "terminal.clear", Automation: false, Target: true, Title: "Clear Screen and Scrollback", Accel: "CmdOrCtrl+K", Keys: "⌘K", Run: func(a *App) { a.clearFocused() }, Hidden: true}
-	cmdClearScroll = command{ID: "terminal.clear-scrollback", Automation: false, Target: true, Title: "Clear Scrollback", Run: func(a *App) { a.clearFocused() }}
-	cmdRestart     = command{ID: "session.restart", Automation: false, Target: true, Title: "Restart Shell in Pane", Run: func(a *App) { a.restartFocused() }}
+	cmdClear       = command{ID: "terminal.clear", Terminal: true, Automation: false, Target: true, Title: "Clear Screen and Scrollback", Accel: "CmdOrCtrl+K", Keys: "⌘K", Run: func(a *App) { a.clearFocused() }, Hidden: true}
+	cmdClearScroll = command{ID: "terminal.clear-scrollback", Terminal: true, Automation: false, Target: true, Title: "Clear Scrollback", Run: func(a *App) { a.clearFocused() }}
+	cmdRestart     = command{ID: "session.restart", Terminal: true, Automation: false, Target: true, Title: "Restart Shell in Pane", Run: func(a *App) { a.restartFocused() }}
 	cmdBigger      = command{ID: "font.increase", Automation: true, Target: false, Title: "Bigger Text", Accel: "CmdOrCtrl+=", Keys: "⌘+", Run: func(a *App) { a.setFontSize(termFont.Size + 1) }}
 	cmdSmaller     = command{ID: "font.decrease", Automation: true, Target: false, Title: "Smaller Text", Accel: "CmdOrCtrl+-", Keys: "⌘−", Run: func(a *App) { a.setFontSize(termFont.Size - 1) }}
 	cmdActualSize  = command{ID: "font.reset", Automation: true, Target: false, Title: "Actual Size", Accel: "CmdOrCtrl+0", Keys: "⌘0", Run: func(a *App) { a.setFontSize(defaultFontSize) }}
 	cmdFind        = command{ID: "terminal.find", Automation: true, Target: true, Title: "Find…", Accel: "CmdOrCtrl+F", Keys: "⌘F", Run: func(a *App) { a.openFind() }}
-	cmdHistory     = command{ID: "terminal.history", Automation: true, Target: true, Title: "查看终端历史…", Run: func(a *App) { a.openTerminalHistory() }}
+	cmdHistory     = command{ID: "terminal.history", Terminal: true, Automation: true, Target: true, Title: "查看终端历史…", Run: func(a *App) { a.openTerminalHistory() }}
 	cmdFindNext    = command{ID: "terminal.find-next", Automation: true, Target: true, Title: "Find Next", Accel: "CmdOrCtrl+G", Keys: "⌘G", Run: func(a *App) { a.findStep(1) }}
 	cmdFindPrev    = command{ID: "terminal.find-previous", Automation: true, Target: true, Title: "Find Previous", Accel: "CmdOrCtrl+Shift+G", Keys: "⇧⌘G", Run: func(a *App) { a.findStep(-1) }}
 	cmdLight       = command{ID: "appearance.light", Automation: true, Target: false, Title: "Appearance: Light", Run: func(a *App) { a.setAppearance("light") }}
@@ -75,6 +101,7 @@ var paletteCommands = []*command{
 	&cmdDiagnostics,
 	&cmdBrowser,
 	&cmdFiles,
+	&cmdFilePane, &cmdDiffPane, &cmdTerminalPane,
 	&cmdSettings,
 	&cmdCheckUpdates,
 	&cmdUpdateRemote,
@@ -90,10 +117,15 @@ var paletteCommands = []*command{
 
 // menu builds the menu bar, whose items run commands in the window.
 func (a *App) menu() *mygo.Menu {
+	a.commandItems = make(map[*command]*mygo.MenuItem)
 	item := func(cmd *command) *mygo.MenuItem {
-		return &mygo.MenuItem{Label: cmd.Title, Accelerator: cmd.Accel, Click: func(*mygo.MenuItem, *mygo.Window) {
+		it := &mygo.MenuItem{Label: cmd.Title, Accelerator: cmd.Accel, Disabled: !cmd.available(a), Click: func(*mygo.MenuItem, *mygo.Window) {
 			a.run(cmd)
 		}}
+		if cmd.Terminal {
+			a.commandItems[cmd] = it
+		}
+		return it
 	}
 	a.appearanceItems = make(map[string]*mygo.MenuItem)
 	appearance := func(label, v string, cmd *command) *mygo.MenuItem {
@@ -151,8 +183,11 @@ func (a *App) menu() *mygo.Menu {
 			item(&cmdClear),
 		}},
 		{Label: "View", Submenu: []*mygo.MenuItem{
+			item(&cmdTerminalPane),
 			item(&cmdBrowser),
 			item(&cmdFiles),
+			item(&cmdFilePane),
+			item(&cmdDiffPane),
 			item(&cmdHistory),
 			item(&cmdPalette),
 			item(&cmdPalette2),
@@ -177,6 +212,14 @@ func (a *App) menu() *mygo.Menu {
 		}},
 		{Role: mygo.RoleWindowMenu},
 	})
+}
+
+func (a *App) syncCommandItems() {
+	for cmd, item := range a.commandItems {
+		if enabled := cmd.available(a); item.IsEnabled() != enabled {
+			item.SetEnabled(enabled)
+		}
+	}
 }
 
 // do changes the state on the main thread, from a menu, and draws.
@@ -207,7 +250,7 @@ func (a *App) run(cmd *command) {
 		return
 	}
 	a.do(func() {
-		if a.win != nil {
+		if a.win != nil && cmd.available(a) {
 			cmd.Run(a)
 		}
 	})
@@ -222,10 +265,6 @@ func (a *App) closeFocused() {
 		a.terminalHistory.close()
 		return
 	}
-	if prefs.FilesOpen {
-		a.toggleFiles()
-		return
-	}
 	if t := a.tab(); t != nil && t.Focus != nil {
 		a.closePane(t.Focus)
 	}
@@ -238,10 +277,6 @@ func (a *App) closeActiveTab() {
 	}
 	if a.terminalHistory != nil && a.terminalHistory.open {
 		a.terminalHistory.close()
-		return
-	}
-	if prefs.FilesOpen {
-		a.toggleFiles()
 		return
 	}
 	if t := a.tab(); t != nil {
@@ -267,19 +302,19 @@ func (a *App) clearFocused() {
 	if a.terminalHistory != nil && a.terminalHistory.open {
 		return
 	}
-	if t := a.tab(); t != nil && t.Focus != nil && t.Focus.term != nil {
+	if t := a.tab(); t != nil && t.Focus != nil && t.Focus.terminalView() != nil {
 		// Clear the scrollback and the screen, and have the shell draw
 		// its prompt again, as Command-K does in Terminal.
 		p := t.Focus
-		p.term.Feed([]byte("\x1b[H\x1b[2J\x1b[3J"))
-		idle := p.info.Idle
+		p.terminal().term.Feed([]byte("\x1b[H\x1b[2J\x1b[3J"))
+		idle := p.terminal().info.Idle
 		client := a.paneClient(p)
-		if client == nil || p.SID == "" {
+		if client == nil || p.terminal().SID == "" {
 			return
 		}
 		go func() {
-			if err := client.Clear(p.SID); err == nil && idle {
-				p.term.Send([]byte{0x0c})
+			if err := client.Clear(p.terminal().SID); err == nil && idle {
+				p.terminal().term.Send([]byte{0x0c})
 			}
 		}()
 	}
@@ -296,8 +331,7 @@ func (a *App) restartFocused() {
 		return
 	}
 	old := t.Focus
-	if old.browser != nil {
-		a.navigateBrowser(old, old.browser.url)
+	if old.terminal() == nil {
 		return
 	}
 	if t.Host != nil {
@@ -305,8 +339,8 @@ func (a *App) restartFocused() {
 		return
 	}
 	cols, rows := 80, 24
-	if old.term != nil {
-		cols, rows = old.term.Size()
+	if old.terminalView() != nil {
+		cols, rows = old.terminal().term.Size()
 	}
 	p := a.newPane(a.currentDir(), cols, rows)
 	a.endPane(old, true)
@@ -344,7 +378,7 @@ func (a *App) shortcuts(c *ui.Context) {
 		a.openSettings()
 		c.Invalidate()
 	}
-	if a.settingsOpen || a.desktops.open || a.remoteUpdate != nil && a.remoteUpdate.open || a.terminalHistory != nil && a.terminalHistory.open || a.files != nil && (a.files.expanded || a.files.pathEditing) {
+	if a.settingsOpen || a.desktops.open || a.remoteUpdate != nil && a.remoteUpdate.open || a.terminalHistory != nil && a.terminalHistory.open || a.focusedFiles() != nil && (a.focusedFiles().expanded || a.focusedFiles().pathEditing) {
 		return
 	}
 	if !a.paletteOpen && c.Shortcut(ui.Shift|ui.Cmd, ui.KeyE) {
@@ -422,7 +456,7 @@ func (a *App) paletteItems() []paletteItem {
 		}
 	}
 	for _, cmd := range paletteCommands {
-		if cmd.Hidden || !match(cmd.Title) {
+		if cmd.Hidden || !cmd.available(a) || !match(cmd.Title) {
 			continue
 		}
 		items = append(items, paletteItem{id: "command:" + cmd.ID, title: cmd.Title, keys: cmd.Keys, glyph: "command", run: func() { cmd.Run(a) }})
@@ -505,7 +539,7 @@ func (a *App) palette(c *ui.Context, k *colors) {
 	})
 	if was && (dialog.Dismissed() || !a.paletteOpen) && !a.settingsOpen {
 		if t := a.tab(); t != nil && a.focusReq == nil {
-			if t.Focus == nil || !t.Focus.find.focus {
+			if t.Focus == nil || t.Focus.terminal() == nil || !t.Focus.terminal().find.focus {
 				a.focusReq = t.Focus
 			}
 		}

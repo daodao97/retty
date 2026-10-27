@@ -105,8 +105,8 @@ func TestPaletteSSHSelectionStartsLocalCommand(t *testing.T) {
 			if a.paletteOpen || len(a.tabs) != 2 || a.tab() == old || a.tab().Host != nil {
 				t.Fatal("selection did not open a new local tab")
 			}
-			if p := a.tab().Focus; p.info.Dir != home || p.SID == "" || p.host != nil {
-				t.Fatalf("SSH pane: dir=%q, SID=%q, host=%v", p.info.Dir, p.SID, p.host)
+			if p := a.tab().Focus; p.terminal().info.Dir != home || p.terminal().SID == "" || p.host != nil {
+				t.Fatalf("SSH pane: dir=%q, SID=%q, host=%v", p.terminal().info.Dir, p.terminal().SID, p.host)
 			}
 			tt.Frame()
 			if !tt.Focused("Terminal") {

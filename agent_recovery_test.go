@@ -111,11 +111,13 @@ func TestAgentRecoveryRestoresLayoutAndReusesLiveProcess(t *testing.T) {
 		t.Fatal("layout changed")
 	}
 	p := ps[0]
-	if p.SID != "agent-pane" || !p.info.Resumed || p.startDir != project {
+	if p.terminal().SID != "agent-pane" || !p.terminal().info.Resumed || p.terminal().startDir != project {
 		t.Fatal("Agent pane lost its identity")
 	}
-	pid := p.info.PID
-	waitFor(t, tt, "resume exact conversation", func() bool { return p.term != nil && strings.Contains(p.term.Text(), "resumed=exact-thread") })
+	pid := p.terminal().info.PID
+	waitFor(t, tt, "resume exact conversation", func() bool {
+		return p.terminalView() != nil && strings.Contains(p.terminal().term.Text(), "resumed=exact-thread")
+	})
 	a.saveNow()
 	for _, p := range ps {
 		p.closed = true
@@ -125,7 +127,7 @@ func TestAgentRecoveryRestoresLayoutAndReusesLiveProcess(t *testing.T) {
 	if !b.restore() {
 		t.Fatal("GUI reopen failed")
 	}
-	if in := b.tab().panes()[0].info; in.PID != pid || in.ID != "agent-pane" {
+	if in := b.tab().panes()[0].terminal().info; in.PID != pid || in.ID != "agent-pane" {
 		t.Fatal("GUI reopen relaunched Agent", in)
 	}
 	t.Cleanup(func() {
@@ -140,7 +142,7 @@ func TestAgentRecoveryRestoresLayoutAndReusesLiveProcess(t *testing.T) {
 func TestAgentRecoveryKeepsFailedPaneAndRetries(t *testing.T) {
 	a, tt, project := newRecoveryTestApp(t, true, false)
 	p := a.tab().panes()[0]
-	if p.SID != "" || p.recoverySID != "agent-pane" || p.recoveryError == "" {
+	if p.terminal().SID != "" || p.terminal().recoverySID != "agent-pane" || p.terminal().recoveryError == "" {
 		t.Fatal("missing directory silently replaced Agent with shell")
 	}
 	if node := a.snapshot().Tabs[0].Root.A; node.SID != "agent-pane" || node.Dir != project {
@@ -154,8 +156,8 @@ func TestAgentRecoveryKeepsFailedPaneAndRetries(t *testing.T) {
 	os.Mkdir(project, 0o700)
 	a.retryAgentRestore(p)
 	a.retryAgentRestore(p) // repeated clicks must not create multiple requests/PTYs
-	waitFor(t, tt, "explicit recovery retry", func() bool { return !p.recoveryBusy && p.SID == "agent-pane" })
-	if p.recoveryError != "" || !p.info.Resumed || p.closed || len(a.tab().panes()) != 2 {
+	waitFor(t, tt, "explicit recovery retry", func() bool { return !p.terminal().recoveryBusy && p.terminal().SID == "agent-pane" })
+	if p.terminal().recoveryError != "" || !p.terminal().info.Resumed || p.closed || len(a.tab().panes()) != 2 {
 		t.Fatal("retry did not retain pane/layout")
 	}
 	a.closePane(p)
@@ -189,20 +191,20 @@ func TestAgentRecoveryCLIExitKeepsPaneAndOutput(t *testing.T) {
 	a.tab().Zoom = nil
 	tt.Frame()
 	allowRecoveryFixtureExit(t)
-	waitFor(t, tt, "failed CLI feedback", func() bool { return p.recoveryError != "" })
+	waitFor(t, tt, "failed CLI feedback", func() bool { return p.terminal().recoveryError != "" })
 	if p.closed || len(a.tab().panes()) != 2 || !slices.Contains(tt.Texts(), "恢复失败") {
 		t.Fatal("failed CLI removed pane/layout", tt.Texts())
 	}
-	if p.term == nil || !strings.Contains(p.term.Text(), "conversation unavailable") {
+	if p.terminalView() == nil || !strings.Contains(p.terminal().term.Text(), "conversation unavailable") {
 		t.Fatal("failed CLI output was lost")
 	}
-	oldPID := p.info.PID
+	oldPID := p.terminal().info.PID
 	if err := os.WriteFile(filepath.Join(rex.Dir(), "bin", "claude"), []byte("#!/bin/sh\nwhile IFS= read -r line; do :; done\n"), 0o700); err != nil {
 		t.Fatal(err)
 	}
 	a.retryAgentRestore(p)
-	waitFor(t, tt, "retry after CLI exit", func() bool { return !p.recoveryBusy && p.recoveryError == "" })
-	if p.info.PID == oldPID || p.SID != "agent-pane" || p.closed {
+	waitFor(t, tt, "retry after CLI exit", func() bool { return !p.terminal().recoveryBusy && p.terminal().recoveryError == "" })
+	if p.terminal().info.PID == oldPID || p.terminal().SID != "agent-pane" || p.closed {
 		t.Fatal("CLI retry did not reuse pane")
 	}
 }
@@ -213,7 +215,7 @@ func TestAgentRecoveryGUIQuitDuringRetryPreservesSession(t *testing.T) {
 	os.Mkdir(project, 0o700)
 	a.retryAgentRestore(p)
 	a.quitting = true
-	waitFor(t, tt, "pending restore response after GUI quit", func() bool { return !p.recoveryBusy })
+	waitFor(t, tt, "pending restore response after GUI quit", func() bool { return !p.terminal().recoveryBusy })
 	infos, err := a.client.List()
 	if err != nil {
 		t.Fatal(err)
@@ -229,7 +231,7 @@ func TestAgentRecoveryGUIQuitDuringRetryPreservesSession(t *testing.T) {
 func TestAgentRecoveryReopenFailureRetainsOutput(t *testing.T) {
 	a, tt, _ := newRecoveryTestApp(t, false, true)
 	allowRecoveryFixtureExit(t)
-	waitFor(t, tt, "CLI failure", func() bool { return a.tab().panes()[0].recoveryError != "" })
+	waitFor(t, tt, "CLI failure", func() bool { return a.tab().panes()[0].terminal().recoveryError != "" })
 	a.saveNow()
 	for _, p := range a.tab().panes() {
 		p.closed = true
@@ -247,11 +249,11 @@ func TestAgentRecoveryReopenFailureRetainsOutput(t *testing.T) {
 		}
 	})
 	p := b.tab().panes()[0]
-	if p.recoveryError == "" || p.SID != "agent-pane" {
+	if p.terminal().recoveryError == "" || p.terminal().SID != "agent-pane" {
 		t.Fatal("reopen lost failed pane")
 	}
 	b.tab().Zoom = nil
-	waitFor(t, ui.NewTester(b.view, 1000, 620), "failed CLI screen replay", func() bool { return strings.Contains(p.term.Text(), "conversation unavailable") })
+	waitFor(t, ui.NewTester(b.view, 1000, 620), "failed CLI screen replay", func() bool { return strings.Contains(p.terminal().term.Text(), "conversation unavailable") })
 }
 
 func TestAgentRecoveryShutdownKeepsLayoutAfterProcessExit(t *testing.T) {
@@ -264,14 +266,14 @@ func TestAgentRecoveryShutdownKeepsLayoutAfterProcessExit(t *testing.T) {
 	waitFor(t, tt, "owned resumed process exits during shutdown", func() bool {
 		infos, _ := a.client.List()
 		for _, in := range infos {
-			if in.ID == p.SID {
+			if in.ID == p.terminal().SID {
 				return in.Exited
 			}
 		}
 		return false
 	})
 	// Also exercise the pending asynchronous exit-check response.
-	a.checkAgentRestoreExit(p, p.stream)
+	a.checkAgentRestoreExit(p, p.terminal().stream)
 	deadline := time.Now().Add(3 * time.Second)
 	for {
 		a.postMu.Lock()
@@ -287,7 +289,7 @@ func TestAgentRecoveryShutdownKeepsLayoutAfterProcessExit(t *testing.T) {
 	}
 	tt.Frame()
 	a.saveNow()
-	if p.closed || p.recoveryError != "" || len(a.tab().panes()) != 2 {
+	if p.closed || p.terminal().recoveryError != "" || len(a.tab().panes()) != 2 {
 		t.Fatal("shutdown changed workspace or recorded a retry failure")
 	}
 	raw, err := a.client.Layout()
@@ -301,13 +303,13 @@ func TestShutdownKeepsOrdinaryShellPane(t *testing.T) {
 	a, tt := newTestApp(t)
 	a.shuttingDown = func() bool { return true }
 	p := a.tab().Focus
-	p.term.Send([]byte("exit 0\r"))
+	p.terminal().term.Send([]byte("exit 0\r"))
 	waitFor(t, tt, "owned shell exits during shutdown", func() bool {
 		infos, _ := a.client.List()
 		return len(infos) == 1 && infos[0].Exited
 	})
 	tt.Frame()
-	if p.closed || len(a.tabs) != 1 || a.snapshot().Tabs[0].Root.SID != p.SID {
+	if p.closed || len(a.tabs) != 1 || a.snapshot().Tabs[0].Root.SID != p.terminal().SID {
 		t.Fatal("automatic shell exit removed shutdown layout")
 	}
 }

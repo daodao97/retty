@@ -85,7 +85,7 @@ func remoteUploadPaneFixture(t *testing.T, failure string) (*App, *Pane, *ui.Tes
 	t.Cleanup(func() { term.Close() })
 	term.Feed([]byte("\x1b[?2004h"))
 	h := &desktopHost{client: client, generation: 1}
-	p := &Pane{ID: 1, SID: "remote-pane", host: h, term: term, remoteView: view}
+	p := &Pane{ID: 1, host: h, content: &terminalPane{SID: "remote-pane", term: term, remoteView: view}}
 	tab := &Tab{ID: 1, Host: h, Root: &Node{ID: 1, Pane: p}, Focus: p}
 	p.Tab, p.Node = tab, tab.Root
 	a := &App{tabs: []*Tab{tab}, activeRemote: p, focusedWin: true}
@@ -132,7 +132,7 @@ func TestRemoteFileDropWaitsForRemoteConfirmationThenPastesRemotePath(t *testing
 	}
 	assertNoUploadInput(t, peer)
 	// An upload waiting for confirmation must not occupy the terminal stream.
-	p.term.Paste("user input")
+	p.terminal().term.Paste("user input")
 	manual := "\x1b[200~user input\x1b[201~"
 	peer.SetReadDeadline(time.Now().Add(time.Second))
 	input := make([]byte, len(manual))
@@ -140,7 +140,7 @@ func TestRemoteFileDropWaitsForRemoteConfirmationThenPastesRemotePath(t *testing
 		t.Fatal("upload blocked ordinary terminal input", err)
 	}
 	close(release)
-	waitFor(t, tt, "remote upload confirmation", func() bool { return p.upload == nil })
+	waitFor(t, tt, "remote upload confirmation", func() bool { return p.terminal().upload == nil })
 	want := "\x1b[200~" + droppedFilePaths([]string{"/srv/Retty/uploads/batch-123/001/a'b.txt"}) + "\x1b[201~"
 	peer.SetReadDeadline(time.Now().Add(time.Second))
 	got := make([]byte, len(want))
@@ -183,7 +183,7 @@ func TestRemoteFileDropCancelAndPaneSwitchDiscardLateConfirmation(t *testing.T) 
 			case <-time.After(time.Second):
 				t.Fatal("cancelled upload did not stop")
 			}
-			waitFor(t, tt, "upload cleared", func() bool { return p.upload == nil })
+			waitFor(t, tt, "upload cleared", func() bool { return p.terminal().upload == nil })
 			assertNoUploadInput(t, peer)
 			if a.err != "" {
 				t.Fatal("cancellation surfaced an error", a.err)
@@ -195,7 +195,7 @@ func TestRemoteFileDropCancelAndPaneSwitchDiscardLateConfirmation(t *testing.T) 
 func TestRemoteFileDropUnsupportedShowsErrorWithoutPastingLocalPath(t *testing.T) {
 	a, p, tt, peer, _, _, _ := remoteUploadPaneFixture(t, `unknown op "upload-files"`)
 	a.pasteDroppedFiles(p.Tab, p, []string{localUploadFixture(t)})
-	waitFor(t, tt, "unsupported upload result", func() bool { return p.upload == nil })
+	waitFor(t, tt, "unsupported upload result", func() bool { return p.terminal().upload == nil })
 	if !strings.Contains(a.err, "更新远端") {
 		t.Fatal("missing upgrade hint", a.err)
 	}

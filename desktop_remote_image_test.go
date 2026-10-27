@@ -22,7 +22,7 @@ func TestRemoteCodexImageUploadsBeforePastingRemotePath(t *testing.T) {
 	for _, action := range []string{"success", "switch agent", "reconnect", "cancel"} {
 		t.Run(action, func(t *testing.T) {
 			a, p, tt, peer, received, release, _ := remoteUploadPaneFixture(t, "")
-			p.info = rex.SessionInfo{ID: p.SID, Program: "codex", Agent: rex.AgentState{ID: "codex", SessionID: "thread", State: "ready"}}
+			p.terminal().info = rex.SessionInfo{ID: p.terminal().SID, Program: "codex", Agent: rex.AgentState{ID: "codex", SessionID: "thread", State: "ready"}}
 			image := remoteClipboardPNG(t)
 			a.uploadPaneClipboardImage(p, image)
 			select {
@@ -36,15 +36,15 @@ func TestRemoteCodexImageUploadsBeforePastingRemotePath(t *testing.T) {
 			assertNoUploadInput(t, peer)
 			switch action {
 			case "switch agent":
-				p.info.Program = "bash"
-				p.info.Agent = rex.AgentState{}
+				p.terminal().info.Program = "bash"
+				p.terminal().info.Agent = rex.AgentState{}
 			case "reconnect":
 				p.host.generation++
 			case "cancel":
 				p.cancelFileUpload()
 			}
 			close(release)
-			waitFor(t, tt, "image upload response", func() bool { return p.upload == nil })
+			waitFor(t, tt, "image upload response", func() bool { return p.terminal().upload == nil })
 			if action != "success" {
 				assertNoUploadInput(t, peer)
 				return
@@ -64,9 +64,9 @@ func TestRemoteCodexImageUploadsBeforePastingRemotePath(t *testing.T) {
 }
 func TestRemoteCodexImageUnsupportedNeverPastesLocalPath(t *testing.T) {
 	a, p, tt, peer, _, _, _ := remoteUploadPaneFixture(t, `unknown op "upload-files"`)
-	p.info.Program = "codex"
+	p.terminal().info.Program = "codex"
 	a.uploadPaneClipboardImage(p, remoteClipboardPNG(t))
-	waitFor(t, tt, "unsupported image upload", func() bool { return p.upload == nil })
+	waitFor(t, tt, "unsupported image upload", func() bool { return p.terminal().upload == nil })
 	if a.err == "" {
 		t.Fatal("missing unsupported gateway error")
 	}
@@ -77,7 +77,7 @@ func TestMobileCodexImagePastesOnlyConfirmedRemotePath(t *testing.T) {
 	for _, action := range []string{"success", "background", "reconnect", "new thread", "cancel"} {
 		t.Run(action, func(t *testing.T) {
 			a, p, tt, peer, received, release, _ := remoteUploadPaneFixture(t, "")
-			m := &mobileApp{client: p.host.client, term: p.term, selected: rex.SessionInfo{ID: p.SID, Program: "codex", Agent: rex.AgentState{ID: "codex", SessionID: "thread", State: "ready"}}, imagePastePost: a.post}
+			m := &mobileApp{client: p.host.client, term: p.terminal().term, selected: rex.SessionInfo{ID: p.terminal().SID, Program: "codex", Agent: rex.AgentState{ID: "codex", SessionID: "thread", State: "ready"}}, imagePastePost: a.post}
 			m.pasteClipboardImage(remoteClipboardPNG(t))
 			select {
 			case <-received:

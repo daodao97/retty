@@ -14,9 +14,9 @@ func TestCompletedFindStopsPollingAndAcceptsNewMatches(t *testing.T) {
 	a, _ := newStaticTestApp(t)
 	tab := a.tab()
 	p := tab.Focus
-	p.term.Feed([]byte("\x1b[?25l\r\nquiet-target one\r\nquiet-target two\r\n"))
-	p.find.open, p.find.query = true, "quiet-target"
-	if err := p.term.SetSearch(p.find.query); err != nil {
+	p.terminal().term.Feed([]byte("\x1b[?25l\r\nquiet-target one\r\nquiet-target two\r\n"))
+	p.terminal().find.open, p.terminal().find.query = true, "quiet-target"
+	if err := p.terminal().term.SetSearch(p.terminal().find.query); err != nil {
 		t.Fatal(err)
 	}
 	frames := 0
@@ -25,7 +25,7 @@ func TestCompletedFindStopsPollingAndAcceptsNewMatches(t *testing.T) {
 		a.findBar(c, colorsOf(c), tab, p)
 	}, 600, 36)
 	tt.Advance(time.Second)
-	if s := p.term.SearchState(); s.Busy || s.Total != 2 {
+	if s := p.terminal().term.SearchState(); s.Busy || s.Total != 2 {
 		t.Fatalf("search did not finish: %+v", s)
 	}
 	settled := frames
@@ -33,16 +33,16 @@ func TestCompletedFindStopsPollingAndAcceptsNewMatches(t *testing.T) {
 	if frames != settled {
 		t.Fatalf("completed search requested %d idle frames", frames-settled)
 	}
-	p.term.Feed([]byte("quiet-target three\r\n"))
+	p.terminal().term.Feed([]byte("quiet-target three\r\n"))
 	tt.Frame()
-	if s := p.term.SearchState(); s.Busy || s.Total != 3 {
+	if s := p.terminal().term.SearchState(); s.Busy || s.Total != 3 {
 		t.Fatalf("new output was not searched: %+v", s)
 	}
-	previous := p.term.SearchState().Current
+	previous := p.terminal().term.SearchState().Current
 	if err := tt.Click("Find Next"); err != nil {
 		t.Fatal(err)
 	}
-	if s := p.term.SearchState(); s.Current == previous {
+	if s := p.terminal().term.SearchState(); s.Current == previous {
 		t.Fatalf("navigation did not advance: %+v", s)
 	}
 }
@@ -50,80 +50,80 @@ func TestCompletedFindStopsPollingAndAcceptsNewMatches(t *testing.T) {
 func TestFindShortcutsAndPaneIsolation(t *testing.T) {
 	a, tt := newTestApp(t)
 	p := a.tab().Focus
-	waitFor(t, tt, "the shell", func() bool { return strings.Contains(p.term.Text(), "$") })
-	p.term.Feed([]byte("\r\nfind-target one\r\nfind-target two\r\nfind-target three\r\n"))
+	waitFor(t, tt, "the shell", func() bool { return strings.Contains(p.terminal().term.Text(), "$") })
+	p.terminal().term.Feed([]byte("\r\nfind-target one\r\nfind-target two\r\nfind-target three\r\n"))
 	tt.Frame()
 	tt.Key(ui.Cmd, ui.KeyF)
 	tt.Frame()
-	if !p.find.open {
+	if !p.terminal().find.open {
 		t.Fatal("Cmd-F did not open search")
 	}
 	if _, ok := tt.Find("Find in Terminal"); !ok {
 		t.Fatal("no search field")
 	}
-	before := p.term.Text()
+	before := p.terminal().term.Text()
 	tt.Type("find-target")
 	tt.Frame()
-	if p.find.query != "find-target" {
-		t.Fatalf("query %q", p.find.query)
+	if p.terminal().find.query != "find-target" {
+		t.Fatalf("query %q", p.terminal().find.query)
 	}
-	if s := p.term.SearchState(); s.Total != 3 || s.Current != 1 {
+	if s := p.terminal().term.SearchState(); s.Total != 3 || s.Current != 1 {
 		t.Fatalf("matches %+v", s)
 	}
-	if p.term.Text() != before {
+	if p.terminal().term.Text() != before {
 		t.Fatal("search text was sent to shell")
 	}
 	tt.Key(0, ui.KeyEnter)
 	tt.Frame()
-	if s := p.term.SearchState(); s.Current != 2 {
+	if s := p.terminal().term.SearchState(); s.Current != 2 {
 		t.Fatalf("Enter %+v", s)
 	}
 	tt.Key(ui.Shift, ui.KeyEnter)
 	tt.Frame()
-	if s := p.term.SearchState(); s.Current != 1 {
+	if s := p.terminal().term.SearchState(); s.Current != 1 {
 		t.Fatalf("Shift-Enter %+v", s)
 	}
 	tt.Key(ui.Cmd, ui.KeyG)
 	tt.Frame()
-	if s := p.term.SearchState(); s.Current != 2 {
+	if s := p.terminal().term.SearchState(); s.Current != 2 {
 		t.Fatalf("Cmd-G %+v", s)
 	}
 	tt.Key(ui.Cmd|ui.Shift, ui.KeyG)
 	tt.Frame()
-	if s := p.term.SearchState(); s.Current != 1 {
+	if s := p.terminal().term.SearchState(); s.Current != 1 {
 		t.Fatalf("Shift-Cmd-G %+v", s)
 	}
 	if err := tt.Click("Find Next"); err != nil {
 		t.Fatal(err)
 	}
-	if s := p.term.SearchState(); s.Current != 2 {
+	if s := p.terminal().term.SearchState(); s.Current != 2 {
 		t.Fatalf("next button %+v", s)
 	}
 	// Escape from a navigation button should close search too.
 	tt.Key(0, ui.KeyEscape)
 	tt.Frame()
-	if p.find.open {
+	if p.terminal().find.open {
 		t.Fatal("Escape did not close search")
 	}
 	tt.Type("echo back-in-shell")
-	waitFor(t, tt, "focus restored", func() bool { return strings.Contains(p.term.Text(), "echo back-in-shell") })
+	waitFor(t, tt, "focus restored", func() bool { return strings.Contains(p.terminal().term.Text(), "echo back-in-shell") })
 	tt.Key(ui.Ctrl, ui.KeyU)
 	a.split(false)
 	other := a.tab().Focus
-	other.term.Feed([]byte("\r\nother-target\r\n"))
+	other.terminal().term.Feed([]byte("\r\nother-target\r\n"))
 	tt.Frame()
 	tt.Key(ui.Cmd, ui.KeyF)
 	tt.Frame()
 	tt.Type("other-target")
 	tt.Frame()
-	if other.find.query != "other-target" || p.find.query != "find-target" {
+	if other.terminal().find.query != "other-target" || p.terminal().find.query != "find-target" {
 		t.Fatal("search leaked across panes")
 	}
 	a.closeFind(other)
 	a.tab().setFocus(p)
 	a.openFind()
 	tt.Frame()
-	if p.find.query != "find-target" {
+	if p.terminal().find.query != "find-target" {
 		t.Fatal("reopening search lost the query")
 	}
 	tt.Command("selectAll")
@@ -135,7 +135,7 @@ func TestFindShortcutsAndPaneIsolation(t *testing.T) {
 	tt.Command("selectAll")
 	tt.Key(0, ui.KeyBackspace)
 	tt.Frame()
-	if p.find.query != "" || p.term.SearchState().Total != 0 {
+	if p.terminal().find.query != "" || p.terminal().term.SearchState().Total != 0 {
 		t.Fatal("clearing the query kept highlights")
 	}
 	a.closeFind(p)
@@ -146,7 +146,7 @@ func TestFindShortcutsAndPaneIsolation(t *testing.T) {
 	tt.Frame()
 	tt.Type("find-target")
 	tt.Frame()
-	if !p.find.open || p.find.query != "find-target" {
+	if !p.terminal().find.open || p.terminal().find.query != "find-target" {
 		t.Fatal("Find from the command palette did not focus its field")
 	}
 }

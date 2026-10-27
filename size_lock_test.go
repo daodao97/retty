@@ -22,10 +22,10 @@ func TestMobileInactiveSessionRestoresDesktopSize(t *testing.T) {
 			p := a.tabs[0].Focus
 			waitFor(t, desktop, "desktop geometry", func() bool {
 				refresh(a)
-				cols, rows := p.term.Size()
-				return cols > 60 && p.info.Cols == cols && p.info.Rows == rows
+				cols, rows := p.terminal().term.Size()
+				return cols > 60 && p.terminal().info.Cols == cols && p.terminal().info.Rows == rows
 			})
-			original := p.info
+			original := p.terminal().info
 			phone, err := rex.Connect()
 			if err != nil {
 				t.Fatal(err)
@@ -40,7 +40,7 @@ func TestMobileInactiveSessionRestoresDesktopSize(t *testing.T) {
 			waitFor(t, tt, "phone ownership", func() bool {
 				refresh(a)
 				desktop.Frame()
-				return p.locked && p.info.SizeLock == m.lockOwner && p.info.Cols < 60
+				return p.terminal().locked && p.terminal().info.SizeLock == m.lockOwner && p.terminal().info.Cols < 60
 			})
 			owner, retainedTerm, retainedStream := m.lockOwner, m.term, m.stream
 			switch action {
@@ -62,9 +62,9 @@ func TestMobileInactiveSessionRestoresDesktopSize(t *testing.T) {
 			}
 			waitFor(t, desktop, "automatic desktop unlock", func() bool {
 				refresh(a)
-				return !p.locked && p.info.SizeLock == "" && p.info.Cols == original.Cols && p.info.Rows == original.Rows
+				return !p.terminal().locked && p.terminal().info.SizeLock == "" && p.terminal().info.Cols == original.Cols && p.terminal().info.Rows == original.Rows
 			})
-			if p.info.PID != original.PID {
+			if p.terminal().info.PID != original.PID {
 				t.Fatal("inactive phone restarted the shell")
 			}
 			if action != "background" {
@@ -84,7 +84,7 @@ func TestMobileInactiveSessionRestoresDesktopSize(t *testing.T) {
 			waitFor(t, tt, "foreground phone ownership", func() bool {
 				refresh(a)
 				desktop.Frame()
-				return p.locked && p.info.SizeLock == m.lockOwner && p.info.Cols < 60
+				return p.terminal().locked && p.terminal().info.SizeLock == m.lockOwner && p.terminal().info.Cols < 60
 			})
 			if m.lockOwner == owner || m.lockLost || m.lockSuspended || m.term != retainedTerm {
 				t.Fatal("foreground did not reacquire a fresh lock on the retained terminal")
@@ -103,16 +103,16 @@ func TestPaneFollowsPhoneSizeLockUntilUnlocked(t *testing.T) {
 	tt.Frame()
 	waitFor(t, tt, "desktop size", func() bool {
 		refresh(a)
-		cols, rows := p.term.Size()
-		return p.info.Cols > 48 && p.info.Cols == cols && p.info.Rows == rows && p.info.SizeLock == ""
+		cols, rows := p.terminal().term.Size()
+		return p.terminal().info.Cols > 48 && p.terminal().info.Cols == cols && p.terminal().info.Rows == rows && p.terminal().info.SizeLock == ""
 	})
-	desktop := [2]int{p.info.Cols, p.info.Rows}
-	phone := a.client.LockStream(p.SID, "phone-run", "Test iPhone", 48, 35)
+	desktop := [2]int{p.terminal().info.Cols, p.terminal().info.Rows}
+	phone := a.client.LockStream(p.terminal().SID, "phone-run", "Test iPhone", 48, 35)
 	defer phone.Close()
 	phone.Resize(48, 35)
 	waitFor(t, tt, "phone lock", func() bool {
 		refresh(a)
-		return p.locked && p.info.Cols == 48 && p.info.Rows == 35
+		return p.terminal().locked && p.terminal().info.Cols == 48 && p.terminal().info.Rows == 35
 	})
 	tt.Frame()
 	if !tt.HasText("Unlock Size") {
@@ -124,10 +124,10 @@ func TestPaneFollowsPhoneSizeLockUntilUnlocked(t *testing.T) {
 		time.Sleep(50 * time.Millisecond)
 	}
 	refresh(a)
-	if p.info.Cols != 48 || p.info.Rows != 35 {
-		t.Fatalf("pane took the size back: %dx%d", p.info.Cols, p.info.Rows)
+	if p.terminal().info.Cols != 48 || p.terminal().info.Rows != 35 {
+		t.Fatalf("pane took the size back: %dx%d", p.terminal().info.Cols, p.terminal().info.Rows)
 	}
-	if cols, rows := p.term.Size(); cols != 48 || rows != 35 {
+	if cols, rows := p.terminal().term.Size(); cols != 48 || rows != 35 {
 		t.Fatalf("locked pane decodes at %dx%d", cols, rows)
 	}
 	if dir := os.Getenv("MYGO_TEST_IMAGES"); dir != "" {
@@ -143,7 +143,7 @@ func TestPaneFollowsPhoneSizeLockUntilUnlocked(t *testing.T) {
 	}
 	waitFor(t, tt, "unlock", func() bool {
 		refresh(a)
-		return !p.locked && p.info.SizeLock == "" && p.info.Cols > 48
+		return !p.terminal().locked && p.terminal().info.SizeLock == "" && p.terminal().info.Cols > 48
 	})
 	tt.Frame()
 	if tt.HasText("Unlock Size") {
@@ -151,8 +151,8 @@ func TestPaneFollowsPhoneSizeLockUntilUnlocked(t *testing.T) {
 	}
 	// The pane has the size it had before the lock, which its stream
 	// already sent once; it must still take it back.
-	if p.info.Cols != desktop[0] || p.info.Rows != desktop[1] {
-		t.Fatalf("pane did not take its size back: %dx%d, want %dx%d", p.info.Cols, p.info.Rows, desktop[0], desktop[1])
+	if p.terminal().info.Cols != desktop[0] || p.terminal().info.Rows != desktop[1] {
+		t.Fatalf("pane did not take its size back: %dx%d, want %dx%d", p.terminal().info.Cols, p.terminal().info.Rows, desktop[0], desktop[1])
 	}
 }
 

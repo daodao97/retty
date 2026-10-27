@@ -63,7 +63,7 @@ func TestPaneCloseButtonTargetsItsPane(t *testing.T) {
 			t.Fatal(err)
 		}
 		for _, info := range infos {
-			if info.ID == top.SID && !info.Exited {
+			if info.ID == top.terminal().SID && !info.Exited {
 				return false
 			}
 		}
@@ -106,10 +106,10 @@ func TestTerminalContextMenuSplit(t *testing.T) {
 			tt.Frame()
 			// Give the unfocused target its own directory. Right-clicking
 			// it must split that pane and inherit its real shell directory.
-			target.term.Send([]byte("cd /usr/bin\r"))
+			target.terminal().term.Send([]byte("cd /usr/bin\r"))
 			waitFor(t, tt, "target directory", func() bool {
 				refresh(a)
-				return target.info.Dir == "/usr/bin"
+				return target.terminal().info.Dir == "/usr/bin"
 			})
 			tab.setFocus(other)
 			a.focusReq = other
@@ -129,18 +129,18 @@ func TestTerminalContextMenuSplit(t *testing.T) {
 				t.Fatalf("wrong split: panes=%d, node=%+v", len(tab.panes()), node)
 			}
 			added := node.B.Pane
-			if added == nil || added == target || added == other || added.SID == "" || tab.Focus != added {
+			if added == nil || added == target || added == other || added.terminal().SID == "" || tab.Focus != added {
 				t.Fatal("new session did not receive focus")
 			}
 			if other.Node != otherNode || otherNode.Pane != other {
 				t.Fatal("split changed the previously focused pane")
 			}
-			if added.startDir != "/usr/bin" {
-				t.Fatalf("new pane directory = %q", added.startDir)
+			if added.terminal().startDir != "/usr/bin" {
+				t.Fatalf("new pane directory = %q", added.terminal().startDir)
 			}
 			waitFor(t, tt, "new shell directory", func() bool {
 				refresh(a)
-				return added.info.Dir == "/usr/bin"
+				return added.terminal().info.Dir == "/usr/bin"
 			})
 		})
 	}
@@ -171,7 +171,7 @@ func TestRestartedPaneLeavesFocusHistory(t *testing.T) {
 	a.restartFocused()
 	restarted := tab.Focus
 	tt.Frame()
-	if restarted == old || !old.closed || !a.closedSessions[old.SID] || slices.Contains(tab.recent, old) {
+	if restarted == old || !old.closed || !a.closedSessions[old.terminal().SID] || slices.Contains(tab.recent, old) {
 		t.Fatal("restart kept the old pane in the tab's focus history or session list")
 	}
 	a.closePane(restarted)

@@ -201,8 +201,10 @@ func TestSidebarProjectHistoryDisclosureAndResume(t *testing.T) {
 			t.Fatal("resume did not open a new local named tab")
 		}
 		p := a.tab().Focus
-		waitFor(t, tt, "resume exact history", func() bool { return p.term != nil && strings.Contains(p.term.Text(), "arg="+s.ID) })
-		out := p.term.Text()
+		waitFor(t, tt, "resume exact history", func() bool {
+			return p.terminalView() != nil && strings.Contains(p.terminal().term.Text(), "arg="+s.ID)
+		})
+		out := p.terminal().term.Text()
 		if !strings.Contains(out, "cwd="+project) || !strings.Contains(out, s.ConfigDir) || strings.Contains(out, "arg=--last") {
 			t.Fatal("resume lost exact project or config", out)
 		}
@@ -257,7 +259,7 @@ func TestSidebarHistoryActivatesExistingSplitAndIgnoresOtherConversations(t *tes
 	a.split(false)
 	panes := original.panes()
 	p, other := panes[0], panes[1]
-	p.info.Agent = rex.AgentState{ID: "codex", SessionID: "already-open", State: "running"}
+	p.terminal().info.Agent = rex.AgentState{ID: "codex", SessionID: "already-open", State: "running"}
 	original.Zoom = other
 	original.setFocus(other)
 	a.newTab("/tmp")
@@ -271,19 +273,19 @@ func TestSidebarHistoryActivatesExistingSplitAndIgnoresOtherConversations(t *tes
 	if len(a.tabs) != 2 || len(before) != len(after) {
 		t.Fatal("activating an existing conversation created a session")
 	}
-	p.info.Agent.SessionID = "switched-conversation"
-	p.info.Program, p.info.Shell = "codex", "codex"
-	p.info.Args = []string{"codex", "resume", s.ID}
-	h.opened = map[string]string{s.Key(): p.SID}
+	p.terminal().info.Agent.SessionID = "switched-conversation"
+	p.terminal().info.Program, p.terminal().info.Shell = "codex", "codex"
+	p.terminal().info.Args = []string{"codex", "resume", s.ID}
+	h.opened = map[string]string{s.Key(): p.terminal().SID}
 	if a.activateOpenHistory(h, s) {
 		t.Fatal("stale launch identity overrode the current conversation")
 	}
-	p.info.Agent = rex.AgentState{}
-	p.info.Exited = true
+	p.terminal().info.Agent = rex.AgentState{}
+	p.terminal().info.Exited = true
 	if a.activateOpenHistory(h, s) {
 		t.Fatal("exited conversation was treated as open")
 	}
-	p.info.Exited = false
+	p.terminal().info.Exited = false
 	original.Host = &desktopHost{key: "other-machine"}
 	if a.activateOpenHistory(h, s) {
 		t.Fatal("local history matched a remote conversation")
@@ -326,15 +328,15 @@ func TestSidebarHistoryDoesNotActivateOtherAccountHome(t *testing.T) {
 	second := first
 	second.ConfigDir = "/accounts/second"
 	h := &sidebarAgentHistory{sessions: map[string]agenthistory.Session{first.Key(): first, second.Key(): second}}
-	p.info.Agent = rex.AgentState{ID: "codex", SessionID: "same-id", State: "running", ConfigDir: first.ConfigDir}
+	p.terminal().info.Agent = rex.AgentState{ID: "codex", SessionID: "same-id", State: "running", ConfigDir: first.ConfigDir}
 	if a.activateOpenHistory(h, second) || !a.activateOpenHistory(h, first) {
 		t.Fatal("conversation ID crossed account configuration homes")
 	}
-	p.info.Agent.ConfigDir = ""
+	p.terminal().info.Agent.ConfigDir = ""
 	if a.activateOpenHistory(h, first) || a.activateOpenHistory(h, second) {
 		t.Fatal("legacy server guessed a configuration home for an ambiguous ID")
 	}
-	h.opened = map[string]string{second.Key(): p.SID}
+	h.opened = map[string]string{second.Key(): p.terminal().SID}
 	if !a.activateOpenHistory(h, second) {
 		t.Fatal("known scoped launch was not reused")
 	}
@@ -347,7 +349,7 @@ func TestSidebarHistoryShowsTitlesWithoutAccountOrProvider(t *testing.T) {
 	t.Setenv("RETTY_DIR", t.TempDir())
 	a, tt := newStaticTestApp(t)
 	a.tab().Name = "Retty"
-	a.tab().Focus.term.Feed([]byte("\x1b[2J\x1b[H› Select a conversation to resume\r\n"))
+	a.tab().Focus.terminal().term.Feed([]byte("\x1b[2J\x1b[H› Select a conversation to resume\r\n"))
 	historyFixture(a, []agenthistory.Session{
 		{Agent: "codex", ID: "personal", Dir: "/work/retty", ConfigDir: "/fixture/personal", Title: "Personal conversation", Provider: "openai", AccountLabel: "Default Codex Account", Updated: time.Now()},
 		{Agent: "codex", ID: "work", Dir: "/work/retty", ConfigDir: "/fixture/work", Title: "Gateway conversation", Provider: "aicoding", AccountLabel: "Work", Updated: time.Now()},
@@ -422,7 +424,7 @@ func TestSidebarProjectHistoryAppearanceAndVirtualization(t *testing.T) {
 	t.Setenv("RETTY_DIR", t.TempDir())
 	a, tt := newStaticTestApp(t)
 	a.tab().Name = "Current work"
-	a.tab().Focus.term.Feed([]byte("\x1b[2J\x1b[H› Continue an earlier conversation from the sidebar\r\n\r\n  Codex and Claude Code sessions grouped by project\r\n  Each conversation resumes in a new tab\r\n"))
+	a.tab().Focus.terminal().term.Feed([]byte("\x1b[2J\x1b[H› Continue an earlier conversation from the sidebar\r\n\r\n  Codex and Claude Code sessions grouped by project\r\n  Each conversation resumes in a new tab\r\n"))
 	var sessions []agenthistory.Session
 	for i := range 1000 {
 		agent := "codex"
@@ -514,8 +516,10 @@ func TestSidebarHistoryResolvesCLIOutsideDaemonPath(t *testing.T) {
 		t.Fatal("CLI missing from daemon PATH was not resolved", a.err)
 	}
 	p := a.tab().Focus
-	waitFor(t, tt, "resolved CLI output", func() bool { return p.term != nil && strings.Contains(p.term.Text(), "arg=path-exact") })
-	out := p.term.Text()
+	waitFor(t, tt, "resolved CLI output", func() bool {
+		return p.terminalView() != nil && strings.Contains(p.terminal().term.Text(), "arg=path-exact")
+	})
+	out := p.terminal().term.Text()
 	if !strings.Contains(out, "cli="+cli) || !strings.Contains(out, bin) || len(a.tabs) != 2 {
 		t.Fatal("resume lost absolute path/PATH or created duplicates", out)
 	}
@@ -540,11 +544,11 @@ func TestSidebarHistoryClickFocusesNestedPaneWithoutNewTab(t *testing.T) {
 				agent = "codex"
 			}
 			s := agenthistory.Session{Agent: agent, ID: "nested-conversation", Dir: "/fixture/nested-project", Title: "Nested conversation", ConfigDir: "/fixture/config"}
-			target.info.Program, target.info.Idle = agent, false
+			target.terminal().info.Program, target.terminal().info.Idle = agent, false
 			if mode == "claude-node-resume" {
-				target.info.Args = []string{"node", "/usr/lib/node_modules/@anthropic-ai/claude-code/cli.js", "--resume", s.ID}
+				target.terminal().info.Args = []string{"node", "/usr/lib/node_modules/@anthropic-ai/claude-code/cli.js", "--resume", s.ID}
 			} else {
-				target.info.Agent = rex.AgentState{ID: agent, SessionID: s.ID, State: "running"}
+				target.terminal().info.Agent = rex.AgentState{ID: agent, SessionID: s.ID, State: "running"}
 			}
 			original.setFocus(left)
 			original.Zoom = left
@@ -595,11 +599,11 @@ func TestSidebarCodexHistoryFocusesCurrentProviderContinuation(t *testing.T) {
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 	original := a.tab()
 	originalPane := original.Focus
-	originalPane.info.Agent = rex.AgentState{ID: "codex", SessionID: "old-provider-session", State: "running", ConfigDir: "/fixture/current"}
+	originalPane.terminal().info.Agent = rex.AgentState{ID: "codex", SessionID: "old-provider-session", State: "running", ConfigDir: "/fixture/current"}
 	continuationTab := a.newTab("/tmp")
 	a.split(false)
 	continuationPane := continuationTab.Focus
-	continuationPane.info.Agent = rex.AgentState{ID: "codex", SessionID: "current-provider-branch", State: "running", ConfigDir: "/fixture/current"}
+	continuationPane.terminal().info.Agent = rex.AgentState{ID: "codex", SessionID: "current-provider-branch", State: "running", ConfigDir: "/fixture/current"}
 	continuationTab.setFocus(continuationTab.panes()[0])
 	continuationTab.Zoom = continuationTab.Focus
 	a.selectTab(0)

@@ -65,7 +65,7 @@ func TestFileLinksThroughAppAndEditorSettings(t *testing.T) {
 	}
 	a.newTab(dir)
 	p := a.tab().Focus
-	waitFor(t, tt, "shell", func() bool { refresh(a); return strings.Contains(p.term.Text(), "$") })
+	waitFor(t, tt, "shell", func() bool { refresh(a); return strings.Contains(p.terminal().term.Text(), "$") })
 	a.openSettings()
 	tt.Frame()
 	if err := tt.Click("Terminal settings"); err != nil {
@@ -85,7 +85,7 @@ func TestFileLinksThroughAppAndEditorSettings(t *testing.T) {
 	var opened []string
 	a.openLinkURL = func(target string) error { opened = append(opened, target); return nil }
 	tt.Frame()
-	p.term.Feed([]byte("\x1b[H\x1b[2Jmain.go:42:5: example compiler error\r\nhttps://example.com/documentation\r\n"))
+	p.terminal().term.Feed([]byte("\x1b[H\x1b[2Jmain.go:42:5: example compiler error\r\nhttps://example.com/documentation\r\n"))
 	tt.Frame()
 	r, ok := tt.Find("Terminal")
 	if !ok {
@@ -104,7 +104,7 @@ func TestFileLinksThroughAppAndEditorSettings(t *testing.T) {
 	if err := os.WriteFile(iconPath, []byte("fixture"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	p.term.Feed([]byte("\x1b[H\x1b[2J(assets/branding/retty-terminal-v3.png)，使用新版"))
+	p.terminal().term.Feed([]byte("\x1b[H\x1b[2J(assets/branding/retty-terminal-v3.png)，使用新版"))
 	tt.Frame()
 	before := len(opened)
 	tt.ClickAtWith(ui.Cmd, r.X+20, r.Y+7)
@@ -113,7 +113,7 @@ func TestFileLinksThroughAppAndEditorSettings(t *testing.T) {
 	}
 	// Codex-style painting inserts a hard break in a long file:// path.
 	// Verify the complete filename reaches the application's file resolver.
-	cols, _ := p.term.Size()
+	cols, _ := p.terminal().term.Size()
 	base := "file://" + dir + "/"
 	padding := cols - len(base) - len("/exec-") - 3
 	if padding < 1 {
@@ -128,7 +128,7 @@ func TestFileLinksThroughAppAndEditorSettings(t *testing.T) {
 	if err := os.WriteFile(imagePath, []byte("fixture"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	p.term.Feed([]byte("\x1b[H\x1b[2J" + first + "\r\n" + tail))
+	p.terminal().term.Feed([]byte("\x1b[H\x1b[2J" + first + "\r\n" + tail))
 	tt.Frame()
 	tt.ClickAtWith(ui.Cmd, r.X+3, r.Y+7)
 	if got, want := opened[len(opened)-1], (&url.URL{Scheme: "cursor", Host: "file", Path: imagePath}).String(); got != want || a.err != "" {
@@ -145,7 +145,7 @@ func TestPaneLinkOpeningAndPreference(t *testing.T) {
 	if err := os.WriteFile(path, []byte("package main\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	p := &Pane{info: rex.SessionInfo{Dir: dir}}
+	p := &Pane{content: &terminalPane{info: rex.SessionInfo{Dir: dir}}}
 	var opened string
 	a := &App{openLinkURL: func(target string) error { opened = target; return nil }}
 	a.setLinkEditor("cursor")

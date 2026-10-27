@@ -57,8 +57,8 @@ func TestFileDropPastesIntoTargetPaneWithoutSubmitting(t *testing.T) {
 			if bracketed {
 				term.Feed([]byte("\x1b[?2004h"))
 			}
-			tab := &Tab{Focus: &Pane{ID: 1}}
-			p := &Pane{ID: 2, Tab: tab, term: term}
+			tab := &Tab{Focus: &Pane{ID: 1, content: &terminalPane{}}}
+			p := &Pane{ID: 2, Tab: tab, content: &terminalPane{term: term}}
 			a := &App{tabs: []*Tab{tab}}
 			a.pasteDroppedFiles(tab, p, []string{"/tmp/first file.txt", "/tmp/second.txt"})
 			want := "'/tmp/first file.txt' /tmp/second.txt "
@@ -89,9 +89,9 @@ func TestFileDropIgnoresEmptyDropsAndDisconnectedRemotePanes(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer term.Close()
-	original := &Pane{ID: 1}
+	original := &Pane{ID: 1, content: &terminalPane{}}
 	tab := &Tab{Focus: original}
-	p := &Pane{ID: 2, Tab: tab, term: term}
+	p := &Pane{ID: 2, Tab: tab, content: &terminalPane{term: term}}
 	a := &App{tabs: []*Tab{tab}}
 	a.pasteDroppedFiles(tab, p, []string{""})
 	p.host = &desktopHost{}

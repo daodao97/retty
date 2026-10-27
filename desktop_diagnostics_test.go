@@ -21,8 +21,8 @@ func TestDiagnosticsShowsMissingAgentCWDCommandAndVersions(t *testing.T) {
 	t.Setenv("CLAUDE_CONFIG_DIR", dir)
 	os.WriteFile(filepath.Join(dir, "hooks.json"), []byte(`{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"/missing/hook-runner"}]}]}}`), 0600)
 	p := a.tab().Focus
-	p.info.Dir = dir
-	p.info.Agent = rex.AgentState{ID: "codex", CWD: filepath.Join(dir, "renamed-project"), ConfigDir: dir, HookEvent: "PreToolUse", Updated: time.Now()}
+	p.terminal().info.Dir = dir
+	p.terminal().info.Agent = rex.AgentState{ID: "codex", CWD: filepath.Join(dir, "renamed-project"), ConfigDir: dir, HookEvent: "PreToolUse", Updated: time.Now()}
 	a.hello = rex.Hello{PID: 321, Version: rex.ProtocolVersion, Build: runtimeinfo.Info{Version: "old-service"}, Exe: "/old/Retty"}
 	a.openDiagnostics()
 	waitFor(t, tt, "diagnostic collection", func() bool { return a.diagnostics != nil && !a.diagnostics.busy })

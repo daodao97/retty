@@ -15,7 +15,7 @@ func TestTerminalHistoryIsReadonlyAndPreservesSession(t *testing.T) {
 	tab := a.newLocalCommandTab(t.TempDir(), []string{"/bin/sh", "-c", "printf HISTORY_FIXTURE; sleep 20"})
 	p := tab.Focus
 	tt.Frame()
-	waitFor(t, tt, "owned history fixture", func() bool { return bytes.Contains(p.term.Snapshot(), []byte("HISTORY_FIXTURE")) })
+	waitFor(t, tt, "owned history fixture", func() bool { return bytes.Contains(p.terminal().term.Snapshot(), []byte("HISTORY_FIXTURE")) })
 	before, err := a.client.List()
 	if err != nil {
 		t.Fatal(err)
@@ -38,12 +38,12 @@ func TestTerminalHistoryIsReadonlyAndPreservesSession(t *testing.T) {
 	}
 	var beforeInfo, afterInfo *rex.SessionInfo
 	for i := range before {
-		if before[i].ID == p.SID {
+		if before[i].ID == p.terminal().SID {
 			beforeInfo = &before[i]
 		}
 	}
 	for i := range after {
-		if after[i].ID == p.SID {
+		if after[i].ID == p.terminal().SID {
 			afterInfo = &after[i]
 		}
 	}

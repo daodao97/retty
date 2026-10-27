@@ -19,7 +19,7 @@ func TestSettingsSelectionCopyAppliesAndPersists(t *testing.T) {
 	second := a.tab().Focus
 	panes := []*Pane{first, second}
 	for _, pane := range panes {
-		waitFor(t, tt, "shell", func() bool { return strings.Contains(pane.term.Text(), "$") })
+		waitFor(t, tt, "shell", func() bool { return strings.Contains(pane.terminal().term.Text(), "$") })
 	}
 
 	tt.Key(ui.Cmd, ui.KeyComma)
@@ -39,14 +39,14 @@ func TestSettingsSelectionCopyAppliesAndPersists(t *testing.T) {
 	third := a.newTab("/tmp").Focus
 	panes = append(panes, third)
 	tt.Frame()
-	waitFor(t, tt, "new shell", func() bool { return strings.Contains(third.term.Text(), "$") })
+	waitFor(t, tt, "new shell", func() bool { return strings.Contains(third.terminal().term.Text(), "$") })
 	// Keep these disposable sessions quiet while switching tabs and resizing
 	// splits. A shell can redraw its prompt after SIGWINCH over the fed fixture.
 	for _, pane := range panes {
-		pane.term.Send([]byte("exec /bin/cat >/dev/null\r"))
+		pane.terminal().term.Send([]byte("exec /bin/cat >/dev/null\r"))
 		waitFor(t, tt, "quiet copy fixture", func() bool {
 			refresh(a)
-			return pane.info.Program == "cat" && strings.Contains(pane.term.Text(), "exec /bin/cat")
+			return pane.terminal().info.Program == "cat" && strings.Contains(pane.terminal().term.Text(), "exec /bin/cat")
 		})
 	}
 	copyPane := func(p *Pane, want string) {
@@ -59,7 +59,7 @@ func TestSettingsSelectionCopyAppliesAndPersists(t *testing.T) {
 		p.Tab.setFocus(p)
 		a.focusReq = p
 		tt.Frame()
-		p.term.Feed([]byte("\x1b[H\x1b[2J1. \x1b[8m**\x1b[28mvisible\x1b[8m**\x1b[0m"))
+		p.terminal().term.Feed([]byte("\x1b[H\x1b[2J1. \x1b[8m**\x1b[28mvisible\x1b[8m**\x1b[0m"))
 		tt.Frame()
 		tt.Command("selectAll")
 		tt.Command("copy")
@@ -72,7 +72,7 @@ func TestSettingsSelectionCopyAppliesAndPersists(t *testing.T) {
 	}
 	// Restore default uses the same live update path and removes the persisted
 	// override. None of the sessions should be replaced when switching modes.
-	sids := []string{first.SID, second.SID, third.SID}
+	sids := []string{first.terminal().SID, second.terminal().SID, third.terminal().SID}
 	tt.Key(ui.Cmd, ui.KeyComma)
 	if err := tt.Click("Restore default Selection copy content"); err != nil {
 		t.Fatal(err)
@@ -83,7 +83,7 @@ func TestSettingsSelectionCopyAppliesAndPersists(t *testing.T) {
 	tt.Key(0, ui.KeyEscape)
 	for i, pane := range panes {
 		copyPane(pane, "1. visible")
-		if pane.SID != sids[i] {
+		if pane.terminal().SID != sids[i] {
 			t.Fatal("copy mode change replaced a session")
 		}
 	}

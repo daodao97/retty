@@ -15,15 +15,15 @@ func TestAgentTabs(t *testing.T) {
 	previous := prefs
 	t.Cleanup(func() { prefs = previous })
 	registerFonts()
-	p := &Pane{ID: 2, info: rex.SessionInfo{Shell: "zsh", Dir: "/work/repo"}}
+	p := &Pane{ID: 2, content: &terminalPane{info: rex.SessionInfo{Shell: "zsh", Dir: "/work/repo"}}}
 	tab := &Tab{ID: 1, Focus: p, Root: &Node{ID: 3, Pane: p}}
 	p.Tab = tab
 	a := &App{tabs: []*Tab{tab}}
 	tt := ui.NewTester(a.view, 1000, 620)
 	tt.SetPreferences(ui.Preferences{ReduceMotion: true})
 	for _, agent := range agents.All {
-		p.info.Program, p.info.Args, p.info.Idle = agent.Aliases[0], nil, false
-		p.title, tab.Name = "", ""
+		p.terminal().info.Program, p.terminal().info.Args, p.terminal().info.Idle = agent.Aliases[0], nil, false
+		p.terminal().title, tab.Name = "", ""
 		tt.Frame()
 		if name, _ := tab.label(); name != agent.Name {
 			t.Fatalf("%s title %q", agent.ID, name)
@@ -41,7 +41,7 @@ func TestAgentTabs(t *testing.T) {
 		}
 		tt.SetDark(false)
 	}
-	p.info.Program, p.info.Args = "claude", nil
+	p.terminal().info.Program, p.terminal().info.Args = "claude", nil
 	for title, want := range map[string]string{
 		"✳ Claude Code":         "Claude Code",
 		" ✳\ufe0e Claude Code ": "Claude Code",
@@ -49,7 +49,7 @@ func TestAgentTabs(t *testing.T) {
 		"Review ✳ login":        "Review ✳ login",
 		"✳":                     "Claude Code",
 	} {
-		p.title = title
+		p.terminal().title = title
 		tt.Frame()
 		if name, _ := tab.label(); name != want {
 			t.Fatalf("Claude title %q: got %q, want %q", title, name, want)
@@ -58,15 +58,15 @@ func TestAgentTabs(t *testing.T) {
 			t.Fatal("cleaning the Claude title hid its brand icon")
 		}
 	}
-	p.title = ""
-	p.info.Program = "node"
-	p.info.Args = []string{"node", "/opt/node_modules/@google/gemini-cli/dist/index.js"}
+	p.terminal().title = ""
+	p.terminal().info.Program = "node"
+	p.terminal().info.Args = []string{"node", "/opt/node_modules/@google/gemini-cli/dist/index.js"}
 	tt.Frame()
 	if name, _ := tab.label(); name != "Gemini CLI" {
 		t.Fatalf("wrapped agent title %q", name)
 	}
-	p.title = "Review the login flow"
-	if name, _ := tab.label(); name != p.title {
+	p.terminal().title = "Review the login flow"
+	if name, _ := tab.label(); name != p.terminal().title {
 		t.Fatal("agent's meaningful terminal title was lost")
 	}
 	tab.Name = "my project"
@@ -77,7 +77,7 @@ func TestAgentTabs(t *testing.T) {
 	if _, ok := tt.Find("Gemini CLI icon"); !ok {
 		t.Fatal("manual name hid the agent icon")
 	}
-	p.info = rex.SessionInfo{Shell: "zsh", Program: "zsh", Dir: "/work/repo", Idle: true}
+	p.terminal().info = rex.SessionInfo{Shell: "zsh", Program: "zsh", Dir: "/work/repo", Idle: true}
 	tab.Name = ""
 	tt.Frame()
 	if name, _ := tab.label(); name != "zsh" {
@@ -92,9 +92,9 @@ func TestAgentTabs(t *testing.T) {
 	if dir := os.Getenv("MYGO_TEST_IMAGES"); dir != "" {
 		a.tabs = nil
 		for i, id := range []string{"claude", "codex", "agy", "dsh", "hermes", "reasonix", "mistermorph", "atomcode"} {
-			p := &Pane{ID: 100 + i, info: rex.SessionInfo{Shell: "zsh", Program: id, Dir: "/work/repo"}}
+			p := &Pane{ID: 100 + i, content: &terminalPane{info: rex.SessionInfo{Shell: "zsh", Program: id, Dir: "/work/repo"}}}
 			if id == "claude" {
-				p.title = "✳ Claude Code"
+				p.terminal().title = "✳ Claude Code"
 			}
 			tab := &Tab{ID: 200 + i, Focus: p, Root: &Node{ID: 300 + i, Pane: p}}
 			p.Tab = tab

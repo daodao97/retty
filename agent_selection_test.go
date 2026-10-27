@@ -13,14 +13,14 @@ func TestAgentPaneSelectionOwnershipAndListMarkers(t *testing.T) {
 	a, tt := newStaticTestApp(t)
 	p := a.tab().Focus
 	for _, agent := range []string{"codex", "claude", "opencode"} {
-		p.info.Program, p.info.Idle, p.info.Args = agent, false, nil
-		p.term.Feed([]byte("\x1b[?1049h\x1b[?1002h\x1b[?1006h\x1b[H\x1b[2J4. example"))
+		p.terminal().info.Program, p.terminal().info.Idle, p.terminal().info.Args = agent, false, nil
+		p.terminal().term.Feed([]byte("\x1b[?1049h\x1b[?1002h\x1b[?1006h\x1b[H\x1b[2J4. example"))
 		tt.Frame()
 		r, ok := tt.Find("Terminal")
 		if !ok {
 			t.Fatal("missing terminal")
 		}
-		cols, rows := p.term.Size()
+		cols, rows := p.terminal().term.Size()
 		cw, ch := r.W/float32(cols), r.H/float32(rows)
 		y, left, right := r.Y+ch/2, r.X+cw/4, r.X+9.75*cw
 		tt.SetClipboard("previous")
@@ -32,7 +32,7 @@ func TestAgentPaneSelectionOwnershipAndListMarkers(t *testing.T) {
 		if tt.Clipboard() != "previous" {
 			t.Fatalf("%s full-screen drag was intercepted by the terminal", agent)
 		}
-		p.term.Feed([]byte("\x1b[?1049l\x1b[H\x1b[2J4. example"))
+		p.terminal().term.Feed([]byte("\x1b[?1049l\x1b[H\x1b[2J4. example"))
 		tt.Frame()
 		tt.Press(right, y)
 		tt.Move(left, y)
@@ -57,14 +57,14 @@ func TestEditorPaneDragSelectionAndProgramChanges(t *testing.T) {
 		t.Run(editor, func(t *testing.T) {
 			a, tt := newStaticTestApp(t)
 			p := a.tab().Focus
-			p.info.Program, p.info.Idle, p.info.Args = editor, false, nil
-			p.term.Feed([]byte("\x1b[?1049h\x1b[?1002h\x1b[?1006h\x1b[H\x1b[2Jhello editor"))
+			p.terminal().info.Program, p.terminal().info.Idle, p.terminal().info.Args = editor, false, nil
+			p.terminal().term.Feed([]byte("\x1b[?1049h\x1b[?1002h\x1b[?1006h\x1b[H\x1b[2Jhello editor"))
 			tt.Frame()
 			r, ok := tt.Find("Terminal")
 			if !ok {
 				t.Fatal("missing terminal")
 			}
-			cols, rows := p.term.Size()
+			cols, rows := p.terminal().term.Size()
 			cw, ch := r.W/float32(cols), r.H/float32(rows)
 			y, left, right := r.Y+ch/2, r.X+cw/4, r.X+4.75*cw
 			tt.SetClipboard("previous")
@@ -80,7 +80,7 @@ func TestEditorPaneDragSelectionAndProgramChanges(t *testing.T) {
 				t.Fatalf("%s keyboard copy lost selection", editor)
 			}
 			// The same pane can switch to an Agent that selects its own history.
-			p.info.Program = "codex"
+			p.terminal().info.Program = "codex"
 			tt.Frame()
 			tt.SetClipboard("keep")
 			tt.Press(left, y)

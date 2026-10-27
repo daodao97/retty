@@ -63,13 +63,14 @@ func blockedDesktopFilePreview(t *testing.T, a *App, b *desktopFiles) context.Co
 func desktopFileTaskFixture(t *testing.T) (*App, *ui.Tester, *desktopFiles) {
 	t.Helper()
 	previous := prefs
-	prefs = settings{FontSize: defaultFontSize, FilesOpen: true}
+	prefs = settings{FontSize: defaultFontSize}
 	t.Cleanup(func() { prefs = previous })
 	t.Setenv("RETTY_DIR", t.TempDir())
 	a, tt := newStaticTestApp(t)
-	a.tab().Focus.info.Dir = t.TempDir()
+	a.tab().Focus.terminal().info.Dir = t.TempDir()
+	a.toggleFiles()
 	tt.Frame()
-	b := a.files
+	b := a.focusedFiles()
 	t.Cleanup(b.stop)
 	waitFor(t, tt, "initial directory", func() bool { return !b.loading })
 	a.runPosted()
@@ -194,7 +195,7 @@ func TestDesktopFileTaskCloseDropsQueuedPreview(t *testing.T) {
 	awaitFileQueue(t, a, 3)
 	a.toggleFiles()
 	a.runPosted()
-	if a.files != nil || len(b.previewData) != 0 || b.previewTask != nil {
+	if a.focusedFiles() != nil || len(b.previewData) != 0 || b.previewTask != nil {
 		t.Fatal("queued preview survived closing its owner")
 	}
 }
@@ -213,5 +214,47 @@ func TestDesktopFileTaskDisconnectedHostDropsQueuedPreview(t *testing.T) {
 	a.runPosted()
 	if len(b.previewData) != 0 {
 		t.Fatal("disconnected host published its queued preview")
+	}
+}
+
+func TestFileComponentReconnectsSameTransportAndKeepsSelection(t *testing.T) {
+	previous := prefs
+	prefs = settings{FontSize: defaultFontSize}
+	t.Cleanup(func() { prefs = previous })
+	t.Setenv("RETTY_DIR", t.TempDir())
+	a, tt := newStaticTestApp(t)
+	client, _ := desktopFixtureClient(t)
+	h := fixtureDesktopHost(t, client)
+	dir := t.TempDir()
+	b := &desktopFiles{cwd: dir, dir: dir, base: "head", host: h}
+	p := &Pane{ID: a.id(), host: h, dir: dir, content: b}
+	b.pane = p
+	b.read = func(_ context.Context, captured *rex.Client, req files.Request) (files.Result, error) {
+		if captured != client {
+			return files.Result{}, errors.New("wrong transport")
+		}
+		if req.Kind == "read" {
+			return files.Result{Data: []byte("remote preview")}, nil
+		}
+		return files.Result{Path: dir, Entries: []files.Entry{{Name: "remote.txt", Regular: true}}}, nil
+	}
+	a.placePane(nil, p, false)
+	t.Cleanup(b.stop)
+	a.syncFiles()
+	waitFor(t, tt, "remote directory", func() bool { return !b.loading })
+	path := filepath.Join(dir, "remote.txt")
+	a.previewFile(b, path, false, 256<<10)
+	waitFor(t, tt, "remote preview", func() bool { return b.previewCode != nil })
+	b.filter = "remote"
+	h.err = "disconnected"
+	a.syncFiles()
+	if !b.offline || b.loading || b.previewLoading || b.previewTask != nil {
+		t.Fatal("offline component retained requests")
+	}
+	h.err = ""
+	a.syncFiles()
+	waitFor(t, tt, "reconnected preview", func() bool { return !b.loading && b.previewCode != nil })
+	if b.offline || b.preview != path || b.filter != "remote" || string(b.previewData) != "remote preview" {
+		t.Fatal("same-client recovery lost the selection or failed to restart requests")
 	}
 }

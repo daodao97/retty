@@ -15,7 +15,7 @@ func TestNotificationChannelSettingsAreIndependent(t *testing.T) {
 	a.openSettings()
 	a.settingsQuery = "notifications"
 	tt.Frame()
-	p := &Pane{SID: "task"}
+	p := &Pane{content: &terminalPane{SID: "task"}}
 	notices, closed := 0, 0
 	a.agentNotify = func(mygo.NotificationOptions, func()) func() {
 		notices++

@@ -65,14 +65,14 @@ func (a *App) refreshDiagnostics(agent string) {
 	req := diagnostics.Request{Agent: agent}
 	if p != nil {
 		host = p.host
-		d.lastHook = p.info.Agent
-		req.CWD = p.info.Agent.CWD
+		d.lastHook = p.sessionInfo().Agent
+		req.CWD = p.sessionInfo().Agent.CWD
 		if req.CWD != "" {
 			d.cwdSource = "最近接受的 Agent 事件 cwd"
 		} else {
-			req.CWD = p.info.Dir
+			req.CWD = p.sessionInfo().Dir
 			if req.CWD == "" {
-				req.CWD = p.startDir
+				req.CWD = p.directory()
 			}
 			if req.CWD != "" {
 				d.cwdSource = "会话目录（未取得 Agent cwd）"
@@ -97,8 +97,8 @@ func (a *App) refreshDiagnostics(agent string) {
 	}
 	d.agent = req.Agent
 	req.HookExecutable = d.hello.Exe
-	if p != nil && p.info.HookExecutable != "" {
-		req.HookExecutable = p.info.HookExecutable
+	if p != nil && p.sessionInfo().HookExecutable != "" {
+		req.HookExecutable = p.sessionInfo().HookExecutable
 		d.runnerSource = "会话创建时注入的 RETTY_HOOK；之后手工修改环境不会被追踪"
 	}
 	if req.HookExecutable == "" && host == nil {

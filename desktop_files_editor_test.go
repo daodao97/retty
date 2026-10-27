@@ -9,7 +9,7 @@ import (
 
 func TestDesktopFilePreviewKeepsLargeTextAndUnknownLanguages(t *testing.T) {
 	previous := prefs
-	prefs = settings{FontSize: defaultFontSize, FilesOpen: true}
+	prefs = settings{FontSize: defaultFontSize}
 	t.Cleanup(func() { prefs = previous })
 	t.Setenv("RETTY_DIR", t.TempDir())
 	dir := t.TempDir()
@@ -22,20 +22,21 @@ func TestDesktopFilePreviewKeepsLargeTextAndUnknownLanguages(t *testing.T) {
 		t.Fatal(err)
 	}
 	a, tt := newStaticTestApp(t)
-	a.tab().Focus.info.Dir = dir
+	a.tab().Focus.terminal().info.Dir = dir
+	a.toggleFiles()
 	t.Cleanup(func() {
-		if a.files != nil {
-			a.files.stop()
+		if a.focusedFiles() != nil {
+			a.focusedFiles().stop()
 		}
 	})
 	tt.Frame()
-	waitFor(t, tt, "directory", func() bool { return a.files != nil && !a.files.loading })
+	waitFor(t, tt, "directory", func() bool { return a.focusedFiles() != nil && !a.focusedFiles().loading })
 	if err := tt.Click("large.unknown-type"); err != nil {
 		t.Fatal(err)
 	}
-	waitFor(t, tt, "large text", func() bool { return !a.files.previewLoading && a.files.previewCode != nil })
-	state := a.files.previewCode
-	if state.Buffer.String() != strings.ReplaceAll(text, "\r\n", "\n") || state.Buffer.Language() != nil || a.files.previewTruncated {
+	waitFor(t, tt, "large text", func() bool { return !a.focusedFiles().previewLoading && a.focusedFiles().previewCode != nil })
+	state := a.focusedFiles().previewCode
+	if state.Buffer.String() != strings.ReplaceAll(text, "\r\n", "\n") || state.Buffer.Language() != nil || a.focusedFiles().previewTruncated {
 		t.Fatal("large plain-text preview truncated lines or changed their content")
 	}
 	chooseFileAction(t, tt, "复制预览内容")
@@ -46,9 +47,9 @@ func TestDesktopFilePreviewKeepsLargeTextAndUnknownLanguages(t *testing.T) {
 		t.Fatal(err)
 	}
 	waitFor(t, tt, "empty text", func() bool {
-		return !a.files.previewLoading && a.files.previewCode != nil && a.files.previewCode != state
+		return !a.focusedFiles().previewLoading && a.focusedFiles().previewCode != nil && a.focusedFiles().previewCode != state
 	})
-	if a.files.previewCode.Buffer.String() != "" || a.files.previewDiff != nil || a.files.previewImage != nil || !tt.HasText("文件预览") {
+	if a.focusedFiles().previewCode.Buffer.String() != "" || a.focusedFiles().previewDiff != nil || a.focusedFiles().previewImage != nil || !tt.HasText("文件预览") {
 		t.Fatal("empty file retained the previous preview")
 	}
 }

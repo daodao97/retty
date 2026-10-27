@@ -104,10 +104,13 @@ func (a *App) hostHello(h *desktopHost) rex.Hello {
 	return a.hello
 }
 func (p *Pane) noticeKey() string {
-	if p.host != nil {
-		return p.host.key + "/" + p.SID
+	if p.terminal() == nil {
+		return ""
 	}
-	return p.SID
+	if p.host != nil {
+		return p.host.key + "/" + p.terminal().SID
+	}
+	return p.terminal().SID
 }
 func noticeSessionID(key string) string {
 	_, sid, ok := strings.Cut(key, "/")
@@ -124,7 +127,7 @@ func noticeOnHost(key string, h *desktopHost) bool {
 }
 func (a *App) markPaneClosed(p *Pane) {
 	if p.host == nil {
-		a.markSessionClosed(p.SID)
+		a.markSessionClosed(p.terminal().SID)
 	} else {
 		a.closeAgentNotice(p.noticeKey())
 	}
@@ -160,8 +163,8 @@ func desktopLayoutKey(h *desktopHost) string {
 }
 func (a *App) desktopInputEnabled(h *desktopHost, enabled bool) {
 	for p := range a.hostPanes(h) {
-		if p.term != nil {
-			p.term.SetInputEnabled(enabled && (p.remoteView == nil || a.activeRemote == p && !p.remoteYielded && p.remoteView.inputReady()))
+		if p.terminalView() != nil {
+			p.terminal().term.SetInputEnabled(enabled && (p.terminal().remoteView == nil || a.activeRemote == p && !p.terminal().remoteYielded && p.terminal().remoteView.inputReady()))
 		}
 	}
 }
@@ -450,29 +453,29 @@ func (a *App) scheduleDesktopRetry(h *desktopHost, update func(func())) {
 }
 func (a *App) reattachDesktopTabs(h *desktopHost) {
 	for p := range a.hostPanes(h) {
-		if in, ok := desktopSession(h, p.SID); ok {
+		if in, ok := desktopSession(h, p.terminal().SID); ok {
 			a.reattachDesktopPane(p, in)
 		} else {
-			p.info.Exited = true
+			p.terminal().info.Exited = true
 		}
 	}
 }
 
 func (a *App) reattachDesktopPane(p *Pane, in rex.SessionInfo) {
-	if p.remoteView != nil {
-		p.info = in
+	if p.terminal().remoteView != nil {
+		p.terminal().info = in
 		a.pauseRemotePane(p)
-		p.remoteView.replace(nil)
+		p.terminal().remoteView.replace(nil)
 		if a.activeRemote == p {
 			a.resumeRemotePane(p)
 		}
 		return
 	}
 	p.closed = true
-	if p.term != nil {
+	if p.terminalView() != nil {
 		a.closePaneTerminal(p)
 	}
-	p.closed, p.info, p.term = false, in, nil
+	p.closed, p.terminal().info, p.terminal().term = false, in, nil
 	a.attach(p, in.Cols, in.Rows)
 }
 
@@ -506,13 +509,13 @@ func (a *App) openDesktopSession(h *desktopHost, in rex.SessionInfo, selectIt bo
 		return
 	}
 	if selectIt {
-		p := &Pane{info: in, startDir: in.Dir}
+		p := &Pane{content: &terminalPane{info: in, startDir: in.Dir}}
 		name, _ := p.label()
 		a.desktops.recentSessions = mergeRecentSessions([]mobileRecentSession{{Desktop: h.key, Session: in.ID, Title: name, Program: sessionProgramName(in)}}, a.desktops.recentSessions)
 		a.saveDesktopHistory()
 	}
 	for p := range a.hostPanes(h) {
-		if p.SID == in.ID {
+		if p.terminal().SID == in.ID {
 			if selectIt {
 				p.Tab.setFocus(p)
 				a.selectTab(slices.Index(a.tabs, p.Tab))
@@ -521,7 +524,7 @@ func (a *App) openDesktopSession(h *desktopHost, in rex.SessionInfo, selectIt bo
 			return
 		}
 	}
-	p := &Pane{ID: a.id(), SID: in.ID, host: h, info: in, startDir: in.Dir}
+	p := &Pane{ID: a.id(), host: h, content: &terminalPane{SID: in.ID, info: in, startDir: in.Dir}}
 	a.attach(p, in.Cols, in.Rows)
 	t := a.singlePaneTab(p)
 	at := len(a.tabs)
@@ -555,8 +558,8 @@ func (a *App) createDesktopSession(h *desktopHost, dir string, split *Pane, vert
 	client, generation := h.client, h.generation
 	update := a.desktopDispatcher()
 	cols, rows := 80, 24
-	if split != nil && split.term != nil {
-		cols, rows = split.term.Size()
+	if split != nil && split.terminalView() != nil {
+		cols, rows = split.terminal().term.Size()
 		if vertical {
 			rows = max(rows/2, 2)
 		} else {
@@ -578,16 +581,13 @@ func (a *App) createDesktopSession(h *desktopHost, dir string, split *Pane, vert
 			h.sessions = append(h.sessions, in)
 			if split == nil {
 				a.openDesktopSession(h, in, true)
-				if prefs.FilesOpen {
-					a.toggleFiles()
-				}
 				return
 			}
 			if split.closed || split.Tab.Host != h || !slices.Contains(a.tabs, split.Tab) {
 				return
 			}
 			t, n := split.Tab, split.Node
-			p := &Pane{ID: a.id(), SID: in.ID, host: h, info: in, startDir: in.Dir, Tab: t}
+			p := &Pane{ID: a.id(), host: h, Tab: t, content: &terminalPane{SID: in.ID, info: in, startDir: in.Dir}}
 			left, right := &Node{ID: a.id(), Pane: split, Parent: n}, &Node{ID: a.id(), Pane: p, Parent: n}
 			split.Node, p.Node = left, right
 			n.Pane, n.A, n.B, n.Vertical, n.Ratio = nil, left, right, vertical, .5
@@ -607,8 +607,8 @@ func (a *App) restartDesktopPane(p *Pane) {
 	}
 	h.creating = true
 	update := a.desktopDispatcher()
-	cols, rows := p.info.Cols, p.info.Rows
-	dir := p.info.Dir
+	cols, rows := p.terminal().info.Cols, p.terminal().info.Rows
+	dir := p.terminal().info.Dir
 	go func() {
 		in, err := client.Create(rex.CreateOptions{Dir: dir, Cols: cols, Rows: rows})
 		update(func() {
@@ -624,9 +624,9 @@ func (a *App) restartDesktopPane(p *Pane) {
 			if p.closed {
 				return
 			}
-			replacement := &Pane{ID: a.id(), SID: in.ID, host: h, info: in, startDir: dir}
+			replacement := &Pane{ID: a.id(), host: h, content: &terminalPane{SID: in.ID, info: in, startDir: dir}}
 			a.endPane(p, true)
-			go client.Kill(p.SID)
+			go client.Kill(p.terminal().SID)
 			a.attach(replacement, in.Cols, in.Rows)
 			a.replacePane(p, replacement)
 		})
@@ -689,7 +689,7 @@ func (a *App) restoreDesktopLayout(h *desktopHost) {
 	h.layout = savedLayout{}
 	shown := map[string]bool{}
 	for p := range a.hostPanes(h) {
-		shown[p.SID] = true
+		shown[p.terminal().SID] = true
 	}
 	var load func(*savedNode, *Tab, *Node) *Node
 	load = func(s *savedNode, t *Tab, parent *Node) *Node {
@@ -698,13 +698,8 @@ func (a *App) restoreDesktopLayout(h *desktopHost) {
 		}
 		n := &Node{ID: a.id(), Parent: parent}
 		if s.A == nil || s.B == nil {
-			if s.Browser != nil {
-				p, err := a.newBrowserPane(s.Browser.ID, s.Browser.URL, h)
-				if err != nil {
-					p, _ = a.newBrowserPane(s.Browser.ID, "about:blank", h)
-				}
+			if p := a.restorePaneContent(s, h); p != nil {
 				p.Tab, p.Node = t, n
-				p.info.Dir, p.startDir = s.Dir, s.Dir
 				n.Pane = p
 				return n
 			}
@@ -713,7 +708,7 @@ func (a *App) restoreDesktopLayout(h *desktopHost) {
 				return nil
 			}
 			shown[s.SID] = true
-			p := &Pane{ID: a.id(), SID: in.ID, host: h, info: in, startDir: in.Dir, Tab: t, Node: n}
+			p := &Pane{ID: a.id(), host: h, Tab: t, Node: n, Key: s.PaneID, content: &terminalPane{SID: in.ID, info: in, startDir: in.Dir}}
 			n.Pane = p
 			a.attach(p, in.Cols, in.Rows)
 			return n

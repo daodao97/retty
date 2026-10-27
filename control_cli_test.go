@@ -145,18 +145,18 @@ func TestDesktopControlSharesActionsAndPlacesSplit(t *testing.T) {
 		seen[action.ID] = true
 	}
 	for _, id := range []string{"pane.close", "session.restart", "session.end-all", "host.update", "terminal.clear"} {
-		if _, err := call(desktopcontrol.Request{Op: "action", Action: id, SID: parent.SID}); err == nil {
+		if _, err := call(desktopcontrol.Request{Op: "action", Action: id, SID: parent.terminal().SID}); err == nil {
 			t.Fatal("destructive action remotely allowed", id)
 		}
 	}
 	if _, err := call(desktopcontrol.Request{Op: "action", Action: "pane.zoom"}); err == nil {
 		t.Fatal("action guessed focused pane")
 	}
-	res, err = call(desktopcontrol.Request{Op: "split", SID: parent.SID, Direction: "down", Create: &rex.CreateOptions{Dir: filepath.Dir(rex.SocketPath()), Command: []string{"/bin/sh"}, Cols: 80, Rows: 24}})
-	if err != nil || res.SID == "" || res.SID == parent.SID {
+	res, err = call(desktopcontrol.Request{Op: "split", SID: parent.terminal().SID, Direction: "down", Create: &rex.CreateOptions{Dir: filepath.Dir(rex.SocketPath()), Command: []string{"/bin/sh"}, Cols: 80, Rows: 24}})
+	if err != nil || res.SID == "" || res.SID == parent.terminal().SID {
 		t.Fatal(res, err)
 	}
-	if len(parent.Tab.panes()) != 2 || !parent.Tab.Root.Vertical || parent.Tab.Focus.SID != res.SID || parent.Tab.Root.A.Pane != parent {
+	if len(parent.Tab.panes()) != 2 || !parent.Tab.Root.Vertical || parent.Tab.Focus.terminal().SID != res.SID || parent.Tab.Root.A.Pane != parent {
 		t.Fatal("split did not preserve target", parent.Tab)
 	}
 	// Invoke the actual CLI through the socket, not just the GUI handler.
@@ -182,7 +182,7 @@ func TestDesktopControlSharesActionsAndPlacesSplit(t *testing.T) {
 		t.Fatal("CLI split did not create third pane")
 	}
 	saveSettingsImage(t, tt, "cli-created-splits")
-	if _, err := call(desktopcontrol.Request{Op: "action", Action: "pane.zoom", SID: parent.SID}); err != nil || parent.Tab.Zoom != parent {
+	if _, err := call(desktopcontrol.Request{Op: "action", Action: "pane.zoom", SID: parent.terminal().SID}); err != nil || parent.Tab.Zoom != parent {
 		t.Fatal("action did not run registered command", err)
 	}
 	// The menu/palette identity no longer depends on translated labels.
@@ -198,7 +198,7 @@ func TestDesktopControlSplitReusesPollDiscoveredSession(t *testing.T) {
 	a, _ := newTestApp(t)
 	parent := a.tab().Focus
 	uiCalls := 0
-	res, err := a.handleDesktopControl(context.Background(), desktopcontrol.Request{Op: "split", SID: parent.SID, Direction: "right"}, func(fn func()) error {
+	res, err := a.handleDesktopControl(context.Background(), desktopcontrol.Request{Op: "split", SID: parent.terminal().SID, Direction: "right"}, func(fn func()) error {
 		uiCalls++
 		if uiCalls == 2 {
 			all, err := a.client.List()
@@ -219,10 +219,10 @@ func TestDesktopControlSplitReusesPollDiscoveredSession(t *testing.T) {
 	}
 	seen := map[string]bool{}
 	for _, p := range parent.Tab.panes() {
-		if seen[p.SID] {
-			t.Fatal("duplicate session attached", p.SID)
+		if seen[p.terminal().SID] {
+			t.Fatal("duplicate session attached", p.terminal().SID)
 		}
-		seen[p.SID] = true
+		seen[p.terminal().SID] = true
 	}
 }
 

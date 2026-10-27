@@ -18,9 +18,9 @@ func TestPaneGitSummaryOpensItsOwnChangesAndCanBeDisabled(t *testing.T) {
 	t.Setenv("RETTY_DIR", t.TempDir())
 	a, tt := newStaticTestApp(t)
 	p := a.tab().Focus
-	p.info.Dir = t.TempDir()
-	p.term.Feed([]byte("\x1b[H\x1b[2J$ git status --short\r\n M app.go\r\n?? new-feature.go\r\n"))
-	status := &gitstate.Status{Repository: gitstate.Repository{Root: p.info.Dir}, Branch: "task/fix", Added: 4, Removed: 2, Files: 2, Ahead: 1}
+	p.terminal().info.Dir = t.TempDir()
+	p.terminal().term.Feed([]byte("\x1b[H\x1b[2J$ git status --short\r\n M app.go\r\n?? new-feature.go\r\n"))
+	status := &gitstate.Status{Repository: gitstate.Repository{Root: p.terminal().info.Dir}, Branch: "task/fix", Added: 4, Removed: 2, Files: 2, Ahead: 1}
 	a.gitStatus = &desktopGitState{entries: map[gitScope]*desktopGitEntry{paneGitScope(p): {status: status}}}
 	tt.Frame()
 	if !tt.HasText("task/fix · +4 −2") {
@@ -31,10 +31,10 @@ func TestPaneGitSummaryOpensItsOwnChangesAndCanBeDisabled(t *testing.T) {
 		t.Fatal(err)
 	}
 	tt.Frame()
-	if !prefs.FilesOpen || !prefs.FilesDiff || a.files == nil || a.files.pane != p || !a.files.diff || a.files.dir != p.info.Dir {
+	if a.focusedFiles() == nil || a.focusedFiles().sourceSID != p.terminal().SID || !a.focusedFiles().diff || a.focusedFiles().dir != p.terminal().info.Dir {
 		t.Fatal("Git summary opened another pane or a non-Diff view")
 	}
-	a.files.stop()
+	a.focusedFiles().stop()
 	a.toggleFiles()
 	a.setGitStatus(false)
 	tt.Frame()
@@ -49,8 +49,8 @@ func TestGitStatusReadsAreAsyncDeduplicatedAndLateResultsCannotFollowDirectory(t
 	t.Cleanup(func() { prefs = previous })
 	a, tt := newStaticTestApp(t)
 	p := a.tab().Focus
-	p.info.Dir = "/fixture/old"
-	p2 := &Pane{info: rex.SessionInfo{Dir: p.info.Dir}}
+	p.terminal().info.Dir = "/fixture/old"
+	p2 := &Pane{content: &terminalPane{info: rex.SessionInfo{Dir: p.terminal().info.Dir}}}
 	a.tabs = append(a.tabs, &Tab{Focus: p2})
 	var calls atomic.Int32
 	release := make(chan struct{})
@@ -68,7 +68,7 @@ func TestGitStatusReadsAreAsyncDeduplicatedAndLateResultsCannotFollowDirectory(t
 	if calls.Load() != 1 || a.gitStatus.pending != 1 || a.paneGit(p) != nil {
 		t.Fatal("view waited for Git or duplicated the same directory")
 	}
-	p.info.Dir, p2.info.Dir = "/fixture/new", "/fixture/new"
+	p.terminal().info.Dir, p2.terminal().info.Dir = "/fixture/new", "/fixture/new"
 	a.gitRead = func(ctx context.Context, client *rex.Client, dir string) (files.Result, error) {
 		return files.Result{Git: &gitstate.Status{Branch: "new"}}, nil
 	}
@@ -85,8 +85,8 @@ func TestGitCacheKeepsHostAndConnectionIdentity(t *testing.T) {
 	previous := prefs
 	prefs.HideGitStatus = false
 	t.Cleanup(func() { prefs = previous })
-	local := &Pane{info: rex.SessionInfo{Dir: "/same/path"}}
-	remote := &Pane{host: &desktopHost{client: &rex.Client{}}, info: local.info}
+	local := &Pane{content: &terminalPane{info: rex.SessionInfo{Dir: "/same/path"}}}
+	remote := &Pane{host: &desktopHost{client: &rex.Client{}}, content: &terminalPane{info: local.terminal().info}}
 	a := &App{gitStatus: &desktopGitState{entries: map[gitScope]*desktopGitEntry{
 		paneGitScope(local):  {status: &gitstate.Status{Branch: "local"}},
 		paneGitScope(remote): {status: &gitstate.Status{Branch: "remote"}},

@@ -14,7 +14,7 @@ import (
 )
 
 func (p *Pane) acceptsFileDrop() bool {
-	return p.term != nil && !p.closed && (p.host == nil || !p.info.Exited && !p.remoteYielded && p.host.connected() && p.remoteView != nil && p.remoteView.inputReady())
+	return p.terminalView() != nil && !p.closed && (p.host == nil || !p.terminal().info.Exited && !p.terminal().remoteYielded && p.host.connected() && p.terminal().remoteView != nil && p.terminal().remoteView.inputReady())
 }
 
 func (a *App) pasteDroppedFiles(t *Tab, p *Pane, paths []string) {
@@ -32,7 +32,7 @@ func (a *App) pasteDroppedFiles(t *Tab, p *Pane, paths []string) {
 	t.setFocus(p)
 	a.focusReq = p
 	a.changed()
-	p.term.Paste(text)
+	p.terminal().term.Paste(text)
 }
 
 type paneUpload struct {
@@ -42,9 +42,12 @@ type paneUpload struct {
 }
 
 func (p *Pane) cancelFileUpload() {
-	if p.upload != nil {
-		p.upload.cancel()
-		p.upload = nil
+	if p.terminal() == nil {
+		return
+	}
+	if p.terminal().upload != nil {
+		p.terminal().upload.cancel()
+		p.terminal().upload = nil
 	}
 }
 
@@ -59,7 +62,7 @@ func (a *App) uploadDroppedFiles(t *Tab, p *Pane, paths []string) {
 }
 
 func (a *App) uploadPaneData(t *Tab, p *Pane, send func(context.Context, *rex.Client, string, func(int64, int64)) ([]string, error), valid func() bool) {
-	if p.upload != nil {
+	if p.terminal().upload != nil {
 		a.err = "当前窗格正在上传文件，请等待完成或取消"
 		return
 	}
@@ -68,8 +71,8 @@ func (a *App) uploadPaneData(t *Tab, p *Pane, send func(context.Context, *rex.Cl
 	a.changed()
 	ctx, cancel := context.WithCancel(context.Background())
 	upload := &paneUpload{cancel: cancel}
-	p.upload = upload
-	client, generation, sid, term, stream := p.host.client, p.host.generation, p.SID, p.term, p.stream
+	p.terminal().upload = upload
+	client, generation, sid, term, stream := p.host.client, p.host.generation, p.terminal().SID, p.terminal().term, p.terminal().stream
 	win := a.win
 	invalidate := func() {
 		if win != nil {
@@ -87,10 +90,10 @@ func (a *App) uploadPaneData(t *Tab, p *Pane, send func(context.Context, *rex.Cl
 		})
 		completed := err == nil && ctx.Err() == nil
 		a.post(func() {
-			if p.upload != upload {
+			if p.terminal().upload != upload {
 				return
 			}
-			p.upload = nil
+			p.terminal().upload = nil
 			if a.quitting || p.closed {
 				return
 			}
@@ -101,17 +104,17 @@ func (a *App) uploadPaneData(t *Tab, p *Pane, send func(context.Context, *rex.Cl
 				return
 			}
 			// Never focus another pane or paste through a replacement connection.
-			if !completed || p.host.client != client || p.host.generation != generation || p.SID != sid || p.term != term || p.stream != stream || a.tab() != t || t.Focus != p || !p.acceptsFileDrop() || valid != nil && !valid() {
+			if !completed || p.host.client != client || p.host.generation != generation || p.terminal().SID != sid || p.terminal().term != term || p.terminal().stream != stream || a.tab() != t || t.Focus != p || !p.acceptsFileDrop() || valid != nil && !valid() {
 				return
 			}
-			p.term.Paste(droppedFilePaths(remotePaths))
+			p.terminal().term.Paste(droppedFilePaths(remotePaths))
 		})
 		invalidate()
 	}()
 }
 
 func (a *App) fileUploadBar(c *ui.Context, k *colors, p *Pane) {
-	upload := p.upload
+	upload := p.terminal().upload
 	ui.Row(c.Key("file-upload")).Height(30).Padding(0, 8+paneActionInset(p), 0, 12).AlignItems(ui.Center).Gap(8).Background(k.panel).Children(func() {
 		message := "正在准备上传…"
 		if upload.prepared.Load() {

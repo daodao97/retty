@@ -51,15 +51,15 @@ func newTestApp(t *testing.T) (*App, *ui.Tester) {
 func newStaticTestApp(t *testing.T) (*App, *ui.Tester) {
 	t.Helper()
 	registerFonts()
-	p := &Pane{ID: 1}
+	p := &Pane{ID: 1, content: &terminalPane{}}
 	tab := &Tab{ID: 1, Root: &Node{ID: 1, Pane: p}, Focus: p}
 	p.Tab, p.Node = tab, tab.Root
-	a := &App{tabs: []*Tab{tab}}
+	a := &App{tabs: []*Tab{tab}, nextID: 1}
 	a.attach(p, 80, 24)
-	if p.term == nil {
+	if p.terminalView() == nil {
 		t.Fatal("could not create fixture terminal")
 	}
-	t.Cleanup(func() { p.term.Close() })
+	t.Cleanup(func() { p.terminal().term.Close() })
 	return a, ui.NewTester(a.view, 1000, 620)
 }
 
@@ -91,7 +91,7 @@ func TestPanesAndTabs(t *testing.T) {
 	a, tt := newTestApp(t)
 	tab := a.tab()
 	p := tab.Focus
-	waitFor(t, tt, "the shell", func() bool { return p.term != nil && strings.Contains(p.term.Text(), "$") })
+	waitFor(t, tt, "the shell", func() bool { return p.terminalView() != nil && strings.Contains(p.terminal().term.Text(), "$") })
 
 	// The command palette splits the pane.
 	a.openPalette()
@@ -171,7 +171,7 @@ func TestPanesAndTabs(t *testing.T) {
 	// A shell that exits closes its pane.
 	a.selectTab(0)
 	tab.setFocus(right)
-	right.term.Send([]byte("exit\r"))
+	right.terminal().term.Send([]byte("exit\r"))
 	waitFor(t, tt, "the pane to close", func() bool { return len(tab.panes()) == 2 })
 }
 
@@ -186,8 +186,8 @@ func TestRestore(t *testing.T) {
 	sids := map[string]bool{}
 	for _, tab := range a.tabs {
 		for _, p := range tab.panes() {
-			sids[p.SID] = true
-			p.term.Close() // detach, as when the app quits
+			sids[p.terminal().SID] = true
+			p.terminal().term.Close() // detach, as when the app quits
 		}
 	}
 	// Another app, as the next launch, finds them all.
@@ -203,8 +203,8 @@ func TestRestore(t *testing.T) {
 	}
 	for _, tab := range b.tabs {
 		for _, p := range tab.panes() {
-			if !sids[p.SID] || p.restored {
-				t.Errorf("pane of session %q not attached again", p.SID)
+			if !sids[p.terminal().SID] || p.terminal().restored {
+				t.Errorf("pane of session %q not attached again", p.terminal().SID)
 			}
 		}
 	}
@@ -212,21 +212,21 @@ func TestRestore(t *testing.T) {
 
 func TestLabels(t *testing.T) {
 	home, _ := os.UserHomeDir()
-	p := &Pane{info: rex.SessionInfo{Shell: "zsh", Program: "zsh", Idle: true, Dir: home + "/Sites/rex-snake"}}
+	p := &Pane{content: &terminalPane{info: rex.SessionInfo{Shell: "zsh", Program: "zsh", Idle: true, Dir: home + "/Sites/rex-snake"}}}
 	if n, d := p.label(); n != "zsh" || d != "~/Sites/rex-snake" {
 		t.Errorf("shell label %q %q", n, d)
 	}
-	p.info = rex.SessionInfo{Shell: "fish", Program: "lazygit", Dir: home + "/Sites/rex-snake"}
-	p.title = "lazygit ~/Sites/rex-snake"
+	p.terminal().info = rex.SessionInfo{Shell: "fish", Program: "lazygit", Dir: home + "/Sites/rex-snake"}
+	p.terminal().title = "lazygit ~/Sites/rex-snake"
 	if n, d := p.label(); n != "Git Changes" || d != "~/Sites/rex-snake" {
 		t.Errorf("lazygit label %q %q", n, d)
 	}
-	p.info.Program = "codex"
-	p.title = "Stress-test Snake demo | rex-snake"
-	if n, d := p.label(); n != p.title || d != "" {
+	p.terminal().info.Program = "codex"
+	p.terminal().title = "Stress-test Snake demo | rex-snake"
+	if n, d := p.label(); n != p.terminal().title || d != "" {
 		t.Errorf("codex label %q %q", n, d)
 	}
-	p.info, p.title = rex.SessionInfo{Shell: "zsh", Program: "ssh", Args: []string{"ssh", "-p", "22", "box.local"}}, ""
+	p.terminal().info, p.terminal().title = rex.SessionInfo{Shell: "zsh", Program: "ssh", Args: []string{"ssh", "-p", "22", "box.local"}}, ""
 	if n, d := p.label(); n != "SSH" || d != "box.local" {
 		t.Errorf("ssh label %q %q", n, d)
 	}

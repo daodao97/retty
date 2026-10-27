@@ -13,8 +13,8 @@ import (
 func TestIdlePollFramesAndLifecycleMaintenance(t *testing.T) {
 	a, _ := newStaticTestApp(t)
 	p := a.tab().Focus
-	p.SID = "fixture"
-	in := rex.SessionInfo{ID: p.SID, Program: "sh", Idle: true}
+	p.terminal().SID = "fixture"
+	in := rex.SessionInfo{ID: p.terminal().SID, Program: "sh", Idle: true}
 	infos := map[string]rex.SessionInfo{in.ID: in}
 	frames := 0
 	for i := 0; i < 20; i++ {
@@ -37,11 +37,11 @@ func TestIdlePollFramesAndLifecycleMaintenance(t *testing.T) {
 		t.Fatal("posted UI work stopped without terminal output")
 	}
 	a.runPosted()
-	p.streamEnded = true
+	p.terminal().streamEnded = true
 	if !a.applyPolled(nil, changed) {
 		t.Fatal("dropped viewer stopped waking maintenance")
 	}
-	p.streamEnded = false
+	p.terminal().streamEnded = false
 	if !a.applyPolled(nil, map[string]rex.SessionInfo{}) {
 		t.Fatal("missing session did not refresh")
 	}

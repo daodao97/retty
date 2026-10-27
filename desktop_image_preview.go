@@ -19,12 +19,12 @@ func (a *App) terminalImagePreview(p *Pane, link terminal.Link) *terminal.LinkPr
 	}
 	// Plain ssh/mosh has no authenticated file reader. Never read a same-named
 	// local file for a path printed by an unknown remote host.
-	if p.host == nil && (p.info.Program == "ssh" || p.info.Program == "mosh") {
+	if p.host == nil && (p.terminal().info.Program == "ssh" || p.terminal().info.Program == "mosh") {
 		return nil
 	}
-	cwd := p.info.Dir
+	cwd := p.terminal().info.Dir
 	if cwd == "" {
-		cwd = p.startDir
+		cwd = p.terminal().startDir
 	}
 	home, _ := os.UserHomeDir()
 	var client *rex.Client
@@ -49,11 +49,11 @@ func (a *App) terminalImagePreview(p *Pane, link terminal.Link) *terminal.LinkPr
 func (a *App) cancelHiddenImagePreviews(narrow bool) {
 	t := a.tab()
 	for _, p := range a.allPanes() {
-		if p.term == nil {
+		if p.terminalView() == nil {
 			continue
 		}
-		if t == nil || p.Tab != t || t.Zoom != nil && t.Zoom != p || prefs.FilesOpen && (!prefs.FilesSidePanel || narrow) {
-			p.term.CancelLinkPreview()
+		if t == nil || p.Tab != t || t.Zoom != nil && t.Zoom != p || narrow && t.Focus.files() != nil && t.Focus != p {
+			p.terminal().term.CancelLinkPreview()
 		}
 	}
 }

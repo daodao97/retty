@@ -361,11 +361,11 @@ func (a *App) resumeHistorySession(h *sidebarAgentHistory, s agenthistory.Sessio
 			}
 			t := a.newLocalOptionsTab(rex.CreateOptions{Dir: target.Dir, Command: command, Env: env})
 			t.Name = s.Title
-			if t.Focus.SID != "" {
+			if t.Focus.terminal().SID != "" {
 				if h.opened == nil {
 					h.opened = make(map[string]string)
 				}
-				h.opened[target.Key()] = t.Focus.SID
+				h.opened[target.Key()] = t.Focus.terminal().SID
 			}
 		})
 		services.Invalidate()
@@ -374,16 +374,16 @@ func (a *App) resumeHistorySession(h *sidebarAgentHistory, s agenthistory.Sessio
 
 func (a *App) activateOpenHistory(h *sidebarAgentHistory, s agenthistory.Session) bool {
 	for t, p := range a.allPanes() {
-		if t.Host != nil || p.host != nil || p.closed || p.info.Exited || p.SID == "" {
+		if t.Host != nil || p.host != nil || p.closed || p.terminal() == nil || p.terminal().info.Exited || p.terminal().SID == "" {
 			continue
 		}
-		state := p.info.Agent
+		state := p.terminal().info.Agent
 		if state.ID == s.Agent && state.ConfigDir != "" && !sameHistoryHome(state.ConfigDir, s.ConfigDir) {
 			continue
 		}
 		// Older servers did not expose the config home. When several homes
 		// contain the same ID, only a known launch may resolve that ambiguity.
-		if state.ConfigDir == "" && h.opened[s.Key()] != p.SID && ambiguousHistoryHome(h, s) {
+		if state.ConfigDir == "" && h.opened[s.Key()] != p.terminal().SID && ambiguousHistoryHome(h, s) {
 			continue
 		}
 		match := false
@@ -391,15 +391,12 @@ func (a *App) activateOpenHistory(h *sidebarAgentHistory, s agenthistory.Session
 			// The user can switch conversations inside an existing CLI. Current
 			// lifecycle identity takes precedence over its original launch argv.
 			match = state.State != "" && state.SessionID == s.ID
-		} else if h.opened[s.Key()] == p.SID && p.info.Shell == s.Agent {
+		} else if h.opened[s.Key()] == p.terminal().SID && p.terminal().info.Shell == s.Agent {
 			match = true
-		} else if sessionProgramName(p.info) == s.Agent {
-			match = historyResumeArgs(s, p.info.Args)
+		} else if sessionProgramName(p.terminal().info) == s.Agent {
+			match = historyResumeArgs(s, p.terminal().info.Args)
 		}
 		if match {
-			if prefs.FilesOpen {
-				a.toggleFiles()
-			}
 			return a.focusAgentPane(p.noticeKey())
 		}
 	}

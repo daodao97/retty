@@ -82,8 +82,8 @@ func (a *App) setDesktopLayout(layout string) {
 
 func (a *App) focusCurrentTerminal() {
 	if t := a.tab(); t != nil && t.Focus != nil {
-		if t.Focus.find.open {
-			t.Focus.find.focus = true
+		if t.Focus.terminal() != nil && t.Focus.terminal().find.open {
+			t.Focus.terminal().find.focus = true
 		} else {
 			a.focusReq = t.Focus
 		}
@@ -114,8 +114,8 @@ func (a *App) setLinkEditor(editor string) {
 func (a *App) setCopyRawText(raw bool) {
 	prefs.CopyRawText = raw
 	for _, p := range a.allPanes() {
-		if p.term != nil {
-			p.term.SetCopyRawText(raw)
+		if p.terminalView() != nil {
+			p.terminal().term.SetCopyRawText(raw)
 		}
 	}
 	saveSettings()
@@ -158,8 +158,8 @@ func (a *App) setFontSize(size float32) {
 	prefs.FontSize = size
 	termFont.Size = size
 	for _, p := range a.allPanes() {
-		if p.term != nil {
-			p.term.SetFont(termFont)
+		if p.terminalView() != nil {
+			p.terminal().term.SetFont(termFont)
 		}
 	}
 	saveSettings()

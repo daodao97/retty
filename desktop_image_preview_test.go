@@ -34,7 +34,7 @@ func TestDesktopImageHoverUsesPaneDirectoryAndRenders(t *testing.T) {
 	os.WriteFile(filepath.Join(dir, "hover-image.png"), b.Bytes(), 0600)
 	a, tt := newStaticTestApp(t)
 	p := a.tab().Focus
-	p.info.Dir = dir
+	p.terminal().info.Dir = dir
 	source := a.terminalImagePreview(p, terminal.Link{Path: "hover-image.png"})
 	if source == nil {
 		t.Fatal("no image source")
@@ -43,7 +43,7 @@ func TestDesktopImageHoverUsesPaneDirectoryAndRenders(t *testing.T) {
 	if err != nil || got.Bounds() != img.Bounds() {
 		t.Fatal(got, err)
 	}
-	p.term.Feed([]byte("\x1b[H\x1b[2Jhover-image.png\r\nAgent output remains selectable"))
+	p.terminal().term.Feed([]byte("\x1b[H\x1b[2Jhover-image.png\r\nAgent output remains selectable"))
 	tt.Frame()
 	r, ok := tt.Find("Terminal")
 	if !ok {
@@ -61,16 +61,16 @@ func TestDesktopImageHoverUsesPaneDirectoryAndRenders(t *testing.T) {
 	if source := a.terminalImagePreview(p, terminal.Link{URL: "https://example.com/image.png"}); source != nil {
 		t.Fatal("hover fetched HTTP URL")
 	}
-	p.info.Program = "ssh"
+	p.terminal().info.Program = "ssh"
 	if source := a.terminalImagePreview(p, terminal.Link{Path: "hover-image.png"}); source != nil {
 		t.Fatal("plain ssh path read local file")
 	}
-	p.info.Program = ""
+	p.terminal().info.Program = ""
 	// File workspaces hide the terminal, canceling an in-flight read.
 	canceled := make(chan struct{})
 	started := make(chan struct{})
-	p.term.Close()
-	p.term, err = terminal.New(terminal.Options{Conn: nopConn{}, OnPreviewLink: func(link terminal.Link) *terminal.LinkPreviewSource {
+	p.terminal().term.Close()
+	p.terminal().term, err = terminal.New(terminal.Options{Conn: nopConn{}, OnPreviewLink: func(link terminal.Link) *terminal.LinkPreviewSource {
 		return &terminal.LinkPreviewSource{Key: "fixture", Load: func(ctx context.Context) (image.Image, error) {
 			close(started)
 			<-ctx.Done()
@@ -81,8 +81,8 @@ func TestDesktopImageHoverUsesPaneDirectoryAndRenders(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { p.term.Close() })
-	p.term.Feed([]byte("\x1b[Hhover-image.png"))
+	t.Cleanup(func() { p.terminal().term.Close() })
+	p.terminal().term.Feed([]byte("\x1b[Hhover-image.png"))
 	tt.Frame()
 	tt.Move(r.X+30, r.Y+10)
 	tt.Frame()
@@ -92,8 +92,8 @@ func TestDesktopImageHoverUsesPaneDirectoryAndRenders(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("fixture hover did not start")
 	}
-	prefs.FilesOpen = true
-	prefs.FilesSidePanel = false
+	a.toggleFiles()
+	a.tab().Zoom = a.tab().Focus
 	a.cancelHiddenImagePreviews(false)
 	select {
 	case <-canceled:
@@ -143,7 +143,7 @@ func TestDesktopImageHoverRemoteReadsCapturedHostAndConnection(t *testing.T) {
 	})
 	defer c.Close()
 	h := &desktopHost{client: c}
-	p := &Pane{host: h, info: rex.SessionInfo{Dir: dir}}
+	p := &Pane{host: h, content: &terminalPane{info: rex.SessionInfo{Dir: dir}}}
 	a := &App{}
 	source := a.terminalImagePreview(p, terminal.Link{Path: "same.png"})
 	if source == nil {

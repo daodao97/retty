@@ -14,9 +14,9 @@ import (
 )
 
 func withAgentState(p *Pane, agent, state string, revision uint64) rex.SessionInfo {
-	in := p.info
-	in.ID, in.Idle, in.Program, in.Exited = p.SID, false, agent, false
-	in.Agent = rex.AgentState{ID: agent, SessionID: "thread-" + p.SID, State: state, Reason: "question", WaitRevision: revision, Updated: time.Now()}
+	in := p.terminal().info
+	in.ID, in.Idle, in.Program, in.Exited = p.terminal().SID, false, agent, false
+	in.Agent = rex.AgentState{ID: agent, SessionID: "thread-" + p.terminal().SID, State: state, Reason: "question", WaitRevision: revision, Updated: time.Now()}
 	return in
 }
 
@@ -41,8 +41,8 @@ func TestAgentNotificationsDeduplicateAndFocusCorrectSplit(t *testing.T) {
 		return func() { closed++ }
 	}
 	infos := map[string]rex.SessionInfo{
-		left.SID:  withAgentState(left, "claude", agents.Running, 0),
-		right.SID: withAgentState(right, "codex", agents.Waiting, 1),
+		left.terminal().SID:  withAgentState(left, "claude", agents.Running, 0),
+		right.terminal().SID: withAgentState(right, "codex", agents.Waiting, 1),
 	}
 	a.apply(infos)
 	a.apply(infos)
@@ -55,9 +55,9 @@ func TestAgentNotificationsDeduplicateAndFocusCorrectSplit(t *testing.T) {
 	tab.setFocus(left)
 	tab.Zoom = left
 	a.settingsOpen, a.paletteOpen = true, true
-	right.find.open = true
+	right.terminal().find.open = true
 	clicks[0]()
-	if a.tab() != tab || tab.Focus != right || tab.Zoom != nil || a.focusReq != right || a.settingsOpen || a.paletteOpen || right.find.open {
+	if a.tab() != tab || tab.Focus != right || tab.Zoom != nil || a.focusReq != right || a.settingsOpen || a.paletteOpen || right.terminal().find.open {
 		t.Fatal("notification did not reveal and focus its split")
 	}
 	tt.Frame()
@@ -68,12 +68,12 @@ func TestAgentNotificationsDeduplicateAndFocusCorrectSplit(t *testing.T) {
 	if len(clicks) != 1 || paneAgentState(right).State != agents.Waiting {
 		t.Fatal("viewing a waiting pane cleared state or repeated notification")
 	}
-	infos[right.SID] = withAgentState(right, "codex", agents.Running, 1)
+	infos[right.terminal().SID] = withAgentState(right, "codex", agents.Running, 1)
 	a.apply(infos)
 	if closed != 1 {
 		t.Fatal("resolved notification was not removed")
 	}
-	infos[right.SID] = withAgentState(right, "codex", agents.Waiting, 2)
+	infos[right.terminal().SID] = withAgentState(right, "codex", agents.Waiting, 2)
 	a.apply(infos)
 	if len(clicks) != 1 {
 		t.Fatal("viewed pane sent a notification")
@@ -83,15 +83,15 @@ func TestAgentNotificationsDeduplicateAndFocusCorrectSplit(t *testing.T) {
 	if len(clicks) != 1 {
 		t.Fatal("suppressed waiting transition replayed on switching tabs")
 	}
-	infos[right.SID] = withAgentState(right, "codex", agents.Running, 2)
+	infos[right.terminal().SID] = withAgentState(right, "codex", agents.Running, 2)
 	a.apply(infos)
-	infos[right.SID] = withAgentState(right, "codex", agents.Waiting, 3)
+	infos[right.terminal().SID] = withAgentState(right, "codex", agents.Waiting, 3)
 	a.apply(infos)
 	if len(clicks) != 2 {
 		t.Fatal("new waiting period did not notify")
 	}
 	a.setAgentNotifications(false)
-	infos[right.SID] = withAgentState(right, "codex", agents.Waiting, 4)
+	infos[right.terminal().SID] = withAgentState(right, "codex", agents.Waiting, 4)
 	a.apply(infos)
 	if len(clicks) != 2 || !readSettings().HideAgentNotifications {
 		t.Fatal("notification preference not respected or saved")
@@ -126,7 +126,7 @@ func TestBackgroundAgentCompletionNotifications(t *testing.T) {
 	info := withAgentState(p, "codex", agents.Running, 0)
 	apply := func(state string, revision uint64) {
 		info.Agent.State, info.Agent.CompletionRevision, info.Agent.Updated = state, revision, time.Now()
-		a.apply(map[string]rex.SessionInfo{p.SID: info})
+		a.apply(map[string]rex.SessionInfo{p.terminal().SID: info})
 	}
 	apply(agents.Running, 0)
 	apply(agents.Completed, 1)
@@ -167,7 +167,7 @@ func TestBackgroundAgentCompletionNotifications(t *testing.T) {
 		t.Fatal("failure not notified")
 	}
 	a.setAgentNotifications(false)
-	if a.agentNotices[p.SID].close == nil {
+	if a.agentNotices[p.terminal().SID].close == nil {
 		t.Fatal("waiting preference removed completion notice")
 	}
 	a.setAgentCompletionNotifications(false)
@@ -190,8 +190,8 @@ func TestBackgroundAgentCompletionNotifications(t *testing.T) {
 	info.Idle = true
 	info.Program = "sh"
 	info.Agent.State = ""
-	a.apply(map[string]rex.SessionInfo{p.SID: info})
-	if a.agentNotices[p.SID].close == nil {
+	a.apply(map[string]rex.SessionInfo{p.terminal().SID: info})
+	if a.agentNotices[p.terminal().SID].close == nil {
 		t.Fatal("completion notice removed when agent exited")
 	}
 	if closed == 0 {
@@ -201,8 +201,8 @@ func TestBackgroundAgentCompletionNotifications(t *testing.T) {
 	reopened := &App{tabs: a.tabs, active: 1, agentNotify: a.agentNotify, focusedWin: true}
 	info = withAgentState(p, "codex", agents.Completed, 0)
 	info.Agent.CompletionRevision = 7
-	p.info = info
-	reopened.apply(map[string]rex.SessionInfo{p.SID: info})
+	p.terminal().info = info
+	reopened.apply(map[string]rex.SessionInfo{p.terminal().SID: info})
 	if len(notices) != 5 {
 		t.Fatal("restored historical completion replayed")
 	}
@@ -220,16 +220,16 @@ func TestBackgroundLongCommandCompletionNotice(t *testing.T) {
 		click = onClick
 		return func() {}
 	}
-	before := p.info
+	before := p.terminal().info
 	before.Program = "sleep"
 	before.Idle = false
 	before.LastInput = time.Now().Add(-9 * time.Second)
-	p.info = before
+	p.terminal().info = before
 	after := before
 	after.Idle = true
 	after.Program = "sh"
-	a.apply(map[string]rex.SessionInfo{p.SID: after})
-	a.apply(map[string]rex.SessionInfo{p.SID: after})
+	a.apply(map[string]rex.SessionInfo{p.terminal().SID: after})
+	a.apply(map[string]rex.SessionInfo{p.terminal().SID: after})
 	if len(notices) != 1 {
 		t.Fatal("background long command in focused window did not notify exactly once")
 	}
@@ -238,8 +238,8 @@ func TestBackgroundLongCommandCompletionNotice(t *testing.T) {
 		t.Fatal("command notification did not return to tab")
 	}
 	before.LastInput = time.Now().Add(-time.Second)
-	p.info = before
-	a.apply(map[string]rex.SessionInfo{p.SID: after})
+	p.terminal().info = before
+	a.apply(map[string]rex.SessionInfo{p.terminal().SID: after})
 	if len(notices) != 1 {
 		t.Fatal("short/viewed command should not notify")
 	}
@@ -249,8 +249,8 @@ func TestActivePaneSuppressesAllDesktopNoticePaths(t *testing.T) {
 	previous := prefs
 	prefs = settings{FontSize: defaultFontSize}
 	t.Cleanup(func() { prefs = previous })
-	p := &Pane{SID: "active"}
-	other := &Pane{SID: "other"}
+	p := &Pane{content: &terminalPane{SID: "active"}}
+	other := &Pane{content: &terminalPane{SID: "other"}}
 	tab := &Tab{Focus: p, Root: &Node{A: &Node{Pane: p}, B: &Node{Pane: other}}}
 	p.Tab, other.Tab = tab, tab
 	a := &App{tabs: []*Tab{tab}, focusedWin: true}
@@ -260,9 +260,9 @@ func TestActivePaneSuppressesAllDesktopNoticePaths(t *testing.T) {
 		return func() { closed++ }
 	}
 	info := withAgentState(p, "codex", agents.Running, 0)
-	a.apply(map[string]rex.SessionInfo{p.SID: info})
+	a.apply(map[string]rex.SessionInfo{p.terminal().SID: info})
 	info.Agent.State, info.Agent.CompletionRevision = agents.Completed, 1
-	a.apply(map[string]rex.SessionInfo{p.SID: info})
+	a.apply(map[string]rex.SessionInfo{p.terminal().SID: info})
 	a.showTerminalNotice(p, "Codex · 已完成", "terminal notification")
 	a.showPaneNotice(p, "program", mygo.NotificationOptions{Title: "command finished"})
 	if notices != 0 {
@@ -272,7 +272,7 @@ func TestActivePaneSuppressesAllDesktopNoticePaths(t *testing.T) {
 	// otherwise suppressed completion into a desktop notification.
 	a.settingsOpen, a.paletteOpen = true, true
 	info.Agent.CompletionRevision = 2
-	a.apply(map[string]rex.SessionInfo{p.SID: info})
+	a.apply(map[string]rex.SessionInfo{p.terminal().SID: info})
 	a.showTerminalNotice(p, "Codex", "active pane under overlay")
 	if notices != 0 {
 		t.Fatal("an overlay made the selected pane notify")
@@ -285,7 +285,7 @@ func TestActivePaneSuppressesAllDesktopNoticePaths(t *testing.T) {
 	}
 	tab.setFocus(other)
 	a.closeViewedPaneNotice()
-	if closed != 1 || a.agentNotices[other.SID].close != nil {
+	if closed != 1 || a.agentNotices[other.terminal().SID].close != nil {
 		t.Fatal("returning to the notified split left its banner pending")
 	}
 	tab.setFocus(p)
@@ -301,7 +301,7 @@ func TestActivePaneSuppressesAllDesktopNoticePaths(t *testing.T) {
 	}
 	// Focused completions stay consumed; switching away cannot replay them.
 	tab.setFocus(other)
-	a.apply(map[string]rex.SessionInfo{p.SID: info})
+	a.apply(map[string]rex.SessionInfo{p.terminal().SID: info})
 	if notices != 2 {
 		t.Fatal("leaving the active pane replayed a suppressed completion")
 	}
@@ -311,14 +311,14 @@ func TestAgentStateMarkersInTabs(t *testing.T) {
 	previous := prefs
 	t.Cleanup(func() { prefs = previous })
 	registerFonts()
-	p := &Pane{ID: 2, SID: "pane", info: rex.SessionInfo{Shell: "zsh", Dir: "/work/repo"}}
+	p := &Pane{ID: 2, content: &terminalPane{SID: "pane", info: rex.SessionInfo{Shell: "zsh", Dir: "/work/repo"}}}
 	tab := &Tab{ID: 1, Focus: p, Root: &Node{ID: 3, Pane: p}}
 	p.Tab, p.Node = tab, tab.Root
 	a := &App{tabs: []*Tab{tab}}
 	tt := ui.NewTester(a.view, 1000, 620)
 	tt.SetPreferences(ui.Preferences{ReduceMotion: true})
 	for _, state := range []string{agents.Ready, agents.Running, agents.Waiting, agents.Completed, agents.Failed, agents.Ready} {
-		p.info = withAgentState(p, "claude", state, 1)
+		p.terminal().info = withAgentState(p, "claude", state, 1)
 		p.attention = true // old bell attention must not hide hook state
 		tt.Frame()
 		label := "Agent " + state
@@ -338,7 +338,7 @@ func TestAgentStateMarkersInTabs(t *testing.T) {
 		}
 		prefs.DesktopLayout = ""
 	}
-	p.info = withAgentState(p, "claude", agents.Waiting, 1)
+	p.terminal().info = withAgentState(p, "claude", agents.Waiting, 1)
 	tt.Frame()
 	if err := tt.Click("Agent waiting for input"); err != nil {
 		t.Fatal(err)
@@ -347,7 +347,7 @@ func TestAgentStateMarkersInTabs(t *testing.T) {
 	if a.focusReq != p {
 		t.Fatal("status click did not focus pane")
 	}
-	p.info.Program, p.info.Idle = "zsh", true
+	p.terminal().info.Program, p.terminal().info.Idle = "zsh", true
 	tt.Frame()
 	if _, ok := tt.Find("Agent waiting for input"); ok {
 		t.Fatal("exited agent left a stale marker")
@@ -356,8 +356,8 @@ func TestAgentStateMarkersInTabs(t *testing.T) {
 		os.MkdirAll(dir, 0o755)
 		a.tabs = nil
 		for i, state := range []string{agents.Running, agents.Waiting, agents.Completed} {
-			pane := &Pane{ID: 10 + i, SID: state, info: rex.SessionInfo{Shell: "zsh", Dir: "/work/repo"}}
-			pane.info = withAgentState(pane, "claude", state, 1)
+			pane := &Pane{ID: 10 + i, content: &terminalPane{SID: state, info: rex.SessionInfo{Shell: "zsh", Dir: "/work/repo"}}}
+			pane.terminal().info = withAgentState(pane, "claude", state, 1)
 			tab := &Tab{ID: 20 + i, Focus: pane, Root: &Node{ID: 30 + i, Pane: pane}}
 			pane.Tab = tab
 			a.tabs = append(a.tabs, tab)
@@ -432,17 +432,17 @@ func TestAgentHookSurvivesWindowReconnect(t *testing.T) {
 	}
 	p := a.tab().Focus
 	quote := func(s string) string { return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'" }
-	p.stream.Write([]byte(quote(script) + " " + quote(capture) + "\r"))
+	p.terminal().stream.Write([]byte(quote(script) + " " + quote(capture) + "\r"))
 	waitFor(t, tt, "fixture foreground", func() bool {
 		refresh(a)
-		return p.info.Program == "claude" && !p.info.Idle && strings.Contains(p.term.Text(), "fixture-ready")
+		return p.terminal().info.Program == "claude" && !p.terminal().info.Idle && strings.Contains(p.terminal().term.Text(), "fixture-ready")
 	})
 	data, err := os.ReadFile(capture)
 	if err != nil {
 		t.Fatal(err)
 	}
 	fields := strings.Split(strings.TrimSpace(string(data)), "\n")
-	if len(fields) != 3 || fields[0] != p.SID {
+	if len(fields) != 3 || fields[0] != p.terminal().SID {
 		t.Fatal("fixture did not inherit pane credentials")
 	}
 	a.newTab("/tmp")
@@ -464,7 +464,7 @@ func TestAgentHookSurvivesWindowReconnect(t *testing.T) {
 	a.save()
 	for _, tab := range a.tabs {
 		for _, pane := range tab.panes() {
-			pane.term.Close()
+			pane.terminal().term.Close()
 		}
 	}
 	reopened := &App{client: a.client}
@@ -474,14 +474,14 @@ func TestAgentHookSurvivesWindowReconnect(t *testing.T) {
 	t.Cleanup(func() {
 		for _, tab := range reopened.tabs {
 			for _, pane := range tab.panes() {
-				pane.term.Close()
+				pane.terminal().term.Close()
 			}
 		}
 	})
 	var restored *Pane
 	for _, tab := range reopened.tabs {
 		for _, pane := range tab.panes() {
-			if pane.SID == p.SID {
+			if pane.terminal().SID == p.terminal().SID {
 				restored = pane
 			}
 		}
@@ -511,17 +511,17 @@ func TestCodexTitleCompletionDoesNotNotify(t *testing.T) {
 		return func() {}
 	}
 	info := withAgentState(p, "codex", agents.Running, 0)
-	a.apply(map[string]rex.SessionInfo{p.SID: info})
+	a.apply(map[string]rex.SessionInfo{p.terminal().SID: info})
 	info.Agent.State, info.Agent.CompletionRevision = agents.Completed, 1
 	info.Agent.Summary = `{"title":"提交 relaykit-bridge PR"}`
-	a.apply(map[string]rex.SessionInfo{p.SID: info})
-	a.apply(map[string]rex.SessionInfo{p.SID: info})
+	a.apply(map[string]rex.SessionInfo{p.terminal().SID: info})
+	a.apply(map[string]rex.SessionInfo{p.terminal().SID: info})
 	if len(notices) != 0 {
 		t.Fatal("internal title generation sent a desktop notification", notices)
 	}
 	info.Agent.CompletionRevision++
 	info.Agent.Summary = "PR 已提交。"
-	a.apply(map[string]rex.SessionInfo{p.SID: info})
+	a.apply(map[string]rex.SessionInfo{p.terminal().SID: info})
 	if len(notices) != 1 || notices[0].Body != info.Agent.Summary {
 		t.Fatal("real completion after title generation was lost", notices)
 	}

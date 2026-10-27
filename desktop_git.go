@@ -31,10 +31,7 @@ type desktopGitState struct {
 }
 
 func paneGitScope(p *Pane) gitScope {
-	s := gitScope{host: p.host, dir: p.info.Dir}
-	if s.dir == "" {
-		s.dir = p.startDir
-	}
+	s := gitScope{host: p.host, dir: p.directory()}
 	if p.host != nil {
 		s.client = p.host.client
 	}
@@ -195,13 +192,5 @@ func (a *App) openPaneChanges(t *Tab, p *Pane, root string) {
 		return
 	}
 	t.setFocus(p)
-	prefs.FilesOpen, prefs.FilesDiff = true, true
-	prefs.FilesSidePanel = true
-	a.focusReq = nil
-	a.syncFiles()
-	if b := a.files; b != nil && (!b.diff || b.dir != root) {
-		b.diff = true
-		a.loadFileDirectory(b, root)
-	}
-	saveSettings()
+	a.openFilesPane(p, root, true, false)
 }

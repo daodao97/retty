@@ -50,8 +50,8 @@ func (a *App) applyPolled(host *desktopHost, infos map[string]rex.SessionInfo) b
 	// These states have time-based transitions even if the control snapshot
 	// is identical: a dropped viewer, delayed unlock or missing session.
 	for p := range a.hostPanes(host) {
-		in, ok := infos[p.SID]
-		if !ok || p.streamEnded || p.remoteAttaching || p.unlocking || p.locked != (in.SizeLock != "") {
+		in, ok := infos[p.terminal().SID]
+		if !ok || p.terminal().streamEnded || p.terminal().remoteAttaching || p.terminal().unlocking || p.terminal().locked != (in.SizeLock != "") {
 			refresh = true
 		}
 	}

@@ -98,11 +98,11 @@ func TestDesktopRemoteSessionRoutingAndDetach(t *testing.T) {
 	if tab.Host != h || p.host != h || a.currentHost() != h || a.paneClient(p) != client {
 		t.Fatal("remote tab borrowed local transport")
 	}
-	waitFor(t, tt, "remote input attachment", func() bool { return p.remoteView.inputReady() })
+	waitFor(t, tt, "remote input attachment", func() bool { return p.terminal().remoteView.inputReady() })
 	tt.Type("export REMOTE_CONTINUE=kept; printf 'remote-%s\\n' ready")
 	tt.Key(0, ui.KeyEnter)
-	waitFor(t, tt, "remote input", func() bool { return strings.Contains(p.term.Text(), "remote-ready") })
-	if strings.Contains(local.term.Text(), "remote-ready") {
+	waitFor(t, tt, "remote input", func() bool { return strings.Contains(p.terminal().term.Text(), "remote-ready") })
+	if strings.Contains(local.terminal().term.Text(), "remote-ready") {
 		t.Fatal("input reached local shell")
 	}
 	// Cmd-T and split inherit the remote computer and directory.
@@ -120,13 +120,13 @@ func TestDesktopRemoteSessionRoutingAndDetach(t *testing.T) {
 	}
 	// The local server's layout and poll must never adopt remote sessions.
 	snapshot := a.snapshot()
-	if len(snapshot.Tabs) != 1 || snapshot.Tabs[0].Root.SID != local.SID {
+	if len(snapshot.Tabs) != 1 || snapshot.Tabs[0].Root.SID != local.terminal().SID {
 		t.Fatal("remote sessions leaked into local layout")
 	}
 	infos, _ := client.List()
 	h.sessions = liveDesktopSessions(infos)
-	a.apply(map[string]rex.SessionInfo{p.SID: {ID: p.SID, Dir: "WRONG-LOCAL-DIR"}, local.SID: local.info})
-	if p.info.Dir == "WRONG-LOCAL-DIR" {
+	a.apply(map[string]rex.SessionInfo{p.terminal().SID: {ID: p.terminal().SID, Dir: "WRONG-LOCAL-DIR"}, local.terminal().SID: local.terminal().info})
+	if p.terminal().info.Dir == "WRONG-LOCAL-DIR" {
 		t.Fatal("local poll changed remote pane")
 	}
 	if err := tt.Click("连接"); err != nil {
@@ -142,7 +142,7 @@ func TestDesktopRemoteSessionRoutingAndDetach(t *testing.T) {
 	remoteAfter, _ := client.List()
 	found := false
 	for _, in := range remoteAfter {
-		if in.ID == p.SID && in.PID == p.info.PID && !in.Exited {
+		if in.ID == p.terminal().SID && in.PID == p.terminal().info.PID && !in.Exited {
 			found = true
 		}
 	}
@@ -150,14 +150,14 @@ func TestDesktopRemoteSessionRoutingAndDetach(t *testing.T) {
 		t.Fatal("closing remote tab ended shell")
 	}
 	// Reattach shares the exact shell, including its environment.
-	a.openDesktopSession(h, p.info, true)
+	a.openDesktopSession(h, p.terminal().info, true)
 	reopened := a.tab().Focus
-	waitFor(t, tt, "reattached remote input", func() bool { return reopened.remoteView.inputReady() })
+	waitFor(t, tt, "reattached remote input", func() bool { return reopened.terminal().remoteView.inputReady() })
 	tt.Type("printf 'continued-%s\\n' \"$REMOTE_CONTINUE\"")
 	tt.Key(0, ui.KeyEnter)
-	waitFor(t, tt, "same remote shell", func() bool { return strings.Contains(reopened.term.Text(), "continued-kept") })
+	waitFor(t, tt, "same remote shell", func() bool { return strings.Contains(reopened.terminal().term.Text(), "continued-kept") })
 	count := len(a.tabs)
-	a.openDesktopSession(h, p.info, true)
+	a.openDesktopSession(h, p.terminal().info, true)
 	if len(a.tabs) != count {
 		t.Fatal("existing session duplicated")
 	}
@@ -185,7 +185,7 @@ func TestDesktopRemoteSessionRoutingAndDetach(t *testing.T) {
 	}
 	localAfter, _ := a.client.List()
 	for _, in := range localAfter {
-		if in.ID == local.SID && (in.PID != localBefore[0].PID) {
+		if in.ID == local.terminal().SID && (in.PID != localBefore[0].PID) {
 			t.Fatal("local shell replaced")
 		}
 	}
@@ -198,7 +198,7 @@ func TestDesktopRemoteSessionRoutingAndDetach(t *testing.T) {
 	for _, tab := range a.tabs {
 		for _, p := range tab.panes() {
 			p.closed = true
-			p.term.Close()
+			p.terminal().term.Close()
 		}
 	}
 	check.Shutdown() // only the owned child
@@ -216,14 +216,14 @@ func TestDesktopMirrorRecoversWhileControlRemainsConnected(t *testing.T) {
 	a.openDesktopSession(h, in, true)
 	p := a.tab().Focus
 	tt.Frame()
-	waitFor(t, tt, "initial mirror snapshot ready", func() bool { return p.remoteView.inputReady() })
+	waitFor(t, tt, "initial mirror snapshot ready", func() bool { return p.terminal().remoteView.inputReady() })
 	tt.Type("export MIRROR_STATE=kept; printf 'mirror-%s\\n' ready")
 	tt.Key(0, ui.KeyEnter)
-	waitFor(t, tt, "initial mirror", func() bool { return strings.Contains(p.term.Text(), "mirror-ready") })
-	cols, rows := p.term.Size()
-	oldStream := p.stream
+	waitFor(t, tt, "initial mirror", func() bool { return strings.Contains(p.terminal().term.Text(), "mirror-ready") })
+	cols, rows := p.terminal().term.Size()
+	oldStream := p.terminal().stream
 	oldStream.Close()
-	waitFor(t, tt, "viewer stream ended", func() bool { return p.streamEnded })
+	waitFor(t, tt, "viewer stream ended", func() bool { return p.terminal().streamEnded })
 	if !h.connected() {
 		t.Fatal("fixture also disconnected control")
 	}
@@ -231,14 +231,14 @@ func TestDesktopMirrorRecoversWhileControlRemainsConnected(t *testing.T) {
 	defer cancel()
 	go a.pollDesktop(ctx, h, client, h.generation, a.desktopDispatcher())
 	waitFor(t, tt, "mirror restored by healthy control poll", func() bool {
-		return p.stream != oldStream && !p.streamEnded && p.remoteView.inputReady() && strings.Contains(p.term.Text(), "mirror-ready")
+		return p.terminal().stream != oldStream && !p.terminal().streamEnded && p.terminal().remoteView.inputReady() && strings.Contains(p.terminal().term.Text(), "mirror-ready")
 	})
-	if h.client != client || p.SID != in.ID || p.info.PID != in.PID {
+	if h.client != client || p.terminal().SID != in.ID || p.terminal().info.PID != in.PID {
 		t.Fatal("viewer recovery replaced control or remote session")
 	}
 	tt.Type("printf 'continued-%s\\n' \"$MIRROR_STATE\"")
 	tt.Key(0, ui.KeyEnter)
-	waitFor(t, tt, "same shell after viewer recovery", func() bool { return strings.Contains(p.term.Text(), "continued-kept") })
+	waitFor(t, tt, "same shell after viewer recovery", func() bool { return strings.Contains(p.terminal().term.Text(), "continued-kept") })
 	infos, err := client.List()
 	if err != nil || len(infos) != 1 || infos[0].Cols != cols || infos[0].Rows != rows {
 		t.Fatal("viewer recovery changed active pane dimensions or created another session", infos, err)
@@ -247,21 +247,21 @@ func TestDesktopMirrorRecoversWhileControlRemainsConnected(t *testing.T) {
 	for _, tab := range a.tabs {
 		for _, pane := range tab.panes() {
 			pane.closed = true
-			pane.term.Close()
+			pane.terminal().term.Close()
 		}
 	}
 }
 
 func TestDesktopNotificationKeysAndLocalPollIsolation(t *testing.T) {
-	local := &Pane{SID: "same", info: rex.SessionInfo{ID: "same", Program: "codex", Agent: rex.AgentState{ID: "codex", State: agents.Running}}}
+	local := &Pane{content: &terminalPane{SID: "same", info: rex.SessionInfo{ID: "same", Program: "codex", Agent: rex.AgentState{ID: "codex", State: agents.Running}}}}
 	host := &desktopHost{key: "another-computer"}
-	remotePane := &Pane{SID: "same", host: host, info: rex.SessionInfo{ID: "same", Dir: "/remote"}}
+	remotePane := &Pane{host: host, content: &terminalPane{SID: "same", info: rex.SessionInfo{ID: "same", Dir: "/remote"}}}
 	lt, rt := &Tab{Root: &Node{Pane: local}, Focus: local}, &Tab{Host: host, Root: &Node{Pane: remotePane}, Focus: remotePane}
 	local.Tab, remotePane.Tab = lt, rt
 	closed := 0
 	a := &App{tabs: []*Tab{lt, rt}, agentNotices: map[string]agentNotice{remotePane.noticeKey(): {close: func() { closed++ }}}}
-	a.apply(map[string]rex.SessionInfo{"same": local.info})
-	if remotePane.info.Dir != "/remote" || closed != 0 {
+	a.apply(map[string]rex.SessionInfo{"same": local.terminal().info})
+	if remotePane.terminal().info.Dir != "/remote" || closed != 0 {
 		t.Fatal("local poll overwrote remote state or dismissed remote notice")
 	}
 	if local.noticeKey() == remotePane.noticeKey() || noticeOnHost(remotePane.noticeKey(), nil) {
@@ -274,7 +274,7 @@ func TestDesktopNotificationKeysAndLocalPollIsolation(t *testing.T) {
 
 func TestDesktopConnectionViews(t *testing.T) {
 	a, tt := newStaticTestApp(t)
-	a.tab().Focus.term.Feed([]byte("\x1b[2J\x1b[H\x1b[32m❯\x1b[0m retty\r\n\r\nPersistent terminals, across your devices.\r\n"))
+	a.tab().Focus.terminal().term.Feed([]byte("\x1b[2J\x1b[H\x1b[32m❯\x1b[0m retty\r\n\r\nPersistent terminals, across your devices.\r\n"))
 	h := &desktopHost{key: "visual", client: &rex.Client{}, hello: rex.Hello{Host: rex.HostInfo{Name: "Studio Mac", Home: "/Users/developer"}}, recent: desktopRecent{Name: "Studio Mac", OS: "macOS"}, sessions: []rex.SessionInfo{
 		{ID: "one", Program: "codex", Shell: "zsh", Dir: "/Users/developer/work/retty"},
 		{ID: "two", Program: "claude", Shell: "zsh", Dir: "/Users/developer/work/mygo"},
@@ -444,8 +444,8 @@ func TestDesktopTailcatConnectAndReconnect(t *testing.T) {
 	oldClient := h.client
 	waitFor(t, tt, "existing poll records request metrics", func() bool { return h.quality.Snapshot(time.Now()).Successes > 0 })
 	oldClient.Close()
-	waitFor(t, tt, "automatically reconnected transport", func() bool { return h.connected() && h.client != oldClient && p.remoteView.inputReady() })
-	if !h.connected() || p.info.PID != existing.PID || p.SID != existing.ID {
+	waitFor(t, tt, "automatically reconnected transport", func() bool { return h.connected() && h.client != oldClient && p.terminal().remoteView.inputReady() })
+	if !h.connected() || p.terminal().info.PID != existing.PID || p.terminal().SID != existing.ID {
 		t.Fatal("reconnect replaced session", h.err)
 	}
 	if sample := h.quality.Snapshot(time.Now()); sample.Reconnects != 1 || !sample.HasRecovery {
@@ -454,7 +454,7 @@ func TestDesktopTailcatConnectAndReconnect(t *testing.T) {
 	tt.Frame()
 	tt.Type("printf 'tunnel-%s\\n' continued")
 	tt.Key(0, ui.KeyEnter)
-	waitFor(t, tt, "input after reconnect", func() bool { return strings.Contains(p.term.Text(), "tunnel-continued") })
+	waitFor(t, tt, "input after reconnect", func() bool { return strings.Contains(p.terminal().term.Text(), "tunnel-continued") })
 	a.disconnectDesktop(h)
 	live, err := desktop.List()
 	if err != nil || len(live) != 2 {
@@ -462,12 +462,12 @@ func TestDesktopTailcatConnectAndReconnect(t *testing.T) {
 	}
 	a.quitting = true
 	a.tabs[0].Focus.closed = true
-	a.tabs[0].Focus.term.Close()
+	a.tabs[0].Focus.terminal().term.Close()
 }
 
 func TestDesktopHistorySerializationDoesNotEnterLayout(t *testing.T) {
 	host := &desktopHost{key: "remote"}
-	a := &App{tabs: []*Tab{{Host: host, Root: &Node{Pane: &Pane{SID: "remote-session"}}}, {Root: &Node{Pane: &Pane{SID: "local-session"}}}}, active: 1}
+	a := &App{tabs: []*Tab{{Host: host, Root: &Node{Pane: &Pane{content: &terminalPane{SID: "remote-session"}}}}, {Root: &Node{Pane: &Pane{content: &terminalPane{SID: "local-session"}}}}}, active: 1}
 	b, err := json.Marshal(a.snapshot())
 	if err != nil {
 		t.Fatal(err)
@@ -485,11 +485,11 @@ func TestDesktopRestoreSplitsAndAdaptActiveRemoteGrid(t *testing.T) {
 	a.createDesktopSession(h, "/tmp", nil, false)
 	waitFor(t, tt, "remote shell", func() bool { return len(a.tabs) == 2 })
 	p := a.tab().Focus
-	waitFor(t, tt, "remote input attachment", func() bool { return p.remoteView.inputReady() })
+	waitFor(t, tt, "remote input attachment", func() bool { return p.terminal().remoteView.inputReady() })
 	tt.Frame()
 	tt.Type("printf 'grid-%s\\n' ready")
 	tt.Key(0, ui.KeyEnter)
-	waitFor(t, tt, "remote stream attached", func() bool { return strings.Contains(p.term.Text(), "grid-ready") })
+	waitFor(t, tt, "remote stream attached", func() bool { return strings.Contains(p.terminal().term.Text(), "grid-ready") })
 	before, err := client.List()
 	if err != nil {
 		t.Fatal(err)
@@ -509,11 +509,11 @@ func TestDesktopRestoreSplitsAndAdaptActiveRemoteGrid(t *testing.T) {
 	old.Name = "远端项目"
 	old.Zoom = old.Focus
 	saved := a.snapshotHost(h)
-	originalIDs := []string{old.panes()[0].SID, old.panes()[1].SID}
+	originalIDs := []string{old.panes()[0].terminal().SID, old.panes()[1].terminal().SID}
 	a.quitting = true
 	for _, p := range old.panes() {
 		p.closed = true
-		p.term.Close()
+		p.terminal().term.Close()
 	}
 	live, err := client.List()
 	if err != nil {
@@ -527,14 +527,14 @@ func TestDesktopRestoreSplitsAndAdaptActiveRemoteGrid(t *testing.T) {
 		t.Fatal("remote layout was flattened or renamed")
 	}
 	for i, p := range reopened.tabs[0].panes() {
-		if p.SID != originalIDs[i] {
+		if p.terminal().SID != originalIDs[i] {
 			t.Fatal("restore replaced remote session")
 		}
 	}
 	reopened.quitting = true
 	for _, p := range reopened.tabs[0].panes() {
 		p.closed = true
-		p.term.Close()
+		p.terminal().term.Close()
 	}
 	// One terminated leaf collapses a split; restoration must not start shells.
 	if err := client.Kill(originalIDs[0]); err != nil {
@@ -547,7 +547,7 @@ func TestDesktopRestoreSplitsAndAdaptActiveRemoteGrid(t *testing.T) {
 	restoredHost.sessions, restoredHost.layout = liveDesktopSessions(live), saved
 	collapsed := &App{client: a.client}
 	collapsed.restoreDesktopLayout(restoredHost)
-	if len(collapsed.tabs) != 1 || len(collapsed.tabs[0].panes()) != 1 || collapsed.tabs[0].Focus.SID != originalIDs[1] {
+	if len(collapsed.tabs) != 1 || len(collapsed.tabs[0].panes()) != 1 || collapsed.tabs[0].Focus.terminal().SID != originalIDs[1] {
 		t.Fatal("missing remote leaf recreated a shell or lost the surviving session")
 	}
 	final, _ := client.List()
@@ -556,9 +556,9 @@ func TestDesktopRestoreSplitsAndAdaptActiveRemoteGrid(t *testing.T) {
 	}
 	collapsed.quitting = true
 	collapsed.tabs[0].Focus.closed = true
-	collapsed.tabs[0].Focus.term.Close()
+	collapsed.tabs[0].Focus.terminal().term.Close()
 	a.tabs[0].Focus.closed = true
-	a.tabs[0].Focus.term.Close()
+	a.tabs[0].Focus.terminal().term.Close()
 }
 
 func TestSharedDesktopHistoryStore(t *testing.T) {

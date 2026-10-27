@@ -80,13 +80,13 @@ func TestTerminalFileLinksOpenInRetty(t *testing.T) {
 			}
 			a, tt := newStaticTestApp(t)
 			p := a.tab().Focus
-			p.info.Dir = dir
+			p.terminal().info.Dir = dir
 			root := a.tab().Root
 			external := ""
 			a.openLinkURL = func(target string) error { external = target; return nil }
 			t.Cleanup(func() {
-				if a.files != nil {
-					a.files.stop()
+				if a.focusedFiles() != nil {
+					a.focusedFiles().stop()
 				}
 			})
 			text := "(docs/automation-plan.md)。"
@@ -102,7 +102,7 @@ func TestTerminalFileLinksOpenInRetty(t *testing.T) {
 			case "directory":
 				text = "docs/"
 			}
-			p.term.Feed([]byte("\x1b[H\x1b[2J" + text))
+			p.terminal().term.Feed([]byte("\x1b[H\x1b[2J" + text))
 			tt.Frame()
 			r, ok := tt.Find("Terminal")
 			if !ok {
@@ -110,10 +110,10 @@ func TestTerminalFileLinksOpenInRetty(t *testing.T) {
 			}
 			tt.ClickAtWith(ui.Cmd, r.X+14, r.Y+7)
 			waitFor(t, tt, "file viewer", func() bool {
-				return a.files != nil && !a.files.loading && (kind == "directory" || a.files.previewCode != nil)
+				return a.focusedFiles() != nil && !a.focusedFiles().loading && (kind == "directory" || a.focusedFiles().previewCode != nil)
 			})
-			b := a.files
-			if external != "" || a.err != "" || b.err != "" || a.tab().Root != root || !readSettings().FilesOpen || b.diff {
+			b := a.focusedFiles()
+			if external != "" || a.err != "" || b.err != "" || a.tab().Root != root || len(a.tab().panes()) != 2 || b.diff {
 				t.Fatalf("file opening changed the session or failed: external=%q, app=%q, browser=%q", external, a.err, b.err)
 			}
 			if kind == "directory" {
@@ -146,22 +146,22 @@ func TestTerminalFileLinkFailuresStayInViewer(t *testing.T) {
 			t.Setenv("RETTY_DIR", t.TempDir())
 			a, tt := newStaticTestApp(t)
 			p := a.tab().Focus
-			p.info.Dir = t.TempDir()
+			p.terminal().info.Dir = t.TempDir()
 			a.openLinkURL = func(string) error { t.Fatal("file fell back to external opener"); return nil }
 			if kind == "offline remote" {
 				p.host = &desktopHost{}
 			}
 			if kind == "raw ssh" {
-				p.info.Program = "ssh"
+				p.terminal().info.Program = "ssh"
 			}
 			t.Cleanup(func() {
-				if a.files != nil {
-					a.files.stop()
+				if a.focusedFiles() != nil {
+					a.focusedFiles().stop()
 				}
 			})
 			a.openTerminalLink(p, terminal.Link{Path: "missing.md"})
 			waitFor(t, tt, fmt.Sprintf("%s error", kind), func() bool {
-				return a.err != "" || a.files != nil && a.files.err != ""
+				return a.err != "" || a.focusedFiles() != nil && a.focusedFiles().err != ""
 			})
 			if kind == "raw ssh" && !strings.Contains(a.err, "远端连接") {
 				t.Fatal(a.err)
@@ -205,17 +205,17 @@ func TestTerminalFileLinkUsesRemoteHost(t *testing.T) {
 	p := a.tab().Focus
 	p.host = &desktopHost{client: client}
 	p.host.hello.Host.Home = "/remote/home"
-	p.info.Dir = "/remote/work"
+	p.terminal().info.Dir = "/remote/work"
 	a.openLinkURL = func(string) error { t.Fatal("remote file used local opener"); return nil }
 	t.Cleanup(func() {
-		if a.files != nil {
-			a.files.stop()
+		if a.focusedFiles() != nil {
+			a.focusedFiles().stop()
 		}
 	})
 	a.openTerminalLink(p, terminal.Link{Path: "~/notes.md"})
-	waitFor(t, tt, "remote file content", func() bool { return a.files != nil && a.files.previewCode != nil })
-	if a.files.preview != "/remote/home/notes.md" || string(a.files.previewData) != "# 来自远端\n" {
-		t.Fatalf("remote file used local home/content: %q, %q", a.files.preview, a.files.previewData)
+	waitFor(t, tt, "remote file content", func() bool { return a.focusedFiles() != nil && a.focusedFiles().previewCode != nil })
+	if a.focusedFiles().preview != "/remote/home/notes.md" || string(a.focusedFiles().previewData) != "# 来自远端\n" {
+		t.Fatalf("remote file used local home/content: %q, %q", a.focusedFiles().preview, a.focusedFiles().previewData)
 	}
 	read := false
 	for len(requests) > 0 {

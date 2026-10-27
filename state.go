@@ -1,21 +1,17 @@
 package main
 
 import (
-	"cmp"
 	"context"
 	"encoding/json"
 	"iter"
-	"log"
 	"os"
 	"slices"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
-	"retty/internal/terminal"
 
 	"retty/internal/agents"
 	"retty/internal/desktopcontrol"
@@ -51,52 +47,18 @@ type Node struct {
 	A, B     *Node
 }
 
-// Pane is a terminal attached to a session of the server.
+// Pane is a container in the split tree. Its content owns rendering and resources.
 type Pane struct {
-	browser                   *browserPane
-	host                      *desktopHost
-	ID                        int
-	SID                       string
-	Tab                       *Tab
-	Node                      *Node
-	term                      *terminal.Terminal
-	stream                    *rex.Stream
-	remoteView                *sessionViewStream
-	remoteOwner               string
-	remoteSeen, remoteYielded bool
-	remoteRelease             <-chan struct{}
-	remoteIdleTimer           *time.Timer
-	remoteIdleEpoch           uint64
-	remoteAttempt             uint64
-	remoteAttaching           bool
-	remoteLoadingSince        time.Time
-	upload                    *paneUpload
-
-	// info is what the server last said of the session.
-	info rex.SessionInfo
-	// title is the last title the program set.
-	title string
-	// lastData is when the session last printed, in Unix nanoseconds.
-	lastData atomic.Int64
-	// attention marks a pane that rang the bell or whose program finished
-	// while it was out of sight; seen clears it.
+	ID        int
+	Key       string // persisted identity, independent of a terminal session
+	Tab       *Tab
+	Node      *Node
+	host      *desktopHost
+	dir       string // working context inherited when the component is opened
+	content   paneContent
 	attention bool
-	// bounds is where the pane's card was in the last frame.
-	bounds      ui.Rect
-	closed      bool
-	streamEnded bool
-	// restored tells that the session was made anew for a pane of a
-	// saved layout whose session was gone.
-	restored      bool
-	recoverySID   string
-	recoveryError string
-	recoveryBusy  bool
-	startDir      string
-	find          paneFind
-	// locked tells that a phone holds the session's size, which the pane
-	// shows at that size until unlocked; unlocking, that it is asked to.
-	locked, unlocking bool
-	unlockedAt        time.Time
+	bounds    ui.Rect
+	closed    bool
 }
 
 // App is the state of Retty's window.
@@ -112,7 +74,6 @@ type App struct {
 	remoteUpdate     *remoteUpdateDialog
 	desktopUpdater   *desktopUpdateService
 	terminalHistory  *terminalHistory
-	files            *desktopFiles
 	filesWidthSaveAt time.Time
 	readReceipts     readReceiptState
 	pollSnapshots    map[*desktopHost]map[string]rex.SessionInfo
@@ -122,6 +83,7 @@ type App struct {
 	openLinkURL      func(string) error // injectable native URL opener
 	win              *mygo.Window
 	appearanceItems  map[string]*mygo.MenuItem
+	commandItems     map[*command]*mygo.MenuItem
 	client           *rex.Client
 	hello            rex.Hello
 	err              string
@@ -243,156 +205,6 @@ func (t *Tab) setFocus(p *Pane) {
 	t.recent = append(t.recent, p)
 }
 
-// newPane makes a pane with a new session in dir.
-func (a *App) newPane(dir string, cols, rows int) *Pane {
-	return a.newCommandPane(dir, nil, cols, rows)
-}
-
-func (a *App) newCommandPane(dir string, command []string, cols, rows int) *Pane {
-	return a.newOptionsPane(rex.CreateOptions{Dir: dir, Command: command, Cols: cols, Rows: rows})
-}
-
-func (a *App) newOptionsPane(options rex.CreateOptions) *Pane {
-	dir, cols, rows := options.Dir, options.Cols, options.Rows
-	if cols <= 0 {
-		cols, rows = 80, 24
-	}
-	options.Cols, options.Rows = cols, rows
-	info, err := a.client.Create(options)
-	if err != nil {
-		log.Printf("creating a session: %v", err)
-		a.err = err.Error()
-		info = rex.SessionInfo{ID: "", Exited: true}
-	}
-	p := &Pane{ID: a.id(), SID: info.ID, info: info, startDir: dir}
-	if p.info.Dir == "" {
-		p.info.Dir = dir
-	}
-	a.attach(p, cols, rows)
-	return p
-}
-
-// attach makes the pane's terminal, attached to its session.
-func (a *App) attach(p *Pane, cols, rows int) {
-	win := a.win
-	onSplit := func(down bool) {
-		a.laterFrom(a.services, func() { a.splitPane(p, down) })
-	}
-	options := terminal.Options{
-		Conn:           nopConn{},
-		Font:           termFont,
-		Theme:          lightTerm,
-		DarkTheme:      darkTerm,
-		AdaptiveColors: true,
-		Transparent:    true,
-		CopyRawText:    prefs.CopyRawText,
-		OnSplit:        onSplit,
-		OnPaste:        func(s ui.Services) bool { return a.pastePaneClipboard(p, s) },
-		OnOpenLink:     func(link terminal.Link) { a.openTerminalLink(p, link) },
-		OnPreviewLink:  func(link terminal.Link) *terminal.LinkPreviewSource { return a.terminalImagePreview(p, link) },
-	}
-	if p.SID == "" {
-		term, err := terminal.New(options)
-		if err == nil {
-			message := "Could not start a session: " + a.err
-			if p.recoveryError != "" {
-				message = "无法恢复 Agent 会话：" + p.recoveryError
-			}
-			if cols <= 0 {
-				cols = 80
-			}
-			if rows <= 0 {
-				rows = 24
-			}
-			term.Resize(cols, rows)
-			term.Feed([]byte("\x1b[31m" + message + "\x1b[0m\r\n"))
-			p.term = term
-		}
-		return
-	}
-	if p.host != nil {
-		var view *sessionViewStream
-		view = newSessionViewStream(nil, func() {
-			a.post(func() {
-				if !p.closed && !a.quitting && p.remoteView == view && !view.hasTransport() {
-					a.pauseRemotePane(p)
-					p.streamEnded = true
-				}
-			})
-			if win != nil {
-				win.Invalidate()
-			}
-		})
-		p.remoteView = view
-		view.setInput(nil)
-	} else {
-		p.stream = a.paneClient(p).Stream(p.SID, cols, rows)
-	}
-	stream := p.stream
-	p.streamEnded = false
-	if p.stream != nil {
-		p.stream.OnData = func(int) { p.lastData.Store(time.Now().UnixNano()) }
-	}
-	// The terminal's callbacks change the state on the main thread, in
-	// the window that made the pane, as long as it is open.
-	update := func(fn func()) {
-		if win != nil {
-			win.Update(fn)
-		} else {
-			a.post(fn)
-		}
-	}
-	options.Conn = p.stream
-	if p.host != nil {
-		// Only the active pane attaches and supplies its own viewport size.
-		// Reuse the phone's retained-reader and atomic snapshot replacement.
-		options.Conn = p.remoteView
-	}
-	options.OnRenderEvent = func(event terminal.RenderEvent) { logRenderEvent(p.SID, event) }
-	options.OnTitle = func(title string) {
-		update(func() { p.title = title })
-	}
-	options.OnBell = func() {
-		update(func() { a.ring(p) })
-	}
-	options.OnNotify = func(title, body string) {
-		update(func() { a.showTerminalNotice(p, title, body) })
-	}
-	options.OnExit = func(int) {
-		update(func() {
-			if p.closed || a.quitting || p.stream != stream || a.systemShuttingDown() {
-				return
-			}
-			if p.host == nil {
-				if p.info.Resumed {
-					a.checkAgentRestoreExit(p, stream)
-				} else {
-					a.closePane(p)
-				}
-			} else {
-				p.streamEnded = true
-			}
-		})
-	}
-	term, err := terminal.New(options)
-	if err != nil {
-		log.Printf("terminal: %v", err)
-		a.err = err.Error()
-		return
-	}
-	// Until a view shows it, the terminal has the session's size, so that
-	// attaching changes nothing in the session.
-	term.Resize(cols, rows)
-	p.term = term
-}
-
-// nopConn is the Conn of a terminal that only shows what the app feeds it.
-type nopConn struct{}
-
-func (nopConn) Read([]byte) (int, error)    { select {} }
-func (nopConn) Write(p []byte) (int, error) { return len(p), nil }
-func (nopConn) Close() error                { return nil }
-
 func (a *App) ring(p *Pane) {
 	if t := a.tab(); t == nil || t.Focus != p || p.Tab != t || !a.focusedWin {
 		p.attention = true
@@ -423,9 +235,6 @@ func (a *App) newLocalOptionsTab(options rex.CreateOptions) *Tab {
 	a.tabs = slices.Insert(a.tabs, at, t)
 	a.active = at
 	a.focusReq = p
-	if prefs.FilesOpen {
-		a.toggleFiles()
-	}
 	a.changed()
 	return t
 }
@@ -433,7 +242,7 @@ func (a *App) newLocalOptionsTab(options rex.CreateOptions) *Tab {
 // currentDir returns the directory new panes open in: the focused pane's.
 func (a *App) currentDir() string {
 	if t := a.tab(); t != nil && t.Focus != nil {
-		if d := t.Focus.info.Dir; d != "" {
+		if d := t.Focus.directory(); d != "" {
 			return d
 		}
 	}
@@ -460,45 +269,6 @@ func (a *App) splitPane(p *Pane, down bool) {
 	}
 }
 
-// split splits the focused pane, the new pane right of it or below it.
-func (a *App) split(vertical bool) {
-	t := a.tab()
-	if t == nil || t.Focus == nil {
-		return
-	}
-	old := t.Focus
-	if old.browser != nil {
-		if _, err := a.openBrowser(old, "about:blank", old.host, vertical); err != nil {
-			a.err = err.Error()
-		}
-		return
-	}
-	if t.Host != nil {
-		a.createDesktopSession(t.Host, a.currentDir(), old, vertical)
-		return
-	}
-	t.Zoom = nil
-	n := old.Node
-	cols, rows := 80, 24
-	if old.term != nil {
-		cols, rows = old.term.Size()
-		if vertical {
-			rows = max(rows/2, 2)
-		} else {
-			cols = max(cols/2, 10)
-		}
-	}
-	p := a.newPane(a.currentDir(), cols, rows)
-	p.Tab = t
-	left := &Node{ID: a.id(), Pane: old, Parent: n}
-	right := &Node{ID: a.id(), Pane: p, Parent: n}
-	old.Node, p.Node = left, right
-	n.Pane, n.A, n.B, n.Vertical, n.Ratio = nil, left, right, vertical, 0.5
-	t.setFocus(p)
-	a.focusReq = p
-	a.changed()
-}
-
 // singlePaneTab makes a tab of one pane, which has the focus.
 func (a *App) singlePaneTab(p *Pane) *Tab {
 	t := &Tab{ID: a.id(), Host: p.host}
@@ -521,41 +291,35 @@ func (a *App) allPanes() iter.Seq2[*Tab, *Pane] {
 	}
 }
 
-// hostPanes yields the panes of the tabs of a computer, nil for this one.
+// hostPanes yields only terminal panes on a computer, nil for this one.
 func (a *App) hostPanes(h *desktopHost) iter.Seq[*Pane] {
 	return func(yield func(*Pane) bool) {
 		for t, p := range a.allPanes() {
-			if t.Host == h && p.browser == nil && !yield(p) {
+			if t.Host == h && p.terminal() != nil && !yield(p) {
 				return
 			}
 		}
 	}
 }
 
-// endPane closes a pane's terminal. With end, the pane's session ends too:
+// endPane disposes the content. For terminals, end also ends the session:
 // its notice closes and this computer's session is killed, while a remote
 // one only detaches, as closing a remote tab does. Without, as when the
 // window closes, the session goes on.
 func (a *App) endPane(p *Pane, end bool) {
-	p.closed = true
-	if p.browser != nil {
-		p.browser.stop()
+	if p.closed {
 		return
 	}
-	if end {
-		a.markPaneClosed(p)
-	}
-	if p.term != nil {
-		a.closePaneTerminal(p)
-	}
-	if sid := cmp.Or(p.SID, p.recoverySID); end && sid != "" && p.host == nil {
-		go a.client.Kill(sid)
+	p.closed = true
+	if p.content != nil {
+		p.content.dispose(a, p, end)
 	}
 }
 
 // replacePane puts p in old's place in its tab, zoomed and focused as old
 // was, so that closing p later never gives the focus back to old.
 func (a *App) replacePane(old, p *Pane) {
+	p.Key = old.identity()
 	t := old.Tab
 	p.Tab, p.Node = t, old.Node
 	old.Node.Pane = p
@@ -568,7 +332,7 @@ func (a *App) replacePane(old, p *Pane) {
 	a.changed()
 }
 
-// closePane closes a pane and ends its session.
+// closePane removes a container and disposes its content.
 func (a *App) closePane(p *Pane) {
 	if p.closed {
 		return
@@ -784,35 +548,10 @@ func (a *App) toggleZoom() {
 // label returns how a pane names itself: its program, or the title the
 // program set, and the directory it works in.
 func (p *Pane) label() (name, detail string) {
-	if p.browser != nil {
-		return browserTitle(p.browser)
+	if p.content == nil {
+		return "窗格", ""
 	}
-	in := p.info
-	prog := paneProgram(p)
-	dir := shortDir(in.Dir)
-	if in.Program == "" {
-		return in.Shell, shortDir(p.startDir)
-	}
-	if in.Idle || prog.Shell {
-		name := in.Program
-		if name == "" {
-			name = in.Shell
-		}
-		return name, dir
-	}
-	if t := strings.TrimSpace(p.title); t != "" && !titleOfShell(t, in) {
-		t = programTitle(t, prog)
-		if t != "" {
-			return t, ""
-		}
-	}
-	name = prog.Name
-	if name == "ssh" || in.Program == "ssh" {
-		if host := sshHost(in.Args); host != "" {
-			return "SSH", host
-		}
-	}
-	return name, dir
+	return p.content.label(p)
 }
 
 // titleOfShell tells a title a shell set, naming the program or the
@@ -891,6 +630,9 @@ type savedTab struct {
 }
 
 type savedNode struct {
+	Kind     paneKind      `json:"kind,omitempty"`
+	PaneID   string        `json:"paneId,omitempty"`
+	Files    *savedFiles   `json:"files,omitempty"`
 	Browser  *savedBrowser `json:"browser,omitempty"`
 	SID      string        `json:"sid,omitempty"`
 	Dir      string        `json:"dir,omitempty"`
@@ -909,19 +651,8 @@ func (a *App) snapshotHost(host *desktopHost) savedLayout {
 	var save func(n *Node) *savedNode
 	save = func(n *Node) *savedNode {
 		if p := n.Pane; p != nil {
-			if p.browser != nil {
-				return &savedNode{Dir: p.info.Dir, Browser: &savedBrowser{ID: p.browser.id, URL: p.browser.url}}
-			}
-			s := &savedNode{SID: p.SID, Dir: p.info.Dir}
-			if s.SID == "" {
-				s.SID = p.recoverySID
-			}
-			if s.Dir == "" {
-				s.Dir = p.startDir
-			}
-			if p.term != nil {
-				s.Cols, s.Rows = p.term.Size()
-			}
+			s := p.content.snapshot(p)
+			s.Kind, s.PaneID, s.Dir = p.content.kind(), p.identity(), p.directory()
 			return s
 		}
 		return &savedNode{Vertical: n.Vertical, Ratio: n.Ratio, A: save(n.A), B: save(n.B)}
@@ -987,20 +718,15 @@ func (a *App) restore() bool {
 	load = func(s *savedNode, t *Tab, parent *Node) *Node {
 		n := &Node{ID: a.id(), Parent: parent}
 		if s.A == nil || s.B == nil {
-			if s.Browser != nil {
-				p, err := a.newBrowserPane(s.Browser.ID, s.Browser.URL, nil)
-				if err != nil {
-					p, _ = a.newBrowserPane(s.Browser.ID, "about:blank", nil)
-				}
+			if p := a.restorePaneContent(s, nil); p != nil {
 				p.Tab, p.Node = t, n
-				p.info.Dir, p.startDir = s.Dir, s.Dir
 				n.Pane = p
 				return n
 			}
 			var p *Pane
 			if in, ok := live[s.SID]; ok && !used[s.SID] {
 				used[s.SID] = true
-				p = &Pane{ID: a.id(), SID: s.SID, info: in, startDir: s.Dir}
+				p = &Pane{ID: a.id(), content: &terminalPane{SID: s.SID, info: in, startDir: s.Dir}}
 				a.attach(p, in.Cols, in.Rows)
 			} else {
 				if a.hello.AgentRecovery && s.SID != "" && !used[s.SID] {
@@ -1013,10 +739,10 @@ func (a *App) restore() bool {
 						dir, _ = os.UserHomeDir()
 					}
 					p = a.newPane(dir, s.Cols, s.Rows)
-					p.restored = true
+					p.terminal().restored = true
 				}
 			}
-			p.Tab, p.Node = t, n
+			p.Tab, p.Node, p.Key = t, n, s.PaneID
 			n.Pane = p
 			return n
 		}
@@ -1067,7 +793,7 @@ func (a *App) markSessionClosed(sid string) {
 }
 
 func (a *App) addSessionTab(in rex.SessionInfo) {
-	p := &Pane{ID: a.id(), SID: in.ID, info: in, startDir: in.Dir}
+	p := &Pane{ID: a.id(), content: &terminalPane{SID: in.ID, info: in, startDir: in.Dir}}
 	a.attach(p, in.Cols, in.Rows)
 	a.tabs = append(a.tabs, a.singlePaneTab(p))
 }
@@ -1080,7 +806,7 @@ func (a *App) syncSessionTabs(byID map[string]rex.SessionInfo) {
 	}
 	shown := map[string]bool{}
 	for p := range a.hostPanes(nil) {
-		shown[p.SID] = true
+		shown[p.terminal().SID] = true
 	}
 	added := false
 	for _, in := range sortedInfos(byID) {
@@ -1154,14 +880,14 @@ func (a *App) applyHost(host *desktopHost, byID map[string]rex.SessionInfo) {
 	var ended []*Pane
 	for p := range a.hostPanes(host) {
 		t := p.Tab
-		in, ok := byID[p.SID]
+		in, ok := byID[p.terminal().SID]
 		if !ok {
-			if host != nil && time.Since(p.info.Created) > 3*time.Second {
+			if host != nil && time.Since(p.terminal().info.Created) > 3*time.Second {
 				ended = append(ended, p)
 			}
 			continue
 		}
-		was := p.info
+		was := p.terminal().info
 		if a.hostHello(host).Version == 4 {
 			previous := was
 			// Reopening a window on the same App resets pane snapshots,
@@ -1169,17 +895,17 @@ func (a *App) applyHost(host *desktopHost, byID map[string]rex.SessionInfo) {
 			previous.Agent.CompletionRevision = max(previous.Agent.CompletionRevision, a.agentFinishedNotified[p.noticeKey()])
 			in.Agent = rex.LegacyCompletionState(previous, in)
 		}
-		p.info = in
+		p.terminal().info = in
 		if host != nil {
-			if p.remoteView != nil && p.stream == nil {
-				p.remoteView.geometry(in.Cols, in.Rows)
+			if p.terminal().remoteView != nil && p.terminal().stream == nil {
+				p.terminal().remoteView.geometry(in.Cols, in.Rows)
 			}
 			a.followRemoteSizeOwner(p)
 		}
 		// A viewer uses its own TCP stream. The control connection can
 		// stay healthy after that stream drops, so restore it on the
 		// next successful poll without redialing or replacing the shell.
-		if host != nil && host.connected() && p.streamEnded && !in.Exited {
+		if host != nil && host.connected() && p.terminal().streamEnded && !in.Exited {
 			a.reattachDesktopPane(p, in)
 		}
 		a.followSizeLock(p, was)

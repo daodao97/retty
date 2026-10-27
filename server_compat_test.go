@@ -50,7 +50,7 @@ func TestReopenReusesServerAndSessions(t *testing.T) {
 		for _, tab := range current.tabs {
 			for _, pane := range tab.panes() {
 				pane.closed = true
-				pane.term.Close() // Normal quit detaches; it does not kill.
+				pane.terminal().term.Close() // Normal quit detaches; it does not kill.
 			}
 		}
 		current.client.Close()
@@ -73,7 +73,7 @@ func TestReopenReusesServerAndSessions(t *testing.T) {
 		for _, tab := range current.tabs {
 			for _, pane := range tab.panes() {
 				count++
-				if live[pane.SID] != pane.info.PID || pane.restored {
+				if live[pane.terminal().SID] != pane.terminal().info.PID || pane.terminal().restored {
 					t.Fatal("reopen replaced a live shell")
 				}
 			}
@@ -89,7 +89,7 @@ func TestLegacyServerCompletionNotifications(t *testing.T) {
 	prefs = settings{FontSize: defaultFontSize}
 	t.Cleanup(func() { prefs = previousPrefs })
 	clock := time.Now().Add(-time.Minute)
-	p := &Pane{SID: "legacy", info: rex.SessionInfo{ID: "legacy", Program: "codex", LastInput: clock.Add(-time.Second), Agent: rex.AgentState{ID: "codex", SessionID: "thread", State: agents.Completed, Updated: clock}}}
+	p := &Pane{content: &terminalPane{SID: "legacy", info: rex.SessionInfo{ID: "legacy", Program: "codex", LastInput: clock.Add(-time.Second), Agent: rex.AgentState{ID: "codex", SessionID: "thread", State: agents.Completed, Updated: clock}}}}
 	tab := &Tab{Focus: p, Root: &Node{Pane: p}}
 	p.Tab = tab
 	a := &App{hello: rex.Hello{Version: 4}, tabs: []*Tab{tab}, agentFinishedNotified: map[string]uint64{}}
@@ -98,11 +98,12 @@ func TestLegacyServerCompletionNotifications(t *testing.T) {
 		notices++
 		return func() {}
 	}
-	info := p.info // Simulate version 4 JSON, always lacking the counter.
+	info := p.terminal( // Simulate version 4 JSON, always lacking the counter.
+	).info
 	apply := func(state string) {
 		clock = clock.Add(time.Second)
 		info.Agent.State, info.Agent.Updated = state, clock
-		a.apply(map[string]rex.SessionInfo{p.SID: info})
+		a.apply(map[string]rex.SessionInfo{p.terminal().SID: info})
 	}
 	apply(agents.Completed)
 	if notices != 0 {
@@ -129,7 +130,7 @@ func TestLegacyServerCompletionNotifications(t *testing.T) {
 	}
 	// Reopening the window replaces its snapshots but keeps the App's
 	// notification history. The next completion must still be delivered.
-	p.info = info
+	p.terminal().info = info
 	apply(agents.Failed)
 	if notices != 3 {
 		t.Fatal("reopening replayed the historical failure")
@@ -143,8 +144,8 @@ func TestLegacyServerCompletionNotifications(t *testing.T) {
 	// must not be synthesized from terminal input.
 	info.Agent.CompletionRevision = 42
 	a.hello.Version = 5
-	a.apply(map[string]rex.SessionInfo{p.SID: info})
-	if p.info.Agent.CompletionRevision != 42 {
+	a.apply(map[string]rex.SessionInfo{p.terminal().SID: info})
+	if p.terminal().info.Agent.CompletionRevision != 42 {
 		t.Fatal("version 5 server's counter was replaced")
 	}
 }

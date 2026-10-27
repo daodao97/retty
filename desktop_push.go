@@ -35,9 +35,9 @@ func (a *App) desktopPushActivity() push.DesktopActivity {
 	activity := push.DesktopActivity{ID: p.id, Sequence: p.sequence, RoutingVersion: 1, Present: present, Active: present, HideWaiting: prefs.HideDesktopNotifications || prefs.HideAgentNotifications, HideCompletion: prefs.HideDesktopNotifications || prefs.HideAgentCompletionNotifications}
 	// Active also carries presence to older workers, whose foreground lease
 	// is their only way to suppress APNs. New workers use the exact pane.
-	if a.win.IsFocused() && !a.win.IsMinimized() && present && !prefs.FilesOpen && (a.terminalHistory == nil || !a.terminalHistory.open) {
-		if t := a.tab(); t != nil && t.Focus != nil && !t.Focus.closed {
-			activity.ViewedDesktop, activity.ViewedSession = a.hostHello(t.Host).Host.ID, t.Focus.SID
+	if a.win.IsFocused() && !a.win.IsMinimized() && present && (a.terminalHistory == nil || !a.terminalHistory.open) {
+		if t := a.tab(); t != nil && t.Focus != nil && t.Focus.terminal() != nil && !t.Focus.closed {
+			activity.ViewedDesktop, activity.ViewedSession = a.hostHello(t.Host).Host.ID, t.Focus.terminal().SID
 		}
 	}
 	return activity
@@ -119,7 +119,7 @@ func startDesktopPushPresence(a *App) {
 }
 
 func (a *App) paneNoticeID(p *Pane) string {
-	info := p.info
+	info := p.terminal().info
 	h := a.hostHello(p.host)
 	if h.Version < 5 {
 		info.Agent.CompletionRevision = 0
@@ -134,7 +134,7 @@ func (a *App) routePaneNotice(p *Pane, kind string, opts mygo.NotificationOption
 		sum := sha256.Sum256([]byte(fmt.Sprintf("%s\x00%s\x00%d", id, opts.Body, time.Now().UnixNano())))
 		id = fmt.Sprintf("retty-agent-%x", sum[:16])
 	}
-	n := push.Notice{ID: id, Desktop: a.hostHello(p.host).Host.ID, Session: p.SID, Kind: kind, Title: opts.Title, Body: opts.Body}
+	n := push.Notice{ID: id, Desktop: a.hostHello(p.host).Host.ID, Session: p.terminal().SID, Kind: kind, Title: opts.Title, Body: opts.Body}
 	n.Viewed = activity.Present && activity.ViewedDesktop == n.Desktop && activity.ViewedSession == n.Session
 	win := a.win
 	var client *rex.Client

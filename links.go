@@ -151,12 +151,12 @@ func resolveTerminalLink(link terminal.Link, cwd, home, editor string, remote bo
 }
 
 func (a *App) openTerminalLink(p *Pane, link terminal.Link) {
-	cwd := p.info.Dir
+	cwd := p.terminal().info.Dir
 	if cwd == "" {
-		cwd = p.startDir
+		cwd = p.terminal().startDir
 	}
 	home, _ := os.UserHomeDir()
-	remote := p.host != nil || p.info.Program == "ssh" || p.info.Program == "mosh"
+	remote := p.host != nil || p.terminal().info.Program == "ssh" || p.terminal().info.Program == "mosh"
 	if p.host != nil {
 		home = p.host.hello.Host.Home
 	}

@@ -11,6 +11,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -30,6 +31,13 @@ import (
 // window dispatcher. The browser owns their lifetime, including parallel
 // directory reads; stop closes them before changing or disposing the owner.
 type desktopFiles struct {
+	sourceSID      string
+	started        bool
+	offline        bool
+	restorePreview string
+	restoreFilter  string
+	width          float32
+
 	base                                             string
 	comparison                                       *gitstate.Comparison
 	turn                                             string
@@ -100,59 +108,120 @@ func (b *desktopFiles) reader() func(context.Context, *rex.Client, files.Request
 	return fileRequest
 }
 
+// The shortcut opens a file component beside the current pane. Invoked in a
+// file component it closes that pane, returning focus through the split tree.
 func (a *App) toggleFiles() {
-	prefs.FilesOpen = !prefs.FilesOpen
-	if !prefs.FilesOpen {
-		prefs.FilesSidePanel = false
+	if b := a.focusedFiles(); b != nil {
+		a.closePane(b.pane)
+		return
 	}
-	saveSettings()
-	if prefs.FilesOpen {
-		a.focusReq = nil
+	var parent *Pane
+	if t := a.tab(); t != nil {
+		parent = t.Focus
 	}
-	if !prefs.FilesOpen {
-		if a.files != nil {
-			a.files.stop()
-		}
-		a.files = nil
-		a.focusCurrentTerminal()
-	}
+	a.openFilesPane(parent, a.currentDir(), false, false)
 }
 
-func (a *App) syncFiles() {
-	if !prefs.FilesOpen {
-		return
+func (a *App) openFilesPane(parent *Pane, dir string, diff, down bool) *Pane {
+	if parent != nil && (parent.closed || parent.Tab == nil || !slices.Contains(a.tabs, parent.Tab)) {
+		return nil
 	}
-	var p *Pane
-	if t := a.tab(); t != nil {
-		p = t.Focus
+	host := a.currentHost()
+	if parent != nil {
+		host = parent.host
 	}
-	if p == nil || p.closed {
-		if a.files != nil {
-			a.files.stop()
-			a.files = nil
-		}
-		return
-	}
-	cwd := a.currentDir()
-	var client *rex.Client
-	if p.host != nil {
-		client = p.host.client
-	}
-	if b := a.files; b != nil && b.pane == p && b.host == p.host && b.client == client && b.cwd == cwd {
-		if b.diff && b.base == "turn" && b.turn != p.info.GitTurn {
-			a.loadFileDirectory(b, cwd)
-		}
-		return
-	}
-	if a.files != nil {
-		a.files.stop()
-	}
-	b := &desktopFiles{pane: p, host: p.host, client: client, cwd: cwd, diff: prefs.FilesDiff, base: prefs.FilesDiffBase}
+	b := &desktopFiles{cwd: dir, dir: dir, diff: diff, base: prefs.FilesDiffBase, width: prefs.FilesWidth, filterFocus: true}
 	if b.base != "turn" && b.base != "branch" {
 		b.base = "head"
 	}
-	a.files = b
-	a.loadFileDirectory(b, cwd)
+	if parent != nil {
+		if v := parent.terminal(); v != nil {
+			b.sourceSID, b.turn = v.SID, v.info.GitTurn
+		} else if source := parent.files(); source != nil {
+			b.sourceSID, b.turn = source.sourceSID, source.turn
+		}
+	}
+	p := &Pane{ID: a.id(), host: host, dir: dir, content: b}
+	b.pane, b.host = p, host
+	if host != nil {
+		b.client = host.client
+	}
+	a.placePane(parent, p, down)
+	if parent != nil && !down {
+		parent.Node.Parent.Ratio = 0.32
+	}
+	a.syncFiles()
+	return p
+}
+
+// Each file component keeps its own requests and preview, including while
+// hidden. A changed remote transport invalidates only that owner's work.
+func (a *App) syncFiles() {
+	// One-time migration of the old global workspace setting into the layout.
+	if prefs.FilesOpen {
+		prefs.FilesOpen, prefs.FilesSidePanel = false, false
+		saveSettings()
+		if a.focusedFiles() == nil {
+			var parent *Pane
+			if t := a.tab(); t != nil {
+				parent = t.Focus
+			}
+			a.openFilesPane(parent, a.currentDir(), prefs.FilesDiff, false)
+		}
+	}
+	for _, p := range a.allPanes() {
+		b := p.files()
+		if b == nil || p.closed {
+			continue
+		}
+		var client *rex.Client
+		if p.host != nil {
+			client = p.host.client
+		}
+		if p.host != nil && !p.host.connected() {
+			if !b.offline || !b.started {
+				b.stop()
+				b.loading, b.previewLoading = false, false
+				b.offline, b.started = true, true
+				b.err = "远端未连接，请先连接这台主机"
+			}
+			continue
+		}
+		if !b.started || b.client != client || b.offline {
+			b.client, b.started = client, true
+			b.offline = false
+			path := b.dir
+			preview, filter := b.restorePreview, b.restoreFilter
+			if preview == "" {
+				preview = b.preview
+			}
+			if filter == "" {
+				filter = b.filter
+			}
+			a.loadFileDirectory(b, path)
+			b.restorePreview, b.restoreFilter = preview, filter
+		} else if b.diff && b.base == "turn" && b.turn != b.currentTurn(a) {
+			a.loadFileDirectory(b, b.cwd)
+		}
+	}
+}
+
+func (b *desktopFiles) sourcePane(a *App) *Pane {
+	if b.sourceSID == "" {
+		return nil
+	}
+	for p := range a.hostPanes(b.host) {
+		if !p.closed && p.terminal().SID == b.sourceSID {
+			return p
+		}
+	}
+	return nil
+}
+func (b *desktopFiles) currentTurn(a *App) string {
+	if p := b.sourcePane(a); p != nil {
+		return p.terminal().info.GitTurn
+	}
+	return b.turn
 }
 
 func fileRequest(ctx context.Context, client *rex.Client, req files.Request) (files.Result, error) {
@@ -163,29 +232,22 @@ func fileRequest(ctx context.Context, client *rex.Client, req files.Request) (fi
 }
 
 func (a *App) filesCurrent(b *desktopFiles) bool {
-	if a.files != b || !prefs.FilesOpen || a.quitting || b.pane.closed {
+	if b == nil || b.pane == nil || a.quitting || b.pane.closed || b.pane.files() != b {
 		return false
 	}
-	t := a.tab()
-	return t != nil && t.Focus == b.pane && b.host == b.pane.host && (b.pane.host == nil || b.pane.host.client == b.client && b.pane.host.connected())
+	p := b.pane
+	return p.Tab != nil && slices.Contains(a.tabs, p.Tab) && b.host == p.host && (p.host == nil || p.host.client == b.client && p.host.connected())
 }
 
 func (a *App) openTerminalFile(p *Pane, link terminal.Link) {
 	if t := a.tab(); t == nil || t.Focus != p || p.closed {
 		return
 	}
-	prefs.FilesOpen = true
-	prefs.FilesSidePanel = false
-	a.focusReq = nil
-	saveSettings()
-	a.syncFiles()
-	b := a.files
-	if b == nil || !a.filesCurrent(b) {
+	owner := a.openFilesPane(p, filepath.Dir(link.Path), false, false)
+	if owner == nil {
 		return
 	}
-	// File links show the file itself, even when the browser was showing Diff.
-	b.diff = false
-	a.loadFileDirectory(b, filepath.Dir(link.Path))
+	b := owner.files()
 	read, client := b.reader(), b.client
 	b.linkTask = async.New(a.desktopDispatcher(), func(state async.State[files.Result]) {
 		if !a.filesCurrent(b) {
@@ -221,6 +283,7 @@ func (a *App) openTerminalFile(p *Pane, link terminal.Link) {
 }
 
 func (a *App) loadFileDirectory(b *desktopFiles, path string) {
+	b.restorePreview, b.restoreFilter = "", ""
 	b.stop()
 	b.loading = true
 	b.err = ""
@@ -233,6 +296,7 @@ func (a *App) loadFileDirectory(b *desktopFiles, path string) {
 	b.previewAdded, b.previewRemoved = 0, 0
 	b.filter = ""
 	b.dir, b.pathInput = path, path
+	a.changed()
 	b.entries = nil
 	b.dirs = map[string]*fileDirectory{}
 	b.truncated = false
@@ -246,7 +310,7 @@ func (a *App) loadFileDirectory(b *desktopFiles, path string) {
 	read, client := b.reader(), b.client
 	hidden := prefs.FilesHidden
 	diff := b.diff
-	base, sid, turn := b.base, b.pane.SID, b.pane.info.GitTurn
+	base, sid, turn := b.base, b.sourceSID, b.currentTurn(a)
 	if b.turn != turn {
 		b.turnRetry = 0
 	}
@@ -274,6 +338,16 @@ func (a *App) loadFileDirectory(b *desktopFiles, path string) {
 			} else {
 				b.dirs[r.Path] = &fileDirectory{open: true, entries: r.Entries}
 			}
+			if b.restorePreview != "" {
+				path := b.restorePreview
+				b.restorePreview = ""
+				a.previewFile(b, path, b.diff, 256<<10)
+			}
+			if b.restoreFilter != "" {
+				b.filter, b.restoreFilter = b.restoreFilter, ""
+			}
+			a.changed()
+
 		}
 	})
 	b.directoryTask.Start(context.Background(), func(ctx context.Context, publish func(files.Result)) error {
@@ -314,6 +388,7 @@ func (a *App) previewFileAt(b *desktopFiles, path string, diff bool, limit, line
 		b.linkTask = nil
 	}
 	b.preview, b.diff, b.previewLimit = path, diff, limit
+	a.changed()
 	b.previewLoading = true
 	b.err, b.previewNote = "", ""
 	b.previewImage, b.previewData = nil, nil
@@ -425,15 +500,16 @@ func (a *App) insertFilePath(b *desktopFiles, path string) {
 	if !a.filesCurrent(b) {
 		return
 	}
-	p := b.pane
-	if !p.acceptsFileDrop() {
+	p := b.sourcePane(a)
+	if p == nil || !p.acceptsFileDrop() {
 		b.err = "当前窗格不可输入，请先接入会话"
 		return
 	}
-	p.term.Paste(droppedFilePaths([]string{path}))
+	p.terminal().term.Paste(droppedFilePaths([]string{path}))
 	b.expanded = false
-	a.toggleFiles()
+	p.Tab.setFocus(p)
 	a.focusReq = p
+	a.changed()
 }
 
 // Download writes only a user-chosen local destination. Temporary partial
@@ -502,7 +578,7 @@ func (a *App) saveBrowserFile(b *desktopFiles, path string) {
 		if err == nil && destination != "" && ctx.Err() == nil {
 			err = downloadFile(ctx, client, path, destination, func(done, total int64) {
 				a.post(func() {
-					if a.files == b && b.downloadEpoch == epoch {
+					if a.focusedFiles() == b && b.downloadEpoch == epoch {
 						b.downloadProgress = fmt.Sprintf("%s / %s", fileSize(done), fileSize(total))
 					}
 				})
@@ -512,7 +588,7 @@ func (a *App) saveBrowserFile(b *desktopFiles, path string) {
 			})
 		}
 		a.post(func() {
-			if a.files != b || b.downloadEpoch != epoch {
+			if a.focusedFiles() != b || b.downloadEpoch != epoch {
 				return
 			}
 			b.downloading = false

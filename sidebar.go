@@ -104,6 +104,7 @@ func (a *App) sidebarTitleBar(c *ui.Context, k *colors, bar ui.TitleBar) {
 			a.newTab(a.currentDir())
 		}
 		a.filesToggle(c, k)
+		a.browserButton(c, k)
 		if compactTitleButton(c.Key("desktop-connections"), k, "plug-connected", "连接", a.hasDesktopConnections()).BorderWidth(0).Tooltip("连接").Clicked() {
 			a.showDesktopConnections(nil)
 		}
@@ -138,7 +139,7 @@ func (a *App) sidebarTab(c *ui.Context, k *colors, i int, t *Tab) {
 		} else if t.Focus != nil {
 			prog := paneProgram(t.Focus)
 			glyph, color = prog.Glyph, programIconColor(c, prog)
-			if prog.Shell || t.Focus.info.Program == "" {
+			if prog.Shell || t.Focus.sessionInfo().Program == "" {
 				color = k.iconMuted
 			}
 		}

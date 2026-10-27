@@ -55,8 +55,8 @@ func (a *App) debug(dir, line string) {
 		arg = strings.ReplaceAll(arg, `\r`, "\r")
 		arg = strings.ReplaceAll(arg, `\e`, "\x1b")
 		win.Update(func() {
-			if t := a.tab(); t != nil && t.Focus != nil && t.Focus.term != nil {
-				t.Focus.term.Send([]byte(arg))
+			if t := a.tab(); t != nil && t.Focus != nil && t.Focus.terminalView() != nil {
+				t.Focus.terminal().term.Send([]byte(arg))
 			}
 		})
 	case "size":

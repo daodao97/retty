@@ -298,7 +298,7 @@ func (a *App) desktopHostSessions(c *ui.Context, h *desktopHost) {
 				if i > 0 {
 					desktopConnectionDivider(c)
 				}
-				p := &Pane{info: in, startDir: in.Dir}
+				p := &Pane{content: &terminalPane{info: in, startDir: in.Dir}}
 				name, _ := p.label()
 				row := desktopConnectionRow(c, "remote-session-"+h.key+in.ID, "打开远端会话 "+in.ID, 64).Disabled(!h.connected() || h.creating)
 				row.Children(func() {

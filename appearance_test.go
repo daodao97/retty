@@ -31,7 +31,7 @@ func TestCodexInputPanelFollowsAppearance(t *testing.T) {
 	t.Cleanup(func() { prefs = previous })
 	a, tt := newStaticTestApp(t)
 	p := a.tab().Focus
-	p.info.Program, p.info.Idle, p.info.Args = "codex", false, nil
+	p.terminal().info.Program, p.terminal().info.Idle, p.terminal().info.Args = "codex", false, nil
 	tt.SetScale(2)
 	for _, cachedDark := range []bool{false, true} {
 		tt.SetDark(cachedDark)
@@ -40,7 +40,7 @@ func TestCodexInputPanelFollowsAppearance(t *testing.T) {
 		if cachedDark {
 			bg, fg = 42, 70
 		}
-		p.term.Feed([]byte(fmt.Sprintf("\x1b[?1049h\x1b[?25l\x1b[H\x1b[2J"+
+		p.terminal().term.Feed([]byte(fmt.Sprintf("\x1b[?1049h\x1b[?25l\x1b[H\x1b[2J"+
 			"OpenAI Codex\r\n\r\n"+
 			"\x1b[48;2;%d;%d;%d;38;2;%d;%d;%dm\x1b[2KAsk Codex to do anything\x1b[0m", bg, bg, bg, fg, fg, fg)))
 		for _, dark := range []bool{cachedDark, !cachedDark, cachedDark} {
@@ -53,7 +53,7 @@ func TestCodexInputPanelFollowsAppearance(t *testing.T) {
 			if !ok {
 				t.Fatal("missing terminal")
 			}
-			_, rows := p.term.Size()
+			_, rows := p.terminal().term.Size()
 			saveSettingsImage(t, tt, fmt.Sprintf("codex-input-cached-%t-dark-%t", cachedDark, dark))
 			pixel := tt.Image().RGBAAt(int((r.X+r.W-2)*2), int((r.Y+r.H/float32(rows)*2.5)*2))
 			if dark == cachedDark {
@@ -66,11 +66,11 @@ func TestCodexInputPanelFollowsAppearance(t *testing.T) {
 		}
 	}
 	// Appearance adaptation must also work in ordinary, non-Agent programs.
-	p.info.Program = "vim"
+	p.terminal().info.Program = "vim"
 	tt.SetDark(false)
 	tt.Frame()
 	r, _ := tt.Find("Terminal")
-	_, rows := p.term.Size()
+	_, rows := p.terminal().term.Size()
 	pixel := tt.Image().RGBAAt(int((r.X+r.W-2)*2), int((r.Y+r.H/float32(rows)*2.5)*2))
 	if pixel.R < 128 {
 		t.Fatalf("editor did not inherit terminal color adaptation: %v", pixel)
@@ -98,7 +98,7 @@ func TestLightAppearanceReadability(t *testing.T) {
 	t.Cleanup(func() { prefs = previous })
 	a, tt := newTestApp(t)
 	p := a.tab().Focus
-	waitFor(t, tt, "shell prompt", func() bool { return strings.Contains(p.term.Text(), "$") })
+	waitFor(t, tt, "shell prompt", func() bool { return strings.Contains(p.terminal().term.Text(), "$") })
 	var output strings.Builder
 	output.WriteString("\x1b[?25l\x1b[H\x1b[2JAgent output / 终端文字对比度\r\n\r\n")
 	for i := range 16 {
@@ -112,7 +112,7 @@ func TestLightAppearanceReadability(t *testing.T) {
 		"\x1b[38;2;210;220;235mRGB 浅灰文字：Agent 自定义颜色\x1b[0m\r\n" +
 		"\x1b[2m弱化文字：会话说明和进度\x1b[0m\r\n" +
 		"\x1b[48;2;35;40;45;38;2;90;100;110m自定义深色背景上的文字\x1b[0m\r\n")
-	p.term.Feed([]byte(output.String()))
+	p.terminal().term.Feed([]byte(output.String()))
 	tt.SetSize(1200, 780)
 	tt.SetScale(2)
 	for _, dark := range []bool{false, true} {

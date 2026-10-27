@@ -21,13 +21,13 @@ func (a *App) findBrowser(id string) (*Pane, error) {
 	}
 	var found *Pane
 	for _, p := range a.allPanes() {
-		if p.browser == nil || p.closed {
+		if p.browser() == nil || p.closed {
 			continue
 		}
-		if p.browser.id == id {
+		if p.browser().id == id {
 			return p, nil
 		}
-		if len(id) >= 4 && strings.HasPrefix(p.browser.id, id) {
+		if len(id) >= 4 && strings.HasPrefix(p.browser().id, id) {
 			if found != nil {
 				return nil, errors.New("ambiguous browser ID prefix")
 			}
@@ -45,9 +45,12 @@ func (a *App) browserParent(id, host string) (*Pane, error) {
 		if p.closed || host != "" && (p.host == nil || p.host.key != host) {
 			continue
 		}
-		candidate := p.SID
-		if p.browser != nil {
-			candidate = p.browser.id
+		candidate := p.identity()
+		if v := p.terminal(); v != nil {
+			candidate = v.SID
+		}
+		if p.browser() != nil {
+			candidate = p.browser().id
 		}
 		if candidate == id {
 			return p, nil
@@ -75,8 +78,8 @@ func (a *App) handleBrowserControl(ctx context.Context, req browsercontrol.Reque
 		err := onUI(func() {
 			if req.Command == "list" {
 				for _, p := range a.allPanes() {
-					if p.browser != nil && !p.closed {
-						result.Browsers = append(result.Browsers, p.browser.info(p.host))
+					if p.browser() != nil && !p.closed {
+						result.Browsers = append(result.Browsers, p.browser().info(p.host))
 					}
 				}
 				for _, h := range a.desktops.hosts {
@@ -108,7 +111,7 @@ func (a *App) handleBrowserControl(ctx context.Context, req browsercontrol.Reque
 			var p *Pane
 			p, opErr = a.openBrowser(parent, req.URL, host, req.Direction == "down")
 			if opErr == nil {
-				info := p.browser.info(p.host)
+				info := p.browser().info(p.host)
 				result.Browser = &info
 			}
 		})
@@ -138,7 +141,7 @@ func (a *App) handleBrowserControl(ctx context.Context, req browsercontrol.Reque
 			}
 			a.syncBrowsers()
 		}
-		b = p.browser
+		b = p.browser()
 		if req.Command == "navigate" {
 			a.navigateBrowser(p, req.URL)
 		}
@@ -240,7 +243,7 @@ func (a *App) handleBrowserControl(ctx context.Context, req browsercontrol.Reque
 			}
 			result.PNG = captured.data
 			if err := onUI(func() {
-				if p.closed || p.browser != b || b.epoch != epoch {
+				if p.closed || p.browser() != b || b.epoch != epoch {
 					opErr = errors.New("page changed; capture again")
 					return
 				}
@@ -325,7 +328,7 @@ func (a *App) handleBrowserControl(ctx context.Context, req browsercontrol.Reque
 		return result, err
 	}
 	err = onUI(func() {
-		if p.closed || p.browser != b || b.epoch != epoch {
+		if p.closed || p.browser() != b || b.epoch != epoch {
 			opErr = errors.New("page changed; read it again")
 			return
 		}

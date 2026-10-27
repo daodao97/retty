@@ -20,8 +20,8 @@ import (
 	"retty/internal/rex"
 )
 
-func TestDesktopFilesCloseCommandsKeepTerminal(t *testing.T) {
-	for _, cmd := range []*command{&cmdClosePane, &cmdCloseTab} {
+func TestDesktopFilesClosePaneKeepsTerminal(t *testing.T) {
+	for _, cmd := range []*command{&cmdClosePane} {
 		for _, layout := range []string{"", "sidebar"} {
 			t.Run(fmt.Sprintf("%s/layout=%s", cmd.Title, layout), func(t *testing.T) {
 				previous := prefs
@@ -31,21 +31,21 @@ func TestDesktopFilesCloseCommandsKeepTerminal(t *testing.T) {
 				a, tt := newStaticTestApp(t)
 				original := a.tab()
 				p, root := original.Focus, original.Root
-				p.info.Dir = t.TempDir()
+				p.terminal().info.Dir = t.TempDir()
 				tt.Frame()
 				a.toggleFiles()
 				tt.Frame()
-				browser := a.files
+				browser := a.focusedFiles()
 				t.Cleanup(browser.stop)
 				ctx := blockedDesktopFilePreview(t, a, browser)
 
 				// Native menu accelerators dispatch these commands outside the tester.
 				cmd.Run(a)
 				tt.Frame()
-				if prefs.FilesOpen || readSettings().FilesOpen || a.files != nil {
+				if prefs.FilesOpen || readSettings().FilesOpen || a.focusedFiles() != nil {
 					t.Fatal("close command did not dismiss the file browser")
 				}
-				if len(a.tabs) != 1 || a.tab() != original || original.Root != root || original.Focus != p || p.closed || p.term == nil {
+				if len(a.tabs) != 1 || a.tab() != original || original.Root != root || original.Focus != p || p.closed || p.terminalView() == nil {
 					t.Fatal("closing the file browser closed its terminal")
 				}
 				if !tt.Focused("Terminal") || !a.paneIsViewed(p) {
@@ -59,7 +59,7 @@ func TestDesktopFilesCloseCommandsKeepTerminal(t *testing.T) {
 	}
 }
 
-func TestNewTabLeavesFileWorkspace(t *testing.T) {
+func TestNewTabPreservesFilePane(t *testing.T) {
 	for _, remote := range []bool{false, true} {
 		for _, layout := range []string{"", "sidebar"} {
 			t.Run(fmt.Sprintf("remote=%t/layout=%s", remote, layout), func(t *testing.T) {
@@ -82,8 +82,8 @@ func TestNewTabLeavesFileWorkspace(t *testing.T) {
 					a.newLocalTab(t.TempDir())
 				}
 				t.Cleanup(func() {
-					if a.files != nil {
-						a.files.stop()
+					if a.focusedFiles() != nil {
+						a.focusedFiles().stop()
 					}
 					for _, tab := range a.tabs {
 						for _, p := range tab.panes() {
@@ -95,7 +95,7 @@ func TestNewTabLeavesFileWorkspace(t *testing.T) {
 				original := a.tab()
 				a.toggleFiles()
 				tt.Frame()
-				browser := a.files
+				browser := a.focusedFiles()
 				ctx := blockedDesktopFilePreview(t, a, browser)
 				if layout == "sidebar" {
 					// Native menu accelerators dispatch commands outside the headless tester.
@@ -105,18 +105,19 @@ func TestNewTabLeavesFileWorkspace(t *testing.T) {
 				}
 				waitFor(t, tt, "new terminal tab", func() bool { return len(a.tabs) == 2 && !prefs.FilesOpen })
 				tt.Frame()
-				if a.tab() == original || a.files != nil || readSettings().FilesOpen || !a.paneIsViewed(a.tab().Focus) {
+				if a.tab() == original || a.focusedFiles() != nil || readSettings().FilesOpen || !a.paneIsViewed(a.tab().Focus) {
 					t.Fatal("new tab did not replace the file workspace")
 				}
-				if ctx.Err() == nil {
-					t.Fatal("file preview request remained active")
+				if ctx.Err() != nil || browser.pane.closed || browser.pane.files() != browser {
+					t.Fatal("switching tabs disposed the file component")
 				}
+				t.Cleanup(browser.stop)
 				if remote {
-					waitFor(t, tt, "new tab input attachment", func() bool { return a.tab().Focus.remoteView.inputReady() })
+					waitFor(t, tt, "new tab input attachment", func() bool { return a.tab().Focus.terminal().remoteView.inputReady() })
 				}
 				tt.Type("printf 'new-tab-%s\\n' focused")
 				tt.Key(0, ui.KeyEnter)
-				waitFor(t, tt, "new tab input", func() bool { return strings.Contains(a.tab().Focus.term.Text(), "new-tab-focused") })
+				waitFor(t, tt, "new tab input", func() bool { return strings.Contains(a.tab().Focus.terminal().term.Text(), "new-tab-focused") })
 				infos, err := client.List()
 				if err != nil || len(infos) != 2 || infos[0].Exited || infos[1].Exited {
 					t.Fatal("original session was not preserved", infos, err)
@@ -147,22 +148,26 @@ func TestDesktopFilesBrowsePreviewAndLayouts(t *testing.T) {
 	img.Close()
 	a, tt := newStaticTestApp(t)
 	p := a.tab().Focus
-	p.info.Dir = dir
-	p.term.Feed([]byte("Retty file browser fixture\r\n$ agent is running\r\n"))
+	p.terminal().info.Dir = dir
+	p.terminal().term.Feed([]byte("Retty file browser fixture\r\n$ agent is running\r\n"))
 	root := a.tab().Root
 	t.Cleanup(func() {
-		if a.files != nil {
-			a.files.stop()
+		if a.focusedFiles() != nil {
+			a.focusedFiles().stop()
 		}
 	})
 	tt.Frame()
 	if err := tt.Click("打开文件浏览器"); err != nil {
 		t.Fatal(err)
 	}
-	waitFor(t, tt, "directory", func() bool { return a.files != nil && !a.files.loading && len(a.files.entries) == 3 })
-	if !readSettings().FilesOpen || a.tab().Root != root || a.paneIsViewed(p) {
-		t.Fatal("workspace did not preserve the hidden terminal")
+	waitFor(t, tt, "directory", func() bool {
+		return a.focusedFiles() != nil && !a.focusedFiles().loading && len(a.focusedFiles().entries) == 3
+	})
+	if len(a.tab().panes()) != 2 || a.tab().Root != root || a.paneIsViewed(p) || p.closed {
+		t.Fatal("file split did not preserve the terminal")
 	}
+	a.toggleZoom()
+	tt.Frame()
 	content, ok := tt.Find("文件内容区")
 	if !ok || content.W != 739 || content.Y != compactTitleH || content.H != 620-compactTitleH {
 		t.Fatal("content does not occupy remaining workspace", content)
@@ -174,22 +179,22 @@ func TestDesktopFilesBrowsePreviewAndLayouts(t *testing.T) {
 		t.Fatal(err)
 	}
 	waitFor(t, tt, "nested directory", func() bool { return tt.HasText("nested.go") })
-	if a.files.dir != dir {
+	if a.focusedFiles().dir != dir {
 		t.Fatal("expanding tree changed root")
 	}
 	if err := tt.Click("nested.go"); err != nil {
 		t.Fatal(err)
 	}
 	waitFor(t, tt, "nested preview", func() bool {
-		return !a.files.previewLoading && strings.Contains(string(a.files.previewData), "package nested")
+		return !a.focusedFiles().previewLoading && strings.Contains(string(a.focusedFiles().previewData), "package nested")
 	})
 	if err := tt.Click("src"); err != nil {
 		t.Fatal(err)
 	}
 	tt.Frame()
-	if tt.HasText("nested.go") {
-		t.Fatal("directory did not collapse")
-	}
+	if a.focusedFiles().dirs[filepath.Join(dir,"src")].open {
+ t.Fatal("directory did not collapse")
+ }
 
 	if err := tt.Click("文件选项"); err != nil {
 		t.Fatal(err)
@@ -197,7 +202,7 @@ func TestDesktopFilesBrowsePreviewAndLayouts(t *testing.T) {
 	if err := tt.ChooseMenuItem("显示隐藏文件"); err != nil {
 		t.Fatal(err)
 	}
-	waitFor(t, tt, "hidden files", func() bool { return !a.files.loading && len(a.files.entries) == 4 })
+	waitFor(t, tt, "hidden files", func() bool { return !a.focusedFiles().loading && len(a.focusedFiles().entries) == 4 })
 	if !readSettings().FilesHidden {
 		t.Fatal("hidden preference did not persist")
 	}
@@ -208,19 +213,19 @@ func TestDesktopFilesBrowsePreviewAndLayouts(t *testing.T) {
 		t.Fatal(err)
 	}
 	tt.Frame()
-	if !a.files.pathEditing {
+	if !a.focusedFiles().pathEditing {
 		t.Fatal("directory dialog did not open")
 	}
 	tt.Key(ui.Cmd|ui.Shift, ui.KeyE)
 	tt.Frame()
-	if !prefs.FilesOpen {
+	if a.focusedFiles() == nil {
 		t.Fatal("directory input leaked shortcut to workspace")
 	}
 	if err := tt.Click("取消"); err != nil {
 		t.Fatal(err)
 	}
 	tt.Frame()
-	if a.files.pathEditing {
+	if a.focusedFiles().pathEditing {
 		t.Fatal("directory dialog did not close")
 	}
 
@@ -254,7 +259,9 @@ func TestDesktopFilesBrowsePreviewAndLayouts(t *testing.T) {
 	if err := tt.Click("README.md"); err != nil {
 		t.Fatal(err)
 	}
-	waitFor(t, tt, "text preview", func() bool { return a.files.preview != "" && !a.files.previewLoading && a.files.previewCode != nil })
+	waitFor(t, tt, "text preview", func() bool {
+		return a.focusedFiles().preview != "" && !a.focusedFiles().previewLoading && a.focusedFiles().previewCode != nil
+	})
 	if !tt.HasText("文件预览") {
 		t.Fatal(tt.Texts())
 	}
@@ -280,7 +287,7 @@ func TestDesktopFilesBrowsePreviewAndLayouts(t *testing.T) {
 	tt.Key(ui.Cmd, ui.KeyA)
 	tt.Type("accidental edit")
 	tt.Key(ui.Cmd, ui.KeyC)
-	if tt.Clipboard() != "# Fixture\n文件预览\n" || a.files.previewCode.Buffer.String() != string(a.files.previewData) {
+	if tt.Clipboard() != "# Fixture\n文件预览\n" || a.focusedFiles().previewCode.Buffer.String() != string(a.focusedFiles().previewData) {
 		t.Fatal("read-only preview changed text or lost its multiline selection", tt.Clipboard())
 	}
 	// App and native-menu Find commands must search the loaded file.
@@ -288,14 +295,14 @@ func TestDesktopFilesBrowsePreviewAndLayouts(t *testing.T) {
 	tt.Frame()
 	tt.Type("文件预览")
 	tt.Frame()
-	if count, _ := a.files.previewCode.FindMatches(); count != 1 || a.files.filter != "" || p.find.open {
+	if count, _ := a.focusedFiles().previewCode.FindMatches(); count != 1 || a.focusedFiles().filter != "" || p.terminal().find.open {
 		t.Fatal("file search went to the tree or the hidden terminal", count)
 	}
 	tt.Key(0, ui.KeyEscape)
 	tt.Frame()
 	chooseFileAction(t, tt, "放大预览")
 	tt.Frame()
-	if !a.files.expanded {
+	if !a.focusedFiles().expanded {
 		t.Fatal("preview did not expand")
 	}
 	if a.paneIsViewed(p) {
@@ -303,13 +310,13 @@ func TestDesktopFilesBrowsePreviewAndLayouts(t *testing.T) {
 	}
 	tt.Key(0, ui.KeyEscape)
 	tt.Frame()
-	if a.files.expanded {
+	if a.focusedFiles().expanded {
 		t.Fatal("escape did not dismiss preview")
 	}
 	if err := tt.Click("image.png"); err != nil {
 		t.Fatal(err)
 	}
-	waitFor(t, tt, "image preview", func() bool { return !a.files.previewLoading && a.files.previewImage != nil })
+	waitFor(t, tt, "image preview", func() bool { return !a.focusedFiles().previewLoading && a.focusedFiles().previewImage != nil })
 	if path := os.Getenv("RETTY_FILES_SNAPSHOT_DIR"); path != "" {
 		os.MkdirAll(path, 0700)
 		f, err := os.Create(filepath.Join(path, "files-image.png"))
@@ -330,6 +337,7 @@ func TestDesktopFilesBrowsePreviewAndLayouts(t *testing.T) {
 		t.Fatal("sidebar and workspace overlap", content)
 	}
 	prefs.FilesWidth = 420
+	a.focusedFiles().width = 420
 	tt.SetSize(560, 620)
 	content, ok = tt.Find("文件内容区")
 	if !ok || content.W < 200 || content.X+content.W > 560 || prefs.FilesWidth != 420 {
@@ -341,6 +349,7 @@ func TestDesktopFilesBrowsePreviewAndLayouts(t *testing.T) {
 		t.Fatal("widening the window did not restore the chosen tree width", content, prefs.FilesWidth)
 	}
 	prefs.FilesWidth = 260
+	a.focusedFiles().width = 260
 	if err := tt.Click("收起文件浏览器"); err != nil {
 		t.Fatal(err)
 	}
@@ -350,42 +359,47 @@ func TestDesktopFilesBrowsePreviewAndLayouts(t *testing.T) {
 	}
 	tt.Key(ui.Cmd|ui.Shift, ui.KeyE)
 	tt.Frame()
-	if !prefs.FilesOpen {
+	if a.focusedFiles() == nil {
 		t.Fatal("file shortcut did not reopen panel")
 	}
 }
 
-func TestDesktopFilesFollowsPaneAndRejectsOfflineRemote(t *testing.T) {
+func TestDesktopFilesKeepsContextAndRejectsOfflineRemote(t *testing.T) {
 	previous := prefs
-	prefs = settings{FontSize: defaultFontSize, FilesOpen: true}
+	prefs = settings{FontSize: defaultFontSize}
 	t.Cleanup(func() { prefs = previous })
 	t.Setenv("RETTY_DIR", t.TempDir())
 	dir := t.TempDir()
 	os.WriteFile(filepath.Join(dir, "local-only.txt"), []byte("local"), 0600)
 	a, tt := newStaticTestApp(t)
-	p := a.tab().Focus
-	p.info.Dir = dir
-	tt.Frame()
-	first := a.files
-	// Switching while a local read is outstanding must not publish it into
-	// an offline remote pane, even if that remote path exists locally.
-	p.host = &desktopHost{}
+	source := a.tab().Focus
+	source.terminal().info.Dir = dir
+	first := a.openFilesPane(source, dir, false, false).files()
+	t.Cleanup(first.stop)
+	waitFor(t, tt, "local directory", func() bool { return !first.loading })
+	source.terminal().info.Dir = t.TempDir()
 	a.syncFiles()
-	second := a.files
-	if second == first || second.err == "" || len(second.entries) != 0 {
+	if first.cwd != dir || first.dir != dir || len(first.entries) != 1 {
+		t.Fatal("file component followed focus or source cwd")
+	}
+	remote, err := a.openBrowser(nil, "about:blank", &desktopHost{}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { a.endPane(remote, false) })
+	second := a.openFilesPane(remote, dir, false, false).files()
+	t.Cleanup(second.stop)
+	if second == first || second.err == "" || second.loading || len(second.entries) != 0 {
 		t.Fatal("offline host fell back to local files")
 	}
 	a.loadFileDirectory(second, dir)
 	if second.err == "" || second.loading {
 		t.Fatal("offline path input started local read")
 	}
-	time.Sleep(20 * time.Millisecond)
 	a.runPosted()
-	if a.files != second || len(second.entries) != 0 {
-		t.Fatal("stale local result appeared in remote browser")
+	if len(second.entries) != 0 || len(first.entries) != 1 {
+		t.Fatal("components shared file results")
 	}
-	second.stop()
-	p.host = nil
 }
 
 func TestDownloadCancellationAndChangesLeaveDestinationIntact(t *testing.T) {
@@ -438,7 +452,7 @@ func TestDesktopFileGitPreview(t *testing.T) {
 		t.Skip(err)
 	}
 	previous := prefs
-	prefs = settings{FontSize: defaultFontSize, FilesOpen: true}
+	prefs = settings{FontSize: defaultFontSize}
 	t.Cleanup(func() { prefs = previous })
 	t.Setenv("RETTY_DIR", t.TempDir())
 	dir := t.TempDir()
@@ -449,33 +463,34 @@ func TestDesktopFileGitPreview(t *testing.T) {
 	name := filepath.Join(dir, "new.go")
 	os.WriteFile(name, []byte("package example\n\n// A new function\nfunc Added() { println(\"Hello, 世界\") }\n"), 0600)
 	a, tt := newStaticTestApp(t)
-	a.tab().Focus.info.Dir = dir
+	a.tab().Focus.terminal().info.Dir = dir
+	a.toggleFiles()
 	tt.Frame()
 	t.Cleanup(func() {
-		if a.files != nil {
-			a.files.stop()
+		if a.focusedFiles() != nil {
+			a.focusedFiles().stop()
 		}
 	})
-	waitFor(t, tt, "git directory", func() bool { return a.files != nil && !a.files.loading })
+	waitFor(t, tt, "git directory", func() bool { return a.focusedFiles() != nil && !a.focusedFiles().loading })
 	if err := tt.Click("new.go"); err != nil {
 		t.Fatal(err)
 	}
-	waitFor(t, tt, "preview", func() bool { return a.files.preview != "" && !a.files.previewLoading })
+	waitFor(t, tt, "preview", func() bool { return a.focusedFiles().preview != "" && !a.focusedFiles().previewLoading })
 	if err := tt.Click("浏览"); err != nil {
 		t.Fatal(err)
 	}
 	tt.Key(0, ui.KeyRight)
-	waitFor(t, tt, "git changes", func() bool { return a.files.diff && !a.files.loading })
+	waitFor(t, tt, "git changes", func() bool { return a.focusedFiles().diff && !a.focusedFiles().loading })
 	if err := tt.Click("new.go"); err != nil {
 		t.Fatal(err)
 	}
-	waitFor(t, tt, "diff preview", func() bool { return !a.files.previewLoading && a.files.previewDiff != nil })
-	if !tt.HasText("文件树") || a.files.previewLanguage != "Go" || a.files.previewDiff.New.Language() == nil {
-		t.Fatal("diff tree or syntax missing", a.files.previewLanguage)
+	waitFor(t, tt, "diff preview", func() bool { return !a.focusedFiles().previewLoading && a.focusedFiles().previewDiff != nil })
+	if !tt.HasText("文件树") || a.focusedFiles().previewLanguage != "Go" || a.focusedFiles().previewDiff.New.Language() == nil {
+		t.Fatal("diff tree or syntax missing", a.focusedFiles().previewLanguage)
 	}
 
-	if a.files.err != "" || !strings.Contains(string(a.files.previewData), "+func Added()") {
-		t.Fatal(a.files.err, string(a.files.previewData))
+	if a.focusedFiles().err != "" || !strings.Contains(string(a.focusedFiles().previewData), "+func Added()") {
+		t.Fatal(a.focusedFiles().err, string(a.focusedFiles().previewData))
 	}
 	if path := os.Getenv("RETTY_FILES_SNAPSHOT_DIR"); path != "" {
 		os.MkdirAll(path, 0700)
@@ -487,7 +502,7 @@ func TestDesktopFileGitPreview(t *testing.T) {
 		t.Fatal(err)
 	}
 	tt.Key(0, ui.KeyLeft)
-	waitFor(t, tt, "normal mode", func() bool { return !a.files.diff && !a.files.loading })
+	waitFor(t, tt, "normal mode", func() bool { return !a.focusedFiles().diff && !a.focusedFiles().loading })
 	if readSettings().FilesDiff {
 		t.Fatal("mode was not persisted")
 	}
@@ -495,13 +510,13 @@ func TestDesktopFileGitPreview(t *testing.T) {
 		t.Fatal(err)
 	}
 	waitFor(t, tt, "normal content", func() bool {
-		return !a.files.previewLoading && strings.Contains(string(a.files.previewData), "Hello, 世界")
+		return !a.focusedFiles().previewLoading && strings.Contains(string(a.focusedFiles().previewData), "Hello, 世界")
 	})
-	if !tt.HasText("文件树") || a.files.previewLanguage != "Go" {
+	if !tt.HasText("文件树") || a.focusedFiles().previewLanguage != "Go" {
 		t.Fatal("normal tree or syntax missing")
 	}
 	chooseFileAction(t, tt, "复制预览内容")
-	if tt.Clipboard() != string(a.files.previewData) {
+	if tt.Clipboard() != string(a.focusedFiles().previewData) {
 		t.Fatal("highlighting changed copied content")
 	}
 

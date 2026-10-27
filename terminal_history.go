@@ -136,13 +136,13 @@ func (h *terminalHistory) view(c *ui.Context) {
 
 func (a *App) openTerminalHistory() {
 	t := a.tab()
-	if t == nil || t.Focus == nil || t.Focus.SID == "" {
+	if t == nil || t.Focus == nil || t.Focus.terminal() == nil || t.Focus.terminal().SID == "" {
 		return
 	}
 	if a.terminalHistory != nil {
 		a.terminalHistory.close()
 	}
-	h := &terminalHistory{open: true, client: a.paneClient(t.Focus), sid: t.Focus.SID, dispatch: a.desktopDispatcher()}
+	h := &terminalHistory{open: true, client: a.paneClient(t.Focus), sid: t.Focus.terminal().SID, dispatch: a.desktopDispatcher()}
 	a.terminalHistory = h
 	h.load(512)
 }

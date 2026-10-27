@@ -10,7 +10,7 @@ import (
 func TestNativePaneSplitKeyboardResizeAndReset(t *testing.T) {
 	for _, vertical := range []bool{false, true} {
 		t.Run(map[bool]string{false: "columns", true: "rows"}[vertical], func(t *testing.T) {
-			left, right := &Pane{ID: 1}, &Pane{ID: 2}
+			left, right := &Pane{ID: 1, content: &terminalPane{}}, &Pane{ID: 2, content: &terminalPane{}}
 			n := &Node{ID: 3, Ratio: .37, Vertical: vertical, A: &Node{ID: 4, Pane: left}, B: &Node{ID: 5, Pane: right}}
 			tab := &Tab{Root: n, Focus: left}
 			a := &App{}

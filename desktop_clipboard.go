@@ -16,7 +16,7 @@ import (
 )
 
 func (a *App) pastePaneClipboard(p *Pane, _ ui.Services) bool {
-	if p.host == nil || sessionProgramName(p.info) != "codex" || !slices.Contains(mygo.Clipboard.Formats(), transfer.PNG) {
+	if p.host == nil || sessionProgramName(p.terminal().info) != "codex" || !slices.Contains(mygo.Clipboard.Formats(), transfer.PNG) {
 		return false
 	}
 	data, err := mygo.Clipboard.ReadFormat(transfer.PNG)
@@ -36,7 +36,7 @@ func (a *App) uploadPaneClipboardImage(p *Pane, data []byte) {
 		a.err = err.Error()
 		return
 	}
-	thread := sessionAgentState(p.info).SessionID
+	thread := sessionAgentState(p.terminal().info).SessionID
 	a.uploadPaneData(p.Tab, p, func(ctx context.Context, client *rex.Client, sid string, progress func(int64, int64)) ([]string, error) {
 		path, err := client.UploadClipboardImage(ctx, sid, data, progress)
 		if err != nil {
@@ -44,7 +44,7 @@ func (a *App) uploadPaneClipboardImage(p *Pane, data []byte) {
 		}
 		return []string{path}, nil
 	}, func() bool {
-		return sessionProgramName(p.info) == "codex" && sessionAgentState(p.info).SessionID == thread
+		return sessionProgramName(p.terminal().info) == "codex" && sessionAgentState(p.terminal().info).SessionID == thread
 	})
 }
 

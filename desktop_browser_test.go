@@ -9,8 +9,35 @@ import (
 	"time"
 
 	"github.com/egoist/mygo"
+	"github.com/egoist/mygo/ui"
 	"retty/internal/browsercontrol"
 )
+
+func TestBrowserAddressEnterNavigatesTypedURL(t *testing.T) {
+	previous := prefs
+	prefs = settings{FontSize: defaultFontSize}
+	t.Cleanup(func() { prefs = previous })
+	t.Setenv("RETTY_DIR", t.TempDir())
+	a, tt := newStaticTestApp(t)
+	view := &fixtureBrowserView{}
+	a.browserFactory = func(*Pane) (browserView, error) { return view, nil }
+	p, err := a.openBrowser(a.tab().Focus, "about:blank", nil, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { a.endPane(p, false) })
+	tt.Frame()
+	if err := tt.Click("浏览器地址"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Key(ui.Cmd, ui.KeyA)
+	tt.Type("localhost:5173/preview?q=entered")
+	tt.Key(0, ui.KeyEnter)
+	tt.Frame()
+	if p.browser().url != "http://localhost:5173/preview?q=entered" || len(view.urls) != 2 || view.urls[1] != p.browser().url {
+		t.Fatalf("Enter did not navigate the address: address=%q url=%q loads=%v", p.browser().address, p.browser().url, view.urls)
+	}
+}
 
 type fixtureBrowserView struct {
 	urls      []string
@@ -43,8 +70,8 @@ func TestBrowserSplitPersistenceAndHiddenLifecyclePreservesTerminal(t *testing.T
 	}
 	t.Cleanup(func() { a.endPane(p, false) })
 	tt.Frame()
-	if p.browser.view != view || len(view.urls) != 1 || p.info.Dir != parent.info.Dir {
-		t.Fatal("browser not initialized or lost project", view.urls, p.info.Dir)
+	if p.browser().view != view || len(view.urls) != 1 || p.directory() != parent.terminal().info.Dir {
+		t.Fatal("browser not initialized or lost project", view.urls, p.directory())
 	}
 	if ps := len(slices.Collect(a.hostPanes(nil))); ps != 1 {
 		t.Fatal("browser entered PTY reconciliation", ps)
@@ -79,18 +106,18 @@ func TestBrowserSplitPersistenceAndHiddenLifecyclePreservesTerminal(t *testing.T
 			restored.endPane(q, false)
 		}
 	})
-	got, err := restored.findBrowser(p.browser.id)
-	if err != nil || got.browser.url != p.browser.url || got.info.Dir != parent.info.Dir || got.Tab.Focus != got || got.Tab.Zoom != got || got.Tab.Root.Ratio != .37 || !got.Tab.Root.Vertical {
+	got, err := restored.findBrowser(p.browser().id)
+	if err != nil || got.browser().url != p.browser().url || got.directory() != parent.terminal().info.Dir || got.Tab.Focus != got || got.Tab.Zoom != got || got.Tab.Root.Ratio != .37 || !got.Tab.Root.Vertical {
 		t.Fatal("browser layout identity, geometry or focus lost", got, err)
 	}
 	if len(restored.tabs) != len(saved.Tabs) {
 		t.Fatal("browser tabs changed across restore")
 	}
-	if _, err := restored.findBrowser(parent.SID); err == nil {
+	if _, err := restored.findBrowser(parent.terminal().SID); err == nil {
 		t.Fatal("terminal ID resolved as browser")
 	}
 	a.closePane(p)
-	if view.destroyed != 1 || p.browser.life.Err() == nil || parent.closed {
+	if view.destroyed != 1 || p.browser().life.Err() == nil || parent.closed {
 		t.Fatal("browser close did not own only its WebView", view.destroyed, parent.closed)
 	}
 	after, _ := a.client.List()
@@ -114,13 +141,13 @@ func TestBrowserCloseCancelsPendingDOMOperation(t *testing.T) {
 		t.Fatal(err)
 	}
 	tt.Frame()
-	p.browser.loading = false
+	p.browser().loading = false
 	queue := make(chan func(), 8)
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	done := make(chan error, 1)
 	go func() {
-		_, err := a.handleBrowserControl(ctx, browsercontrol.Request{Command: "wait", ID: p.browser.id, Text: "never"}, func(fn func()) error {
+		_, err := a.handleBrowserControl(ctx, browsercontrol.Request{Command: "wait", ID: p.browser().id, Text: "never"}, func(fn func()) error {
 			ack := make(chan struct{})
 			select {
 			case queue <- func() { fn(); close(ack) }:
@@ -176,7 +203,7 @@ func TestBrowserReadWaitsForForwardingBeforeSavingLogicalURL(t *testing.T) {
 	}
 	defer a.endPane(p, false)
 	tt.Frame()
-	p.browser.connecting = true
+	p.browser().connecting = true
 	p.Tab.Zoom = parent
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
@@ -187,7 +214,7 @@ func TestBrowserReadWaitsForForwardingBeforeSavingLogicalURL(t *testing.T) {
 	}
 	done := make(chan reply, 1)
 	go func() {
-		res, err := a.handleBrowserControl(ctx, browsercontrol.Request{Command: "read", ID: p.browser.id}, func(fn func()) error {
+		res, err := a.handleBrowserControl(ctx, browsercontrol.Request{Command: "read", ID: p.browser().id}, func(fn func()) error {
 			ack := make(chan struct{})
 			select {
 			case queue <- func() { fn(); close(ack) }:
@@ -217,17 +244,17 @@ func TestBrowserReadWaitsForForwardingBeforeSavingLogicalURL(t *testing.T) {
 		t.Fatal("read evaluated the old page while forwarding")
 	default:
 	}
-	if p.browser.url != "http://localhost:5173/app" {
+	if p.browser().url != "http://localhost:5173/app" {
 		t.Fatal("pending logical URL was replaced")
 	}
-	p.browser.physical, p.browser.logicalOrigin = "http://127.0.0.1:49152", "http://localhost:5173"
-	p.browser.loading, p.browser.connecting = false, false
+	p.browser().physical, p.browser().logicalOrigin = "http://127.0.0.1:49152", "http://localhost:5173"
+	p.browser().loading, p.browser().connecting = false, false
 	for {
 		select {
 		case fn := <-queue:
 			fn()
 		case r := <-done:
-			if r.err != nil || r.result.Document == nil || r.result.Document.URL != "http://localhost:5173/app#state" || p.browser.url != r.result.Document.URL {
+			if r.err != nil || r.result.Document == nil || r.result.Document.URL != "http://localhost:5173/app#state" || p.browser().url != r.result.Document.URL {
 				t.Fatal("lost logical SPA URL", r.result, r.err)
 			}
 			return

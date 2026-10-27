@@ -88,19 +88,19 @@ func (in *readReceiptState) markRead(client *rex.Client, sid, id string, persist
 }
 
 func (a *App) readResult(p *Pane) {
-	if p == nil || p.closed || p.host != nil && !p.host.connected() {
+	if p == nil || p.terminal() == nil || p.closed || p.host != nil && !p.host.connected() {
 		return
 	}
 	h := a.hostHello(p.host)
-	id := resultNoticeID(h, h.Host.ID, p.info)
-	if !a.readReceipts.readable(id, p.info) {
+	id := resultNoticeID(h, h.Host.ID, p.terminal().info)
+	if !a.readReceipts.readable(id, p.terminal().info) {
 		return
 	}
 	client := a.paneClient(p)
 	if !h.Attention {
 		client = nil
 	}
-	a.readReceipts.markRead(client, p.SID, id, a.persistReadReceipts, a.desktopDispatcher())
+	a.readReceipts.markRead(client, p.terminal().SID, id, a.persistReadReceipts, a.desktopDispatcher())
 }
 
 func (a *App) loadReadReceipts() {

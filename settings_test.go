@@ -21,7 +21,7 @@ func TestSettingsNavigationSearchAndDefaults(t *testing.T) {
 	t.Cleanup(func() { prefs, termFont = previous, previousFont })
 	a, tt := newTestApp(t)
 	p := a.tab().Focus
-	sid := p.SID
+	sid := p.terminal().SID
 	tt.Key(ui.Cmd, ui.KeyComma)
 	if panel, ok := tt.Find("Settings"); !ok || panel.X != 0 || panel.Y != 0 || panel.W != 1000 || panel.H != 620 {
 		t.Fatalf("settings should fill the window: %+v", panel)
@@ -87,7 +87,7 @@ func TestSettingsNavigationSearchAndDefaults(t *testing.T) {
 		}
 	}
 	tt.Key(0, ui.KeyEscape)
-	if a.settingsOpen || p.SID != sid {
+	if a.settingsOpen || p.terminal().SID != sid {
 		t.Fatal("closing settings changed the session")
 	}
 	if !tt.Focused("Terminal") {
@@ -152,8 +152,8 @@ func TestDesktopCompactLayoutAndSettingsFocus(t *testing.T) {
 	a, tt := newTestApp(t)
 	tt.SetTitleBar(ui.TitleBar{Left: 80, Height: 44})
 	p := a.tab().Focus
-	waitFor(t, tt, "shell", func() bool { return strings.Contains(p.term.Text(), "$") })
-	sid := p.SID
+	waitFor(t, tt, "shell", func() bool { return strings.Contains(p.terminal().term.Text(), "$") })
+	sid := p.terminal().SID
 	if p.bounds.X != 0 || p.bounds.Y != compactTitleH || p.bounds.W != 1000 || p.bounds.Y+p.bounds.H != 620 {
 		t.Fatalf("terminal does not reach window edges: %+v", p.bounds)
 	}
@@ -175,11 +175,11 @@ func TestDesktopCompactLayoutAndSettingsFocus(t *testing.T) {
 		t.Fatal("settings did not take focus")
 	}
 	tt.Key(0, ui.KeyEscape)
-	if p.SID != sid || !tt.Focused("Terminal") {
+	if p.terminal().SID != sid || !tt.Focused("Terminal") {
 		t.Fatal("settings changed session or lost terminal focus")
 	}
 	tt.Type("echo compact-focus")
-	waitFor(t, tt, "terminal focus", func() bool { return strings.Contains(p.term.Text(), "echo compact-focus") })
+	waitFor(t, tt, "terminal focus", func() bool { return strings.Contains(p.terminal().term.Text(), "echo compact-focus") })
 	tt.Key(ui.Ctrl, ui.KeyU)
 	tt.Key(ui.Cmd, ui.KeyF)
 	tt.Type("compact")
@@ -188,8 +188,8 @@ func TestDesktopCompactLayoutAndSettingsFocus(t *testing.T) {
 		t.Fatal(err)
 	}
 	tt.Type("-query")
-	if p.find.query != "compact-query" {
-		t.Fatalf("search focus after settings: %q", p.find.query)
+	if p.terminal().find.query != "compact-query" {
+		t.Fatalf("search focus after settings: %q", p.terminal().find.query)
 	}
 	a.closeFind(p)
 	tt.Frame()

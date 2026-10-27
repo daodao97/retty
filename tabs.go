@@ -152,8 +152,17 @@ func (a *App) tabMenu(m *ui.Menu, t *Tab) {
 }
 
 func paneProgram(p *Pane) program {
-	if p.browser != nil {
+	if p.browser() != nil {
 		return program{Name: "浏览器", Glyph: "globe", IconColor: ui.Hex("#7ca8ef")}
 	}
-	return programOf(sessionProgramName(p.info))
+	if b := p.files(); b != nil {
+		if b.diff {
+			return program{Name: "Diff", Glyph: "diff", IconColor: ui.Hex("#82b99c")}
+		}
+		return program{Name: "文件", Glyph: "folder-open", IconColor: ui.Hex("#b69c71")}
+	}
+	if p.terminal() == nil {
+		return program{Name: "窗格", Glyph: "layout-grid"}
+	}
+	return programOf(sessionProgramName(p.terminal().info))
 }

@@ -94,7 +94,7 @@ func TestSidebarTabActionsScrollAndSmallWindow(t *testing.T) {
 	a, tt := newStaticTestApp(t)
 	a.tabs[0].Name = "Session 01"
 	for i := 2; i <= 20; i++ {
-		pane := &Pane{ID: i}
+		pane := &Pane{ID: i, content: &terminalPane{}}
 		tab := &Tab{ID: i, Name: fmt.Sprintf("Session %02d", i), Root: &Node{ID: i, Pane: pane}, Focus: pane}
 		pane.Tab, pane.Node = tab, tab.Root
 		a.tabs = append(a.tabs, tab)
@@ -180,11 +180,11 @@ func TestSidebarAppearanceAndRemoteMarker(t *testing.T) {
 	a, tt := newStaticTestApp(t)
 	p := a.tab().Focus
 	a.tab().Name = "Sidebar navigation"
-	p.info.Program = "codex"
-	p.info.Agent = rex.AgentState{ID: "codex", State: "running"}
-	p.term.Feed([]byte("\x1b[2J\x1b[H\x1b[?25l› Add a collapsible session sidebar\r\n\r\n  Working on the desktop layout\r\n\r\n  ✓ Preserve tabs and split panes\r\n  ✓ Remember the selected layout\r\n  ✓ Expand the terminal when collapsed\r\n\r\n› "))
+	p.terminal().info.Program = "codex"
+	p.terminal().info.Agent = rex.AgentState{ID: "codex", State: "running"}
+	p.terminal().term.Feed([]byte("\x1b[2J\x1b[H\x1b[?25l› Add a collapsible session sidebar\r\n\r\n  Working on the desktop layout\r\n\r\n  ✓ Preserve tabs and split panes\r\n  ✓ Remember the selected layout\r\n  ✓ Expand the terminal when collapsed\r\n\r\n› "))
 	for i, name := range []string{"Build logs", "API workspace", "Notes"} {
-		pane := &Pane{ID: i + 2}
+		pane := &Pane{ID: i + 2, content: &terminalPane{}}
 		tab := &Tab{ID: i + 2, Name: name, Root: &Node{ID: i + 2, Pane: pane}, Focus: pane}
 		pane.Tab, pane.Node = tab, tab.Root
 		if name == "API workspace" {
@@ -195,7 +195,7 @@ func TestSidebarAppearanceAndRemoteMarker(t *testing.T) {
 	}
 	tt.SetTitleBar(ui.TitleBar{Left: 80, Height: 44})
 	tt.SetScale(2)
-	p.term.SetTheme(lightTerm, darkTerm)
+	p.terminal().term.SetTheme(lightTerm, darkTerm)
 	for _, dark := range []bool{false, true} {
 		tt.SetDark(dark)
 		tt.Advance(180 * time.Millisecond) // capture after the chrome's color transition

@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/egoist/mygo/ui"
-	"retty/internal/terminal"
 )
 
 const (
@@ -35,6 +34,7 @@ func (a *App) view(c *ui.Context) {
 			a.desktopContent(c, k)
 		}
 	})
+	a.syncCommandItems()
 	a.saveFileWidth(c)
 	if a.err != "" {
 		a.errorBanner(c, k)
@@ -68,22 +68,11 @@ func (a *App) view(c *ui.Context) {
 
 func (a *App) desktopContent(c *ui.Context, k *colors) {
 	ui.Row(c.Key("desktop-content")).Grow(1).MinWidth(0).MinHeight(0).Children(func() {
-		if prefs.FilesOpen && !prefs.FilesSidePanel {
-			a.filesPanel(c, k)
-			return
-		}
-		if prefs.FilesOpen && a.desktopContentWidth(c) < 720 {
-			a.changesSidePanel(c, k).Grow(1)
-			return
-		}
-		ui.Column(c.Key("terminal-content")).Grow(1).Basis(0).FillHeight().MinWidth(0).MinHeight(0).Children(func() {
+		ui.Column(c.Key("pane-content")).Grow(1).Basis(0).FillHeight().MinWidth(0).MinHeight(0).Children(func() {
 			if t := a.tab(); t != nil {
 				a.tabContent(c, k, t)
 			}
 		})
-		if prefs.FilesOpen {
-			a.changesSidePanel(c, k)
-		}
 	})
 }
 
@@ -138,6 +127,10 @@ func (a *App) paneCloseButton(c *ui.Context, k *colors, p *Pane) {
 
 // tabContent lays out the panes of a tab, or the one zoomed.
 func (a *App) tabContent(c *ui.Context, k *colors, t *Tab) {
+	if t.Zoom == nil && t.Focus.files() != nil && a.desktopContentWidth(c) < 720 {
+		a.paneCard(c, k, t, t.Focus).Grow(1)
+		return
+	}
 	if t.Zoom != nil {
 		a.paneCard(c, k, t, t.Zoom).Grow(1)
 		return
@@ -177,75 +170,16 @@ func (a *App) node(c *ui.Context, k *colors, t *Tab, n *Node) ui.Element {
 	return box
 }
 
-// paneCard draws a pane with its optional search field and terminal.
+// paneCard draws a container and delegates its body to the content.
 func (a *App) paneCard(c *ui.Context, k *colors, t *Tab, p *Pane) ui.Element {
 	card := ui.Column(c.Key(p.ID)).Clip().MinWidth(0).MinHeight(0).Background(terminalBackground(c))
 	card.Transition(ui.ElementTransition{Colors: true, Duration: 160 * time.Millisecond})
 	card.Children(func() {
-		if p.browser != nil {
-			a.browserContent(c, k, t, p)
-			return
+		if p.content != nil {
+			p.content.render(a, c, k, p)
 		}
-		a.paneGitBar(c, k, t, p)
-		if p.find.open {
-			a.findBar(c, k, t, p)
-		}
-		if p.locked {
-			a.sizeLockBar(c, k, p)
-		}
-		if p.upload != nil {
-			a.fileUploadBar(c, k, p)
-		}
-		if p.recoveryError != "" {
-			a.agentRecoveryBar(c, k, p)
-		}
-		body := ui.Box(c.Key("terminal-body")).Grow(1).MinHeight(0)
-		body.Children(func() {
-			if p.term == nil {
-				return
-			}
-			program := paneProgram(p)
-			p.term.SetSelectOnDrag(program.Agent || program.LocalSelection)
-			p.term.SetSelectOnDragInAltScreen(program.LocalSelection)
-			tv := terminal.View(c, p.term).Fill()
-			if p.acceptsFileDrop() {
-				if files := tv.DroppedFiles(); len(files) > 0 {
-					a.pasteDroppedFiles(t, p, files)
-				}
-			}
-			if p.find.open && tv.Shortcut(0, ui.KeyEscape) {
-				a.closeFind(p)
-			}
-			if a.focusReq == p && a.tab() == t {
-				tv.Focus()
-				a.focusReq = nil
-			}
-			if tv.Focused() && t.Focus != p {
-				t.setFocus(p)
-				a.changed()
-			}
-			if tv.Pressed() && p.host != nil && !p.remoteYielded {
-				a.resumeRemotePane(p)
-			}
-			if tv.Focused() {
-				p.attention = false
-			}
-		})
-		if p.host != nil && (!p.host.connected() || p.streamEnded) {
-			ui.Box(c).Absolute().Top(0).Left(0).Right(0).Height(32).Padding(0, paneActionInset(p), 0, 0).Background(k.panel).
-				Children(func() { a.desktopOfflineBar(c, k, p.host) })
-		} else if p.host != nil && p.remoteView != nil && a.remotePaneStatus(c, p) != "" {
-			ui.Row(c).Absolute().Top(0).Left(0).Right(0).Height(28).Padding(0, 8+paneActionInset(p), 0, 12).AlignItems(ui.Center).Gap(8).Background(k.panel).Children(func() {
-				message := a.remotePaneStatus(c, p)
-				ui.Text(c, message).FontSize(12).TextColor(k.textMuted).Grow(1)
-				if p.remoteYielded && iconButton(c, k, "rotate-ccw", "接入当前窗格", 24, 13).Clicked() {
-					t.setFocus(p)
-					a.focusReq = p
-					a.activateRemotePane(p)
-				}
-			})
-		}
-		if card.Hovered() && t.Root.Pane == nil {
+
+		if card.Hovered() && t.Root.Pane == nil && p.browser() == nil && p.files() == nil {
 			a.paneCloseButton(c, k, p)
 		}
 	})
@@ -254,9 +188,12 @@ func (a *App) paneCard(c *ui.Context, k *colors, t *Tab, p *Pane) ui.Element {
 	card.Draw(func(_ *ui.Painter, r ui.Rect) {
 		p.bounds = r
 	})
-	if card.Pressed() && t.Focus != p {
+	if t.Focus != p && (card.Pressed() || card.FocusWithin()) {
 		t.setFocus(p)
-		a.focusReq = p
+		if !card.FocusWithin() {
+			a.focusReq = p
+		}
+		a.changed()
 	}
 	a.syncRemotePaneActivity()
 	return card
@@ -265,13 +202,16 @@ func (a *App) paneCard(c *ui.Context, k *colors, t *Tab, p *Pane) ui.Element {
 // paneRunning tells that a pane's agent is at work, or that its program
 // printed just now, rather than waiting, done or running quietly.
 func paneRunning(c *ui.Context, p *Pane) bool {
+	if p.terminal() == nil {
+		return false
+	}
 	if s := paneAgentState(p); s.State != "" {
 		return s.State == "running"
 	}
-	if p.attention || p.info.Idle || p.info.Program == "" || programOf(p.info.Program).Shell {
+	if p.attention || p.terminal().info.Idle || p.terminal().info.Program == "" || programOf(p.terminal().info.Program).Shell {
 		return false
 	}
-	last := time.Unix(0, p.lastData.Load())
+	last := time.Unix(0, p.terminal().lastData.Load())
 	if since := c.Now().Sub(last); since < activeFor {
 		c.After(activeFor - since)
 		return true
@@ -297,17 +237,17 @@ func (a *App) errorBanner(c *ui.Context, k *colors) {
 
 // Fast attachments do not flash a loading banner over a retained screen.
 func (a *App) remotePaneStatus(c *ui.Context, p *Pane) string {
-	if p.remoteYielded {
+	if p.terminal().remoteYielded {
 		return "此会话已在其他窗口打开"
 	}
 	if a.activeRemote != p {
 		return ""
 	}
-	if p.remoteView.readReady() {
-		return screenFreshness(c, p.remoteView)
+	if p.terminal().remoteView.readReady() {
+		return screenFreshness(c, p.terminal().remoteView)
 	}
-	if p.remoteView.hasTransport() {
-		remaining := remoteLoadingDelay - c.Now().Sub(p.remoteLoadingSince)
+	if p.terminal().remoteView.hasTransport() {
+		remaining := remoteLoadingDelay - c.Now().Sub(p.terminal().remoteLoadingSince)
 		if remaining > 0 {
 			c.After(remaining)
 			return ""

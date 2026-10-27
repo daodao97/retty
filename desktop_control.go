@@ -89,14 +89,14 @@ func (a *App) controlPane(sid string) (*Pane, error) {
 		return nil, errors.New("action requires --target with a stable session ID")
 	}
 	for p := range a.hostPanes(nil) {
-		if p.SID == sid && !p.closed {
+		if p.terminal().SID == sid && !p.closed {
 			return p, nil
 		}
 	}
 	if len(sid) >= 4 {
 		var found *Pane
 		for p := range a.hostPanes(nil) {
-			if !p.closed && strings.HasPrefix(p.SID, sid) {
+			if !p.closed && strings.HasPrefix(p.terminal().SID, sid) {
 				if found != nil {
 					return nil, errors.New("ambiguous session prefix; use the full ID")
 				}
@@ -176,15 +176,15 @@ func (a *App) handleDesktopControl(ctx context.Context, req desktopcontrol.Reque
 		if err != nil {
 			return
 		}
-		if parent.info.Exited {
+		if parent.terminal().info.Exited {
 			err = errors.New("target session has exited")
 			return
 		}
 		client = a.client
 		if options.Dir == "" {
-			options.Dir = parent.info.Dir
+			options.Dir = parent.terminal().info.Dir
 			if options.Dir == "" {
-				options.Dir = parent.startDir
+				options.Dir = parent.terminal().startDir
 			}
 		}
 	})
@@ -214,7 +214,7 @@ func (a *App) handleDesktopControl(ctx context.Context, req desktopcontrol.Reque
 		// that single-pane tab into the split instead of attaching it twice.
 		var p *Pane
 		for existing := range a.hostPanes(nil) {
-			if existing.SID == in.ID {
+			if existing.terminal().SID == in.ID {
 				if existing.Tab.Root.Pane != existing {
 					err = errors.New("new session is already placed in a split")
 					return
@@ -230,7 +230,7 @@ func (a *App) handleDesktopControl(ctx context.Context, req desktopcontrol.Reque
 			}
 		}
 		if p == nil {
-			p = &Pane{ID: a.id(), SID: in.ID, info: in, startDir: options.Dir}
+			p = &Pane{ID: a.id(), content: &terminalPane{SID: in.ID, info: in, startDir: options.Dir}}
 			a.attach(p, in.Cols, in.Rows)
 		}
 		a.insertControlSplit(parent, p, req.Direction == "down")

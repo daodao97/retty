@@ -24,7 +24,7 @@ func TestPaletteFrameworkChoicesAndDismissal(t *testing.T) {
 				} else if err := tt.Click("Find…"); err != nil {
 					t.Fatal(err)
 				}
-				if a.paletteOpen || !a.tab().Focus.find.open {
+				if a.paletteOpen || !a.tab().Focus.terminal().find.open {
 					t.Fatal("choice did not execute the filtered command")
 				}
 				a.closeFind(a.tab().Focus)
@@ -34,7 +34,7 @@ func TestPaletteFrameworkChoicesAndDismissal(t *testing.T) {
 					t.Fatal("empty result hidden")
 				}
 				tt.Key(0, ui.KeyEnter)
-				if !a.paletteOpen || a.tab().Focus.find.open {
+				if !a.paletteOpen || a.tab().Focus.terminal().find.open {
 					t.Fatal("empty result executed an old command")
 				}
 				tt.Key(0, ui.KeyEscape)
@@ -76,7 +76,7 @@ func TestPaletteKeyboardSelectionAndFreeScroll(t *testing.T) {
 	tt.Key(0, ui.KeyDown)
 	tt.Key(0, ui.KeyUp)
 	tt.Key(0, ui.KeyEnter)
-	if a.paletteOpen || !a.tab().Focus.find.open {
+	if a.paletteOpen || !a.tab().Focus.terminal().find.open {
 		t.Fatal("framework navigation did not select the filtered command")
 	}
 }
