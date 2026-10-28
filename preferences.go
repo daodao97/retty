@@ -219,6 +219,30 @@ func (a *App) preferenceItems() []preferenceItem {
 					c.Invalidate()
 				}
 			}},
+		{id: "sidebar-session-mode", title: "侧边栏会话显示", label: "Sidebar session mode", detail: "默认平铺所有已打开会话；项目模式按主机和工作目录分组，可展开或折叠。", group: "布局", section: 0,
+			modified: prefs.SidebarSessionMode != "", reset: func() { a.setSidebarSessionMode("") },
+			control: func(c *ui.Context) {
+				selected := 0
+				if prefs.SidebarSessionMode == "project" {
+					selected = 1
+				}
+				if ui.Segmented(c, &selected, "平铺模式", "项目模式").Label("Sidebar session mode").Changed() {
+					mode := ""
+					if selected == 1 {
+						mode = "project"
+					}
+					a.setSidebarSessionMode(mode)
+					c.Invalidate()
+				}
+			}},
+		{id: "title-folder-position", title: "标题文件夹名位置", label: "Title folder position", detail: "默认显示「会话标题 | 文件夹名」，也可前置或隐藏文件夹名。", group: "布局", section: 0,
+			modified: prefs.TitleFolderPosition != "", reset: func() { a.setTitleFolderPosition("") },
+			control: func(c *ui.Context) {
+				selected := titleFolderPositionIndex(prefs.TitleFolderPosition)
+				if ui.Segmented(c, &selected, "前面", "后面", "无").Label("Title folder position").Changed() {
+					a.setTitleFolderPosition(titleFolderPositions[selected])
+				}
+			}},
 		{id: "git-status", title: "Git 分支与变更", label: "Git status", detail: "在窗格中显示当前分支和变更摘要，点击打开 Diff。关闭后停止后台 Git 状态查询。", group: "布局", section: 0,
 			modified: prefs.HideGitStatus, reset: func() { a.setGitStatus(true) },
 			control: func(c *ui.Context) {

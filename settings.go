@@ -17,6 +17,8 @@ type settings struct {
 	// Appearance is "light", "dark", or "" to follow the system.
 	Appearance                       string  `json:"appearance,omitempty"`
 	DesktopLayout                    string  `json:"desktopLayout,omitempty"`
+	SidebarSessionMode               string  `json:"sidebarSessionMode,omitempty"`
+	TitleFolderPosition              string  `json:"titleFolderPosition,omitempty"`
 	SidebarCollapsed                 bool    `json:"sidebarCollapsed,omitempty"`
 	FilesOpen                        bool    `json:"filesOpen,omitempty"`
 	FilesHidden                      bool    `json:"filesHidden,omitempty"`
@@ -62,8 +64,14 @@ func readSettings() settings {
 	default:
 		s.LinkEditor = ""
 	}
+	if s.TitleFolderPosition != "before" && s.TitleFolderPosition != "none" {
+		s.TitleFolderPosition = ""
+	}
 	if s.DesktopLayout != "sidebar" {
 		s.DesktopLayout = ""
+	}
+	if s.SidebarSessionMode != "project" {
+		s.SidebarSessionMode = ""
 	}
 	if s.UsageTrayAgent != "codex" && s.UsageTrayAgent != "claude" {
 		s.UsageTrayAgent = ""
@@ -114,6 +122,20 @@ func (a *App) toggleTabSidebar() {
 
 func (a *App) setLinkEditor(editor string) {
 	prefs.LinkEditor = editor
+	saveSettings()
+}
+
+func (a *App) setTitleFolderPosition(position string) {
+	prefs.TitleFolderPosition = position
+	saveSettings()
+	if a.win != nil {
+		a.win.Invalidate()
+	}
+}
+
+func (a *App) setSidebarSessionMode(mode string) {
+	prefs.SidebarSessionMode = mode
+	a.sidebarVisibleTab = nil
 	saveSettings()
 }
 

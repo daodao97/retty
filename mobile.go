@@ -71,6 +71,8 @@ type mobileApp struct {
 	retryAttempt                       int
 	retryTimer                         *time.Timer
 	sessionPreferences                 map[string]mobileSessionPreference
+	titleFolderPosition                string
+	titleFolderPreferenceTouched       bool
 	preferenceEpoch                    int
 	editingSession                     string
 	editingOpen                        bool
@@ -150,6 +152,7 @@ func mobileMain() {
 		m.win = mygo.NewWindow(mygo.WindowOptions{Title: "Retty", Width: 390, Height: 844, BackgroundColor: "light-dark(#f5f6f8, #111315)", Content: ui.View(m.view)})
 		m.invalidate()
 		m.loadSessionPreferences()
+		m.loadTitleFolderPreference()
 		m.loadReadReceipts()
 		m.setupPush()
 		m.setupLiveActivity()

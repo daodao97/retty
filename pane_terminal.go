@@ -76,7 +76,7 @@ func (v *terminalPane) label(p *Pane) (name, detail string) {
 	if t := strings.TrimSpace(v.title); t != "" && !titleOfShell(t, in) {
 		t = programTitle(t, prog)
 		if t != "" {
-			return t, ""
+			return positionTitleFolder(t, prefs.TitleFolderPosition), ""
 		}
 	}
 	name = prog.Name

@@ -89,10 +89,12 @@ type App struct {
 	hello            rex.Hello
 	err              string
 
-	tabs              []*Tab
-	active            int
-	nextID            int
-	sidebarVisibleTab *Tab // scroll selection into view only when it changes
+	tabs                  []*Tab
+	active                int
+	nextID                int
+	sidebarVisibleTab     *Tab // scroll selection into view only when it changes
+	sidebarProjectOpen    map[string]bool
+	sidebarVisibleProject string
 
 	// focusReq asks the view to give the keyboard focus to a pane's
 	// terminal.

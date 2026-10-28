@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"encoding/json"
 	"slices"
+	"time"
 
 	"github.com/egoist/mygo/ui"
 	"retty/internal/rex"
@@ -49,13 +50,17 @@ func (m *mobileApp) recentDesktop(key string) (desktopRecent, bool) {
 }
 
 func (m *mobileApp) recentSessionTitle(entry mobileRecentSession) string {
-	return cmp.Or(m.sessionPreferences[sessionKey(entry.Desktop, entry.Session)].Name, entry.Title, "终端会话")
+	if name := m.sessionPreferences[sessionKey(entry.Desktop, entry.Session)].Name; name != "" {
+		return name
+	}
+	return positionTitleFolder(cmp.Or(entry.Title, "终端会话"), m.titleFolderPosition)
 }
 
 func (m *mobileApp) rememberSession(s rex.SessionInfo) {
 	if s.Exited {
 		return
 	}
+	m.markSessionUsed(s.ID, time.Now())
 	entry := mobileRecentSession{Desktop: m.desktopKey(), Session: s.ID, Title: mobileSessionTitle(s), Program: sessionProgramName(s)}
 	m.recentSessions = mergeRecentSessions([]mobileRecentSession{entry}, m.recentSessions)
 	m.persistRecentSessions()

@@ -2,7 +2,10 @@ package main
 
 import (
 	"fmt"
-	"path/filepath"
+	"path"
+	"strings"
+
+	"github.com/egoist/mygo/ui"
 )
 
 type sidebarProjectTab struct {
@@ -23,8 +26,31 @@ func (a *App) sidebarProjects() []sidebarProjectGroup {
 	var groups []sidebarProjectGroup
 	byKey := make(map[string]int)
 	for i, tab := range a.tabs {
-		git := a.paneGit(tab.Focus)
-		if git == nil || git.CommonDir == "" {
+		p := tab.Focus
+		for _, candidate := range tab.panes() {
+			if candidate.terminal() != nil {
+				p = candidate
+				break
+			}
+		}
+		git := a.paneGit(p)
+		if prefs.SidebarSessionMode == "project" && a.gitStatus != nil && p != nil {
+			if entry := a.gitStatus.entries[paneGitScope(p)]; entry != nil {
+				git = entry.status
+			}
+		}
+		identity, dir := "", ""
+		if git != nil && git.CommonDir != "" {
+			identity, dir = "git:"+git.CommonDir, git.ProjectDir
+		}
+		if identity == "" && prefs.SidebarSessionMode == "project" {
+			dir = strings.ReplaceAll(p.directory(), "\\", "/")
+			if dir != "" {
+				dir = path.Clean(dir)
+			}
+			identity = "dir:" + dir
+		}
+		if identity == "" {
 			groups = append(groups, sidebarProjectGroup{key: fmt.Sprintf("tab:%d", tab.ID), tabs: []sidebarProjectTab{{i, tab}}})
 			continue
 		}
@@ -39,18 +65,55 @@ func (a *App) sidebarProjects() []sidebarProjectGroup {
 				host = fmt.Sprintf("remote:%p", h)
 			}
 		}
-		key := host + "\x00" + git.CommonDir
+		key := host + "\x00" + identity
 		at, found := byKey[key]
 		if !found {
-			label := filepath.Base(git.ProjectDir)
+			label := path.Base(strings.ReplaceAll(dir, "\\", "/"))
+			if dir == "" {
+				label = "其他会话"
+			}
 			if hostName != "" {
 				label += " · " + hostName
 			}
 			at = len(groups)
 			byKey[key] = at
-			groups = append(groups, sidebarProjectGroup{key: key, label: label, dir: git.ProjectDir})
+			groups = append(groups, sidebarProjectGroup{key: key, label: label, dir: dir})
 		}
 		groups[at].tabs = append(groups[at].tabs, sidebarProjectTab{i, tab})
 	}
 	return groups
+}
+
+func (a *App) sidebarProjectTabs(c *ui.Context, k *colors, groups []sidebarProjectGroup) {
+	for _, group := range groups {
+		open := a.sidebarProjectOpen[group.key]
+		name, tooltip := group.label, group.dir
+		ui.Column(c.Key(group.key)).FillWidth().Shrink(0).Gap(3).Children(func() {
+			header := ui.ButtonBase(c.Key("project-header")).Label("项目 "+name).Tooltip(tooltip).
+				Expanded(open).FillWidth().Height(36).Shrink(0).Padding(0, 9).Gap(8).Radius(7).AlignItems(ui.Center)
+			if header.Hovered() {
+				header.Background(k.hover)
+			}
+			header.Children(func() {
+				ui.Icon(c, icon("folder-open")).Size(17, 17).TextColor(k.iconMuted).Shrink(0)
+				ui.Text(c, name).FontSize(12).FontWeight(500).TextColor(k.text).SingleLine().Ellipsis("…").Grow(1).MinWidth(0)
+				glyph := "chevron-right"
+				if open {
+					glyph = "chevron-down"
+				}
+				ui.Icon(c, icon(glyph)).Size(12, 12).TextColor(k.iconMuted).Shrink(0)
+			})
+			if header.Clicked() {
+				a.sidebarProjectOpen[group.key] = !open
+				c.Invalidate()
+			}
+			if open {
+				ui.Column(c.Key("project-tabs")).FillWidth().Shrink(0).Padding(0, 0, 0, 16).Gap(4).Children(func() {
+					for _, item := range group.tabs {
+						a.sidebarTab(c, k, item.index, item.tab)
+					}
+				})
+			}
+		})
+	}
 }

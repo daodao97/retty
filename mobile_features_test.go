@@ -102,26 +102,26 @@ func TestMobileReconnectRetainsPageAndCancelReleasesTerminal(t *testing.T) {
 	}
 }
 
-func TestMobileSessionNamesAreDeviceScopedAndWaitingWins(t *testing.T) {
+func TestMobileSessionNamesAreDeviceScopedAndPinsComeFirst(t *testing.T) {
 	m := &mobileApp{}
 	m.hello.Host.ID = "first"
 	m.setSessionPreference("pinned", "我的任务", true)
 	waiting := rex.SessionInfo{ID: "waiting", Program: "claude", Agent: rex.AgentState{ID: "claude", State: agents.Waiting}}
 	m.sessions = []rex.SessionInfo{{ID: "ordinary"}, {ID: "pinned", Title: "original"}, waiting}
 	got := m.orderedSessions()
-	if got[0].ID != "waiting" || got[1].ID != "pinned" || m.sessionTitle(got[1]) != "我的任务" {
+	if got[0].ID != "pinned" || got[1].ID != "ordinary" || m.sessionTitle(got[0]) != "我的任务" {
 		t.Fatal(got)
 	}
 	if m.sessions[0].ID != "ordinary" {
 		t.Fatal("sorting changed source list")
 	}
 	m.hello.Host.ID = "second"
-	if m.preference("pinned").Pinned || m.sessionTitle(got[1]) != "original" {
+	if m.preference("pinned").Pinned || m.sessionTitle(got[0]) != "original" {
 		t.Fatal("preferences leaked to another desktop")
 	}
 	m.hello.Host.ID = "first"
 	m.setSessionPreference("pinned", "", false)
-	if m.sessionTitle(got[1]) != "original" {
+	if m.sessionTitle(got[0]) != "original" {
 		t.Fatal("clearing name did not restore source title")
 	}
 	m.setSessionPreference("pinned", strings.Repeat("字", 90)+"\n", false)

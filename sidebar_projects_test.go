@@ -70,3 +70,60 @@ func TestSidebarProjectsGroupsWorktreesByHostWithoutChangingTabIdentity(t *testi
 		t.Fatal("disabled metadata still regrouped tabs", groups)
 	}
 }
+
+func TestSidebarProjectModeCollapseSelectionAndFlatRestore(t *testing.T) {
+	previous := prefs
+	prefs = settings{FontSize: defaultFontSize, DesktopLayout: "sidebar"}
+	t.Cleanup(func() { prefs = previous })
+	t.Setenv("RETTY_DIR", t.TempDir())
+	a, tt := newStaticTestApp(t)
+	a.agentHistory = &sidebarAgentHistory{loaded: true, nextRead: time.Now().Add(time.Hour), selected: -1}
+	main := a.tab()
+	main.Name, main.Focus.terminal().info.Dir = "Main task", "/fixture/retty"
+	remote := &desktopHost{key: "remote-fixture", hello: rex.Hello{Host: rex.HostInfo{Name: "devbox"}}}
+	add := func(id int, name string, host *desktopHost) *Tab {
+		p := &Pane{ID: id, host: host, content: &terminalPane{info: rex.SessionInfo{Dir: "/fixture/retty"}}}
+		tab := &Tab{ID: id, Name: name, Host: host, Focus: p, Root: &Node{ID: id, Pane: p}}
+		p.Tab, p.Node = tab, tab.Root
+		a.tabs = append(a.tabs, tab)
+		return tab
+	}
+	second, otherHost := add(2, "Second task", nil), add(3, "Remote task", remote)
+	tt.Frame()
+	if _, ok := tt.Find("项目 retty"); ok {
+		t.Fatal("default mode introduced a project heading")
+	}
+	a.setSidebarSessionMode("project")
+	tt.Frame()
+	if readSettings().SidebarSessionMode != "project" {
+		t.Fatal("project mode was not persisted")
+	}
+	if _, ok := tt.Find("Second task"); !ok {
+		t.Fatal("active project's sibling was hidden")
+	}
+	if _, ok := tt.Find("Remote task"); ok {
+		t.Fatal("another host's project started expanded")
+	}
+	if err := tt.Click("项目 retty"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if _, ok := tt.Find("Main task"); ok || a.tab() != main {
+		t.Fatal("collapsing a project kept its rows or switched the session")
+	}
+	a.selectTab(2)
+	tt.Frame()
+	if _, ok := tt.Find("Remote task"); !ok || a.tab() != otherHost {
+		t.Fatal("selecting a hidden session did not reveal its project")
+	}
+	a.setSidebarSessionMode("")
+	tt.Frame()
+	for _, name := range []string{"Main task", "Second task", "Remote task"} {
+		if _, ok := tt.Find(name); !ok {
+			t.Fatal("restoring flat mode lost a session", name)
+		}
+	}
+	if a.tabs[0] != main || a.tabs[1] != second || a.tabs[2] != otherHost || main.Focus.closed || second.Focus.closed {
+		t.Fatal("presentation changes modified tab order or pane identity")
+	}
+}

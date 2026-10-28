@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"time"
 
 	"github.com/egoist/mygo"
@@ -46,6 +47,15 @@ func (m *mobileApp) sessionSettingsDialog(c *ui.Context) {
 			if mobileSettingSwitch(c, &voiceEnabled, "语音输入", "mic", "语音输入", "在会话页面显示按住说话区域").Changed() {
 				m.setVoiceEnabled(voiceEnabled)
 			}
+			ui.Column(c).FillWidth().Padding(12).Radius(12).Background(c.Theme().Background).Gap(8).Children(func() {
+				ui.Text(c, "标题文件夹名位置").FontSize(15)
+				selected := titleFolderPositionIndex(m.titleFolderPosition)
+				if ui.Segmented(c, &selected, "前面", "后面", "无").Label("标题文件夹名位置").FillWidth().Height(44).Changed() {
+					m.setTitleFolderPosition(titleFolderPositions[selected])
+				}
+				preview := positionTitleFolder("会话标题 | 文件夹名", m.titleFolderPosition)
+				ui.Text(c, preview).FontSize(12).TextColor(c.Theme().TextMuted).FillWidth().SingleLine().Ellipsis("…")
+			})
 			if m.hello.Version >= 6 {
 				enabled := m.sizeLock
 				if mobileSettingSwitch(c, &enabled, "按手机尺寸显示", "smartphone", "按手机尺寸显示", "离开后恢复桌面尺寸").Changed() {
@@ -76,6 +86,31 @@ func (m *mobileApp) sessionSettingsDialog(c *ui.Context) {
 		})
 	})
 	m.deviceNameDialog(c)
+}
+
+func (m *mobileApp) loadTitleFolderPreference() {
+	if m.store == nil || m.storage == nil {
+		return
+	}
+	m.storage <- func() {
+		var position string
+		if data, err := m.store.Get("title-folder-position"); err == nil {
+			json.Unmarshal(data, &position)
+		}
+		mygo.RunOnMain(func() {
+			if !m.titleFolderPreferenceTouched {
+				m.titleFolderPosition = position
+				m.invalidate()
+			}
+		})
+	}
+}
+
+func (m *mobileApp) setTitleFolderPosition(position string) {
+	m.titleFolderPosition, m.titleFolderPreferenceTouched = position, true
+	data, _ := json.Marshal(position)
+	m.save("title-folder-position", data, func() { m.error = "无法保存标题显示设置，请重试"; m.invalidate() })
+	m.invalidate()
 }
 
 func mobileSettingSwitch(c *ui.Context, enabled *bool, label, glyph, title, description string) ui.Element {

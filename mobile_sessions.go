@@ -10,11 +10,13 @@ import (
 	"retty/internal/rex"
 	"sort"
 	"strings"
+	"time"
 )
 
 type mobileSessionPreference struct {
-	Name   string `json:"name,omitempty"`
-	Pinned bool   `json:"pinned,omitempty"`
+	Name     string    `json:"name,omitempty"`
+	Pinned   bool      `json:"pinned,omitempty"`
+	LastUsed time.Time `json:"lastUsed,omitzero"`
 }
 
 func (m *mobileApp) desktopKey() string { return cmp.Or(m.hello.Host.ID, m.link) }
@@ -33,7 +35,10 @@ func (m *mobileApp) sessionTitle(s rex.SessionInfo) string { return m.titleOn(m.
 
 // titleOn names a session of the given desktop, preferring the user's name.
 func (m *mobileApp) titleOn(desktop string, s rex.SessionInfo) string {
-	return cmp.Or(m.sessionPreferences[sessionKey(desktop, s.ID)].Name, mobileSessionTitle(s))
+	if name := m.sessionPreferences[sessionKey(desktop, s.ID)].Name; name != "" {
+		return name
+	}
+	return positionTitleFolder(mobileSessionTitle(s), m.titleFolderPosition)
 }
 
 func (m *mobileApp) sessionDirectory(s rex.SessionInfo) string {
@@ -91,13 +96,41 @@ func (m *mobileApp) sessionValue(s rex.SessionInfo) string {
 func (m *mobileApp) orderedSessions() []rex.SessionInfo {
 	sessions := append([]rex.SessionInfo(nil), m.sessions...)
 	sort.SliceStable(sessions, func(i, j int) bool {
-		a, b := sessionAgentState(sessions[i]), sessionAgentState(sessions[j])
-		if (a.State == agents.Waiting) != (b.State == agents.Waiting) {
-			return a.State == agents.Waiting
+		a, b := m.preference(sessions[i].ID), m.preference(sessions[j].ID)
+		if a.Pinned != b.Pinned {
+			return a.Pinned
 		}
-		return m.preference(sessions[i].ID).Pinned && !m.preference(sessions[j].ID).Pinned
+		return m.sessionLastUsed(sessions[i]).After(m.sessionLastUsed(sessions[j]))
 	})
 	return sessions
+}
+
+func (m *mobileApp) sessionLastUsed(s rex.SessionInfo) time.Time {
+	used := s.LastInput
+	if opened := m.preference(s.ID).LastUsed; opened.After(used) {
+		used = opened
+	}
+	if used.IsZero() {
+		used = s.Created
+	}
+	return used
+}
+
+func (m *mobileApp) markSessionUsed(sid string, at time.Time) {
+	key := m.preferenceKey(sid)
+	p := m.preference(sid)
+	if sid == "" || m.closedSessions[key] || !at.After(p.LastUsed) {
+		return
+	}
+	if m.sessionPreferences == nil {
+		m.sessionPreferences = map[string]mobileSessionPreference{}
+	}
+	p.LastUsed = at
+	m.sessionPreferences[key] = p
+	// Opening a session changes recency, not its name or pin. A delayed
+	// preference load must still restore those independently edited fields.
+	m.preferenceEpoch++
+	m.persistSessionPreferences()
 }
 
 func (m *mobileApp) sessionList(c *ui.Context) {
@@ -190,10 +223,15 @@ func (m *mobileApp) setSessionPreference(sid, name string, pinned bool) {
 		m.sessionPreferences = map[string]mobileSessionPreference{}
 	}
 	key := m.preferenceKey(sid)
-	if name == "" && !pinned {
+	p := m.preference(sid)
+	p.Name, p.Pinned = name, pinned
+	if m.closedSessions[key] {
+		p.LastUsed = time.Time{}
+	}
+	if name == "" && !pinned && p.LastUsed.IsZero() {
 		delete(m.sessionPreferences, key)
 	} else {
-		m.sessionPreferences[key] = mobileSessionPreference{Name: name, Pinned: pinned}
+		m.sessionPreferences[key] = p
 	}
 	m.preferenceEpoch++
 	if m.preferenceTouched == nil {
@@ -237,7 +275,19 @@ func (m *mobileApp) applyLoadedSessionPreferences(preferences map[string]mobileS
 			m.sessionPreferences = map[string]mobileSessionPreference{}
 		}
 		for key, value := range preferences {
-			if !m.preferenceTouched[key] {
+			current := m.sessionPreferences[key]
+			if m.preferenceTouched[key] {
+				value.Name, value.Pinned = current.Name, current.Pinned
+			}
+			if current.LastUsed.After(value.LastUsed) {
+				value.LastUsed = current.LastUsed
+			}
+			if m.closedSessions[key] {
+				value.LastUsed = time.Time{}
+			}
+			if value.Name == "" && !value.Pinned && value.LastUsed.IsZero() {
+				delete(m.sessionPreferences, key)
+			} else {
 				m.sessionPreferences[key] = value
 			}
 		}
@@ -272,7 +322,7 @@ func (m *mobileApp) sessionEditor(c *ui.Context) {
 		originalName := "会话名称"
 		for _, s := range m.sessions {
 			if s.ID == m.editingSession {
-				originalName = mobileSessionTitle(s)
+				originalName = positionTitleFolder(mobileSessionTitle(s), m.titleFolderPosition)
 				break
 			}
 		}

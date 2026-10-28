@@ -30,14 +30,41 @@ func (a *App) sidebarLayout(c *ui.Context, k *colors, bar ui.TitleBar) {
 					ui.Spacer(c)
 					a.collapseSidebarButton(c, k)
 				})
+				var projects []sidebarProjectGroup
+				listHeight := float32(len(a.tabs)*44 + 16)
+				if prefs.SidebarSessionMode == "project" {
+					projects = a.sidebarProjects()
+					if a.sidebarProjectOpen == nil {
+						a.sidebarProjectOpen = make(map[string]bool)
+					}
+					listHeight = 16
+					for _, project := range projects {
+						for _, item := range project.tabs {
+							if item.index == a.active {
+								if a.sidebarVisibleTab != a.tab() || a.sidebarVisibleProject != project.key {
+									a.sidebarProjectOpen[project.key] = true
+								}
+								a.sidebarVisibleProject = project.key
+							}
+						}
+						listHeight += 40
+						if a.sidebarProjectOpen[project.key] {
+							listHeight += float32(len(project.tabs) * 44)
+						}
+					}
+				}
 				tabs := ui.Scroll(c.Key("sidebar-tabs")).Label("Sidebar tabs").Role(ui.RoleTabList).
 					MinHeight(0).FillWidth().Padding(10, 8).Gap(4)
 				if a.agentHistory != nil && a.agentHistory.expanded {
-					tabs.Height(min(float32(len(a.tabs)*44+16), max(96, height*0.4))).Shrink(0)
+					tabs.Height(min(listHeight, max(96, height*0.4))).Shrink(0)
 				} else {
 					tabs.Grow(1).Basis(0)
 				}
 				tabs.Children(func() {
+					if prefs.SidebarSessionMode == "project" {
+						a.sidebarProjectTabs(c, k, projects)
+						return
+					}
 					for i, t := range slices.Clone(a.tabs) {
 						a.sidebarTab(c, k, i, t)
 					}

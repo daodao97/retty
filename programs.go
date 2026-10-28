@@ -111,6 +111,39 @@ func programTitle(title string, p program) string {
 	return title
 }
 
+// Program titles conventionally end with " | folder". Keep the raw title
+// unchanged and position or hide only its final segment for display.
+func positionTitleFolder(title, position string) string {
+	if position != "before" && position != "none" {
+		return title
+	}
+	index := strings.LastIndex(title, " | ")
+	if index < 0 {
+		return title
+	}
+	name, folder := strings.TrimSpace(title[:index]), strings.TrimSpace(title[index+3:])
+	if name == "" || folder == "" {
+		return title
+	}
+	if position == "none" {
+		return name
+	}
+	return folder + " | " + name
+}
+
+// titleFolderPositions is the settings' segment order. The empty default
+// keeps the folder after the title.
+var titleFolderPositions = []string{"before", "", "none"}
+
+func titleFolderPositionIndex(position string) int {
+	for i, p := range titleFolderPositions {
+		if p == position {
+			return i
+		}
+	}
+	return 1
+}
+
 var (
 	shellProgram = program{Glyph: "square-terminal", IconColor: ui.Hex("#5fd38d"), Shell: true}
 
