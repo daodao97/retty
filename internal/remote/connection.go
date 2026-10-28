@@ -89,6 +89,9 @@ func ResumeConnection(ctx context.Context, client *rex.Client, info *rex.DeviceI
 }
 
 func resumeConnection(ctx context.Context, client *rex.Client, info *rex.DeviceInfo, delay time.Duration) (*rex.Client, rex.Hello, []rex.SessionInfo, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, rex.Hello{}, nil, err
+	}
 	type result struct {
 		client   *rex.Client
 		hello    rex.Hello
@@ -96,6 +99,20 @@ func resumeConnection(ctx context.Context, client *rex.Client, info *rex.DeviceI
 		err      error
 	}
 	results := make(chan result, 2)
+	// A canceled dial can still return a connection after its network stack
+	// wakes. Drain it off the recovery path and close any unclaimed client.
+	discard := func(pending int) {
+		if pending > 0 {
+			go func() {
+				for range pending {
+					late := <-results
+					if late.client != nil && late.client != client {
+						late.client.Close()
+					}
+				}
+			}()
+		}
+	}
 	checkCtx, cancelCheck := context.WithTimeout(ctx, ResumeCheckTimeout)
 	defer cancelCheck()
 	go func() {
@@ -117,6 +134,9 @@ func resumeConnection(ctx context.Context, client *rex.Client, info *rex.DeviceI
 	var failure error
 	for pending := 1; pending > 0; {
 		select {
+		case <-ctx.Done():
+			discard(pending)
+			return nil, rex.Hello{}, nil, ctx.Err()
 		case <-start.C:
 			if !redialing {
 				redial()
@@ -125,15 +145,15 @@ func resumeConnection(ctx context.Context, client *rex.Client, info *rex.DeviceI
 			continue
 		case r := <-results:
 			pending--
-			if r.err == nil {
-				// The loser's late connection must not leak.
-				if pending > 0 {
-					go func() {
-						if late := <-results; late.client != nil && late.client != client && late.err == nil {
-							late.client.Close()
-						}
-					}()
+			if err := ctx.Err(); err != nil {
+				if r.client != nil && r.client != client {
+					r.client.Close()
 				}
+				discard(pending)
+				return nil, rex.Hello{}, nil, err
+			}
+			if r.err == nil {
+				discard(pending)
 				return r.client, r.hello, r.sessions, nil
 			}
 			// A redial's failure, such as a protocol mismatch, explains

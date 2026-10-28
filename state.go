@@ -63,6 +63,7 @@ type Pane struct {
 
 // App is the state of Retty's window.
 type App struct {
+	usage            *desktopUsage
 	cliInstaller     *desktopCLIInstaller
 	diagnostics      *desktopDiagnostics
 	diagnosticRead   func(context.Context, *rex.Client, diagnostics.Request) (diagnostics.Report, error)

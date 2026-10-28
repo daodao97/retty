@@ -22,7 +22,19 @@
   "ios": {
     "capabilities": ["camera", "microphone", "speech"],
     "minimumSystemVersion": "15.0",
+    "native": {"support": ["browser", "live-activities"]},
+    "extensions": [{
+      "name": "RettyActivity",
+      "extensionPoint": "com.apple.widgetkit-extension",
+      "minimumSystemVersion": "16.2",
+      "native": {
+        "sources": ["resources/ios/RettyLiveActivity.swift"],
+        "frameworks": ["SwiftUI", "WidgetKit"],
+        "support": ["live-activities"]
+      }
+    }],
     "infoPlist": {
+      "NSSupportsLiveActivities": true,
       "NSCameraUsageDescription": "扫描 Retty 桌面端的二维码以连接终端会话。",
       "NSLocalNetworkUsageDescription": "连接同一 Wi-Fi 下的 Retty 设备，通过局域网加密直连降低终端延迟。",
       "NSMicrophoneUsageDescription": "按住说话，将语音转换为可编辑的终端输入文字。",

@@ -15,6 +15,7 @@ var settingsSections = []struct{ title, label, glyph string }{
 	{"Agent", "Agent integrations", "bot"},
 	{"关于", "About Retty", "circle-dot"},
 	{"诊断", "Hook and version diagnostics", "circle-dot"},
+	{"用量", "Agent usage", "activity"},
 }
 
 type preferenceItem struct {
@@ -136,6 +137,13 @@ func (a *App) settingsPage(c *ui.Context, k *colors) {
 		})
 	})
 	a.settingsInitialFocus = false
+	if a.usage != nil && a.usage.resetOpen && a.usage.panel == nil {
+		ui.DialogBase(c, &a.usage.resetOpen, func(back, panel ui.Element) {
+			back.Background(ui.RGBA(0, 0, 0, .3))
+			panel.Width(360).MaxWidthPercent(95).Padding(20).Radius(12).Background(theme.Background).Column()
+			a.usageResetConfirmation(c, a.usage.reading("codex"))
+		})
+	}
 	if !a.settingsOpen {
 		a.focusCurrentTerminal()
 		c.Invalidate()
@@ -144,6 +152,44 @@ func (a *App) settingsPage(c *ui.Context, k *colors) {
 
 func (a *App) preferenceItems() []preferenceItem {
 	items := []preferenceItem{
+		{id: "usage-tray", title: "托盘用量", label: "Usage tray", detail: "在系统托盘显示订阅额度的剩余百分比。", group: "用量", section: usageSettingsSection,
+			modified: prefs.HideUsageTray, reset: func() { a.setUsageTray(false, prefs.UsageTrayAgent) },
+			control: func(c *ui.Context) {
+				show := !prefs.HideUsageTray
+				if settingsSwitch(c, &show, "Usage tray").Changed() {
+					a.setUsageTray(!show, prefs.UsageTrayAgent)
+				}
+			}},
+		{id: "usage-agent", title: "托盘账户", label: "Tray usage account", detail: "自动选择可用的本机账户，或固定显示一个 Agent。", group: "用量", section: usageSettingsSection,
+			modified: prefs.UsageTrayAgent != "", reset: func() { a.setUsageTray(prefs.HideUsageTray, "") },
+			control: func(c *ui.Context) {
+				values, selected := []string{"", "codex", "claude"}, 0
+				for i, value := range values {
+					if value == prefs.UsageTrayAgent {
+						selected = i
+					}
+				}
+				if ui.Segmented(c, &selected, "自动", "Codex", "Claude").Label("Tray usage account").Changed() {
+					a.setUsageTray(prefs.HideUsageTray, values[selected])
+				}
+			}},
+		{id: "usage-icon", title: "托盘图标", label: "Tray icon style", detail: "使用 Retty 终端图标，或跟随托盘账户显示 Agent 图标。", group: "用量", section: usageSettingsSection,
+			modified: prefs.UsageTrayAgentIcon, reset: func() { a.setUsageTrayAgentIcon(false) },
+			control: func(c *ui.Context) {
+				selected := 0
+				if prefs.UsageTrayAgentIcon {
+					selected = 1
+				}
+				if ui.Segmented(c, &selected, "Retty", "Agent").Label("Tray icon style").Changed() {
+					a.setUsageTrayAgentIcon(selected == 1)
+				}
+			}},
+		{id: "agent-usage", title: "订阅用量", label: "Open agent usage", detail: "查看本机 Codex 和 Claude 账户的额度与重置时间。", group: "用量", section: usageSettingsSection,
+			control: func(c *ui.Context) {
+				if ui.Button(c, "查看用量").Label("Open agent usage").Clicked() {
+					a.openUsage()
+				}
+			}},
 		{id: "appearance", title: "主题", label: "Color theme", detail: "选择浅色、深色，或跟随系统的外观设置。", group: "颜色", section: 0,
 			modified: prefs.Appearance != "", reset: func() { a.setAppearance("") },
 			control: func(c *ui.Context) {
@@ -387,6 +433,10 @@ func settingsSwitch(c *ui.Context, value *bool, label string) ui.Element {
 
 func (a *App) settingsContent(c *ui.Context, theme *ui.Theme) {
 	query := strings.ToLower(strings.TrimSpace(a.settingsQuery))
+	if a.settingsSection == usageSettingsSection && query == "" && !a.settingsModifiedOnly {
+		a.usagePage(c, theme)
+		return
+	}
 	if a.settingsSection == 4 && query == "" && !a.settingsModifiedOnly {
 		a.diagnosticsPage(c, theme)
 		return

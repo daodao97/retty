@@ -4,6 +4,8 @@ import (
 	"embed"
 	"path"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/egoist/mygo/ui"
 	"retty/internal/agents"
@@ -89,10 +91,20 @@ func programIconColor(c *ui.Context, p program) ui.Color {
 	return color
 }
 
-// Claude's OSC title includes a status asterisk; the brand icon already
-// identifies the task in both desktop tabs and mobile rows.
+// Titles stay stable while lifecycle indicators show activity separately.
+// Codex's OSC spinner is presentation, and can outlive the actual turn.
 func programTitle(title string, p program) string {
 	title = strings.TrimSpace(title)
+	if p.Glyph == "agent:codex" && title != "" {
+		frame, size := utf8.DecodeRuneInString(title)
+		if strings.ContainsRune("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏", frame) {
+			rest := title[size:]
+			next, _ := utf8.DecodeRuneInString(rest)
+			if rest == "" || unicode.IsSpace(next) {
+				title = strings.TrimSpace(rest)
+			}
+		}
+	}
 	if p.Glyph == "agent:claude" && strings.HasPrefix(title, "✳") {
 		title = strings.TrimSpace(strings.TrimLeft(strings.TrimPrefix(title, "✳"), "\ufe0e\ufe0f"))
 	}

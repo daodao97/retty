@@ -139,8 +139,12 @@ func main() {
 	a := &App{}
 	mygo.App.SetMenu(a.menu())
 	mygo.App.WhenReady(a.open)
+	if !performanceRun && runtime.GOOS != "android" {
+		mygo.App.WhenReady(a.startUsage)
+		mygo.App.OnWillQuit(func(*mygo.QuitEvent) { a.stopUsage() })
+	}
 	mygo.App.OnActivate(func(hasVisibleWindows bool) {
-		if !hasVisibleWindows && a.win == nil {
+		if !hasVisibleWindows && a.win == nil && (a.usage == nil || a.usage.panel == nil) {
 			a.open()
 		}
 	})

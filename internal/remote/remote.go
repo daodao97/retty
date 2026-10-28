@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/tailscale/tailcat"
+	"retty/internal/agentusage"
 	"retty/internal/notification"
 	"retty/internal/rex"
 	"retty/internal/selfupdate"
@@ -82,6 +83,10 @@ type Bridge struct {
 	portGate     chan struct{}
 	updateGate   chan struct{}
 	identityLock *os.File
+	usageValue   agentusage.Snapshot
+	usagePending *usageFlight
+	usageRead    func(context.Context) agentusage.Snapshot
+	activity     *activityPublisher
 }
 
 // OnClose registers cleanup before publishing this bridge to consumers.

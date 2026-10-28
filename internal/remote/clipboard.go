@@ -63,6 +63,14 @@ func (b *Bridge) serveConnection(conn net.Conn, socket string) {
 		b.servePort(conn, reader, line)
 		return
 	}
+	if req.Op == "agent-usage" {
+		b.serveUsage(conn, line)
+		return
+	}
+	if req.Op == "live-activity" {
+		b.serveLiveActivity(conn, socket, line)
+		return
+	}
 	if req.Op == "host-diagnostics" {
 		b.serveHostDiagnostics(conn, line)
 		return

@@ -2,11 +2,17 @@ package main
 
 import (
 	"context"
+	"time"
 
 	"github.com/egoist/mygo"
 	"retty/internal/remote"
 	"retty/internal/rex"
 )
+
+// A suspended tunnel can outlive its usable network path. Give socket reuse
+// and the parallel redial a short chance, then let startConnection open a fresh
+// tunnel as an explicit home-page selection would.
+const mobileResumeTimeout = 5 * time.Second
 
 func (m *mobileApp) connectionUsable() bool {
 	return !m.reconnecting && remote.ConnectionUsable(m.client)
@@ -54,6 +60,8 @@ func (m *mobileApp) startPolling(client *rex.Client, generation int) {
 }
 
 func (m *mobileApp) enterBackground() {
+	m.closePreview()
+	m.cancelUsage()
 	m.cancelSpeech(true)
 	m.clearKeyboardModifiers()
 	if m.background {
@@ -131,7 +139,7 @@ func (m *mobileApp) checkRetainedConnection() {
 	client, generation := m.client, m.generation
 	m.resumeCheckID++
 	checkID := m.resumeCheckID
-	ctx, cancel := context.WithTimeout(context.Background(), remote.ResumeRecoveryTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), mobileResumeTimeout)
 	m.cancel = cancel
 	m.reconnecting = true // Disable terminal input until the check completes.
 	if m.term != nil {

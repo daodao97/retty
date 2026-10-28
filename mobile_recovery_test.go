@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -114,6 +115,77 @@ func TestMobileFailedPartialSnapshotKeepsScreenAndDoesNotReplayInput(t *testing.
 	buf := make([]byte, 64)
 	if n, _ := nextPeer.Read(buf); n != 0 {
 		t.Fatal("offline input replayed")
+	}
+}
+
+// Exercise lifecycle callbacks and main-thread completion with a transport
+// still blocked inside its old dial. No real desktop or phone is involved.
+func TestMobileForegroundAbandonsStalledTunnelWithoutLeavingPage(t *testing.T) {
+	if os.Getenv("RETTY_MOBILE_RECOVERY_E2E") != "1" {
+		t.Skip("set RETTY_MOBILE_RECOVERY_E2E=1 for UI dispatch")
+	}
+	registerFonts()
+	for _, page := range []string{"terminal", "sessions"} {
+		t.Run(page, func(t *testing.T) {
+			conn, peer := net.Pipe()
+			defer peer.Close()
+			release := make(chan struct{})
+			defer close(release)
+			client := rex.NewClient(conn, func(context.Context) (net.Conn, error) {
+				<-release
+				return nil, context.Canceled
+			})
+			defer client.Close()
+			cached := rex.SessionInfo{ID: "retained", PID: 123, Cols: 80, Rows: 24}
+			// An invalid fixture link stops the fresh-connect phase before it
+			// reaches any network; its diagnostic proves that phase was entered.
+			m := &mobileApp{client: client, link: "fixture", sessions: []rex.SessionInfo{cached}}
+			var retained *terminal.Terminal
+			mygo.RunOnMain(func() {
+				if page == "terminal" {
+					stream := newSessionViewStream(nil, nil)
+					var err error
+					retained, err = terminal.New(terminal.Options{Conn: stream, Font: terminal.Font{Family: termFont.Family, Size: 13}})
+					if err != nil {
+						t.Error(err)
+						return
+					}
+					retained.Feed([]byte("retained screen"))
+					m.term, m.stream, m.selected = retained, stream, cached
+				}
+				m.enterBackground()
+				m.enterForeground()
+			})
+			defer mygo.RunOnMain(func() { m.disconnect(false) })
+			deadline := time.Now().Add(mobileResumeTimeout + 2*time.Second)
+			recovered := false
+			for time.Now().Before(deadline) {
+				mygo.RunOnMain(func() { recovered = m.generation > 0 && m.connectionIssue != nil })
+				if recovered {
+					break
+				}
+				time.Sleep(10 * time.Millisecond)
+			}
+			if !recovered {
+				t.Fatal("foreground recovery never abandoned the suspended tunnel")
+			}
+			mygo.RunOnMain(func() {
+				if m.home || !m.reconnecting || m.term != retained || !reflect.DeepEqual(m.sessions, []rex.SessionInfo{cached}) {
+					t.Error("fresh-connect fallback lost the current page or cached session")
+				}
+				if retained != nil && !strings.Contains(retained.Text(), "retained screen") {
+					t.Error("fresh-connect fallback erased terminal contents")
+				}
+				if len(m.connectionDiagnostics) == 0 || m.connectionDiagnostics[0].Stage != remote.StageLink {
+					t.Error("fallback did not reach the fresh connection path")
+				}
+			})
+			select {
+			case <-client.Closed():
+			case <-time.After(time.Second):
+				t.Error("expired retained control was left open")
+			}
+		})
 	}
 }
 

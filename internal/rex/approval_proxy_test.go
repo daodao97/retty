@@ -44,8 +44,44 @@ func TestStructuredCodexProxyWithoutHooks(t *testing.T) {
 			return
 		}
 		defer c.CloseNow()
-		if _, _, err = c.Read(ctx); err != nil {
+		_, first, err := c.Read(ctx)
+		if err != nil {
 			return
+		}
+		var request codexEnvelope
+		if json.Unmarshal(first, &request) != nil {
+			return
+		}
+		if request.Method == "initialize" {
+			// The relay's metadata connection is independent of the CLI and
+			// must never consume or answer the CLI's approval request.
+			for {
+				if len(request.ID) > 0 {
+					var result any = map[string]any{}
+					switch request.Method {
+					case "initialize":
+					case "thread/read":
+						result = map[string]any{"thread": codexThread{ID: "thread", Status: codexStatus{Type: "idle"}}}
+					case "thread/turns/list":
+						result = map[string]any{"data": []codexTurn{}}
+					default:
+						t.Errorf("unexpected metadata request %q", request.Method)
+						return
+					}
+					raw, _ := json.Marshal(map[string]any{"id": request.ID, "result": result})
+					if c.Write(ctx, websocket.MessageText, raw) != nil {
+						return
+					}
+				}
+				_, raw, err := c.Read(ctx)
+				if err != nil {
+					return
+				}
+				request = codexEnvelope{}
+				if json.Unmarshal(raw, &request) != nil {
+					return
+				}
+			}
 		}
 		if err = c.Write(ctx, websocket.MessageText, []byte(`{"id":1,"result":{"thread":{"id":"thread","cwd":"/tmp","status":{"type":"idle"}}}}`)); err != nil {
 			return

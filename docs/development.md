@@ -47,7 +47,11 @@ zsh 会话在返回提示符时清空遗留的 Kitty 键盘协议栈，防止 TU
 
 Hook/版本诊断的范围、只读检查及回归入口见 [Hook 与版本诊断](diagnostics-and-devservers.md)。
 
+设置中的订阅额度、CLI 读取和托盘进度见 [本机 Agent 用量](agent-usage.md)。
+
 手机通过 Codex app-server / Claude PermissionRequest Hook 处理结构化授权、原生确认面板和隔离真机测试见 [手机原生 Agent 授权](mobile-approvals.md)。
+
+手机手动预览开发页面、跨主机订阅用量、ActivityKit 锁屏状态、扩展签名和隔离真机测试见 [手机预览与实时状态](mobile-experiences.md)。
 
 可重复的生产版性能测量见 [性能基线](performance.md)。工具为每个场景创建独立会话与 GUI 数据目录，报告 GUI、会话服务、推送 worker 的 CPU、物理内存、RSS、启动峰值及原始样本。
 
@@ -372,6 +376,8 @@ Tailcat 服务端会永久保留每个连接过的节点密钥，并在每次新
 
 桌面远程窗格使用独立的只读画面流和前台输入/尺寸 attachment，兼容现有 v4/v6 服务，无需重启 daemon。离开窗格或窗口失焦立即关闭前台 attachment 并释放尺寸；只读画面流保留 60 秒，后台继续消费输出，超时关闭但保留终端画面。返回时复用画面流，通过新的 LIST 检查所有权后接入输入；已被其他设备接管的会话保持只读，必须点击“接入当前窗格”。后台流不发送输入、resize 或租约续期。前台期间两条流都会接收输出，输入流会持续排空，避免远端写入阻塞。首次载入或实际画面流恢复超过 400ms 才显示载入提示；单纯恢复输入不会清屏或显示载入提示。
 
+手机恢复旧连接和旧隧道的总预算为 5 秒，超时后自动进入全新隧道连接流程，保留会话列表、当前会话及已有终端内容。恢复协调器直接响应取消和期限，不等待旧网络栈中的重拨返回；迟到的新控制连接在后台关闭，不能覆盖较新的连接状态。日常前台轮询仍保留 10 秒响应预算，避免短暂中继延迟触发频繁重连。无需退出到主页触发新连接。
+
 桌面文件拖拽通过独立的 `upload-files` 桥接连接上传，不向会话服务发送文件数据或新操作，也不要求升级已有 daemon。桌面桥接与 CLI 网关均使用自己的状态目录下的 `uploads/batch-*/` 保存完整批次；文件权限为 0600，可执行文件和目录为 0700。各个拖入项有独立子目录，同名文件不会覆盖。只有收到完整内容、客户端完成标记并确认目标会话仍存活后，才返回绝对路径；失败批次自动删除，完成批次保留以供运行中的程序使用，不随窗格关闭删除。
 
 单批最多 1GB、4096 项、256 个拖入项，超时 10 分钟。文件夹中的符号链接或特殊文件不展开，需单独拖入链接目标；顶层符号链接会解析到目标。取消、切换窗格、失去窗口焦点或断开连接会停止传输，并丢弃迟到的路径结果。旧版远端提示升级桥接/网关，不回退粘贴本机路径。只更新远端 GUI 即可让桌面桥接支持上传；已有 CLI 网关需待合适时机更新，不重启正在运行任务的会话服务。
@@ -383,6 +389,8 @@ RETTY_REMOTE_E2E=1 GOWORK=off go test ./internal/remote \
   -run '^TestTailcatSessionLifecycle$' -count=1 -v -timeout 25m
 RETTY_MOBILE_RECOVERY_E2E=1 GOWORK=off go test . \
   -run '^TestMobileRecoveryAcrossDesktopBridgeRestart$' -count=1 -v -timeout 3m
+RETTY_MOBILE_RECOVERY_E2E=1 GOWORK=off go test . \
+  -run '^TestMobileForegroundAbandonsStalledTunnelWithoutLeavingPage$' -count=1 -race -timeout 45s
 ```
 
 真机脚本安装上一步已签名的 `build/ios-arm64/Retty.app`，使用独立 Keychain 命名空间和测试服务：
@@ -435,7 +443,9 @@ Git 分支摘要、Worktree 项目归组、终端旁独立窗格中的只读本�
 
 已读和通知投递回执分开保存，事件身份沿用 `AgentNoticeID`。新会话服务通过 `Hello.attention` 广告已读能力，`markAttention` 仅接受当前事件的 ID，已读结果随 `list` 在桌面/手机之间同步；源服务原子保存到 `attention-seen.json`，不触碰 PTY、尺寸或输入。旧服务降级到客户端的 256 条已读记录，继续沿用桌面 `inbox-seen.json`、手机 SecureStore `inbox-seen-v1` 的存储键，保留既有回执；旧服务不能跨端同步。
 
-Codex 只从当前根线程、当前轮的 `item/completed` 最终回复生成摘录，仍等明确的完成/空闲事件确认结束；Claude Code 使用 Stop/StopFailure 的 `last_assistant_message`。Codex TUI 会通过同一连接创建 `ephemeral` 临时线程生成旧对话摘要等结构化内容；proxy 和 metadata watcher 不允许临时线程或子 Agent 接管窗格、生成完成通知，即使它们的 `turn/start` / `turn/steer` 请求成功。摘录为首个正文句，最多 160 字符，不包括代码块，不调用模型，不保留完整回复。新一轮会清除旧摘录；没有最终回复时沿用任务说明。桌面、远端提醒与 APNs 共用 `AgentNoticeBody`。需要源服务、对应 hook/proxy 和推送 worker 支持新字段；GUI 更新不会升级已有后台进程，不为了启用摘要或已读同步重启真实任务。Agent 恢复记录同时保存事件序号，重启电脑后继续递增，避免旧已读/通知回执吞掉恢复后的下一轮结果。
+Codex 只从当前根线程、当前轮的 `item/completed` 最终回复生成摘录。匹配当前轮次的 `turn/completed`（completed / failed / interrupted）立即结束该轮，不再等待额外的 `thread/status/changed: idle`；自动续跑由新的 `turn/started` 恢复运行状态，延迟到达的 active 通知不能重新打开已结束的轮次。proxy 另建只读元数据连接，每 2 秒通过 `thread/read` 和 `thread/turns/list`（`itemsView: notLoaded`）校准已有根线程，查询后再确认空闲状态；若查询期间线程或事件版本变化，则丢弃旧快照。查询不 resume、订阅、启动或中断线程，断线重连不清空状态。OSC 7501 对普通程序仍驱动完整生命周期；已连接 App Server 的 Codex 根记录保留结构化轮次身份及通知序号，并合并同一状态下新鲜的 OSC 进度、标题和等待说明；子记录仍独立参与聚合，迟到的 OSC working 不覆盖结构化完成。
+
+Claude Code 使用 Stop/StopFailure 的 `last_assistant_message`。Codex TUI 会通过同一连接创建 `ephemeral` 临时线程生成旧对话摘要等结构化内容；proxy 和 metadata watcher 不允许临时线程或子 Agent 接管窗格、生成完成通知，即使它们的 `turn/start` / `turn/steer` 请求成功。摘录为首个正文句，最多 160 字符，不包括代码块，不调用模型，不保留完整回复。新一轮会清除旧摘录；没有最终回复时沿用任务说明。桌面、远端提醒与 APNs 共用 `AgentNoticeBody`。需要源服务、对应 hook/proxy 和推送 worker 支持新字段；GUI 更新不会升级已有后台进程，不为了启用摘要或已读同步重启真实任务。Agent 恢复记录同时保存事件序号，重启电脑后继续递增，避免旧已读/通知回执吞掉恢复后的下一轮结果。
 
 本地控制轮询仍为 500ms，维护和重连检查照常执行；相同快照不再请求重建界面。输出、状态、摘要、已读、尺寸变化及未完成的窗格维护仍请求刷新，终端输出和输入继续自行失效。隔离用例 `TestIdlePollFramesAndLifecycleMaintenance` 的 20 次相同快照从原先 20 次刷新请求降到初始化的 1 次。Apple M3 上 `BenchmarkIdleSnapshotComparison`（200ms）的 1/32/100 个会话约为 110ns/2.7µs/8.3µs，均零分配；这是快照比较成本，不能换算为整机 CPU 降幅。复现：`GOWORK=off go test . -run '^$' -bench BenchmarkIdleSnapshotComparison -benchtime=200ms`。
 

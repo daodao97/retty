@@ -78,9 +78,21 @@ func (s *session) reportAgent(token string, event *AgentEvent) (agents.HookInput
 	// Revisions share a monotonic space when a session switches between
 	// generic terminal status and an agent integration.
 	previous := s.agent.state
+	previousView := previous
+	if len(s.programStatus.records) > 0 {
+		previousView = s.programStatus.agentStateWithLifecycle(&s.agent)
+	}
 	s.agent.apply(*event)
 	if s.agent.state.WaitRevision > previous.WaitRevision {
-		s.agent.state.WaitRevision = max(s.agent.state.WaitRevision, s.programStatus.serial+1)
+		if previousView.State == agents.Waiting && previousView.Source != ProgramStatusSource &&
+			previousView.ID == s.agent.state.ID && previousView.SessionID == s.agent.state.SessionID &&
+			s.agent.turnID == event.Input.TurnID && event.Input.TurnID != "" {
+			// OSC already exposed this block. The structured confirmation is
+			// the same notice, rather than a second permission notification.
+			s.agent.state.WaitRevision = max(s.agent.state.WaitRevision, previousView.WaitRevision)
+		} else {
+			s.agent.state.WaitRevision = max(s.agent.state.WaitRevision, s.programStatus.serial+1)
+		}
 	}
 	if s.agent.state.CompletionRevision > previous.CompletionRevision {
 		s.agent.state.CompletionRevision = max(s.agent.state.CompletionRevision, s.programStatus.serial+1)
@@ -110,7 +122,7 @@ func (t *agentTracker) apply(e AgentEvent) {
 	h := agents.NormalizeHook(e.Agent, e.Input)
 	if e.Agent == "codex" && h.Event == "Stop" && h.Source != agents.CodexLifecycleSource {
 		// A Stop hook is a proposal to finish, before other hooks may continue
-		// the task. Only turn/completed or an idle metadata snapshot confirms it.
+		// the task. Only turn/completed or a terminal, idle metadata snapshot confirms it.
 		return
 	}
 	previousTurn := t.turnID

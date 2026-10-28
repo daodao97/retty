@@ -1,6 +1,53 @@
 import XCTest
 
 final class RettyUITests: XCTestCase {
+    func testMobilePreviewUsageAndActivity() throws {
+        continueAfterFailure = false
+        let app = XCUIApplication(bundleIdentifier: "com.daodao.retty")
+        app.launchEnvironment["RETTY_UI_TEST"] = "1"
+        app.terminate()
+        app.launch()
+        XCTAssertTrue(app.buttons["扫码连接桌面"].waitForExistence(timeout: 15))
+        if #available(iOS 16.4, *) { app.open(URL(string: Fixture.link)!) }
+        else { throw XCTSkip("URL opening requires iOS 16.4") }
+        let session = app.buttons["打开会话 " + Fixture.existing]
+        XCTAssertTrue(session.waitForExistence(timeout: 45), app.debugDescription)
+        app.buttons["会话列表设置"].tap()
+        app.buttons["订阅用量汇总"].tap()
+        XCTAssertTrue(app.staticTexts["Codex 重置卡 · 2 张"].waitForExistence(timeout: 30), app.debugDescription)
+        screenshot("mobile-usage-native")
+        app.buttons["关闭订阅用量"].tap()
+        session.tap()
+        app.buttons["会话工具"].tap()
+        app.buttons["开发页面预览"].tap()
+        let address = app.textFields["开发页面地址"]
+        XCTAssertTrue(address.waitForExistence(timeout: 5), app.debugDescription)
+        address.tap()
+        address.press(forDuration: 1.2)
+        let selectAll = app.menuItems["全选"].exists ? app.menuItems["全选"] : app.menuItems["Select All"]
+        if selectAll.waitForExistence(timeout: 2) { selectAll.tap(); app.typeText(Fixture.created) }
+        else { address.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 100) + Fixture.created) }
+        app.buttons["打开预览"].tap()
+        let heading = app.webViews.staticTexts["手机开发预览已连接"]
+        XCTAssertTrue(heading.waitForExistence(timeout: 20), app.debugDescription)
+        screenshot("mobile-preview-native")
+        let done = app.buttons["完成"].exists ? app.buttons["完成"] : app.buttons["Done"]
+        XCTAssertTrue(done.exists, app.debugDescription)
+        done.tap()
+        app.buttons["会话工具"].tap()
+        app.buttons["在锁屏显示此会话"].tap()
+        Thread.sleep(forTimeInterval: 3)
+        XCTAssertFalse(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "无法开启锁屏")).firstMatch.exists, app.debugDescription)
+        screenshot("mobile-activity-created")
+        XCUIDevice.shared.press(.home)
+        Thread.sleep(forTimeInterval: 12)
+        screenshot("mobile-activity-background-waiting")
+        Thread.sleep(forTimeInterval: 12)
+        screenshot("mobile-activity-background-completed")
+        app.activate()
+        app.buttons["关闭会话工具"].tap()
+    }
+
     func testNativeAgentApproval() throws {
         continueAfterFailure = false
         let app = XCUIApplication(bundleIdentifier: "com.daodao.retty")

@@ -39,6 +39,7 @@ func (a *App) openFileComponent(diff bool) {
 }
 
 var (
+	cmdUsagePanel   = command{ID: "usage.open", Title: "用量概览…", Run: func(a *App) { a.toggleUsagePanel() }}
 	cmdFilePane     = command{ID: "files.open", Automation: true, Target: true, Title: "新建文件窗格", Run: func(a *App) { a.openFileComponent(false) }}
 	cmdDiffPane     = command{ID: "diff.open", Automation: true, Target: true, Title: "打开 Diff 窗格", Run: func(a *App) { a.openFileComponent(true) }}
 	cmdTerminalPane = command{ID: "terminal.open", Title: "打开终端窗格", Run: func(a *App) {
@@ -103,6 +104,7 @@ var paletteCommands = []*command{
 	&cmdFiles,
 	&cmdFilePane, &cmdDiffPane, &cmdTerminalPane,
 	&cmdSettings,
+	&cmdUsagePanel,
 	&cmdCheckUpdates,
 	&cmdUpdateRemote,
 	&cmdNewTab, &cmdSplitRight, &cmdSplitDown, &cmdZoom, &cmdEqualize, &cmdClosePane, &cmdCloseTab,

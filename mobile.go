@@ -22,6 +22,9 @@ import (
 )
 
 type mobileApp struct {
+	preview                            mobilePreview
+	usage                              mobileUsage
+	live                               mobileLiveActivity
 	approval                           *mobileApproval
 	terminalHistory                    *terminalHistory
 	readReceipts                       readReceiptState
@@ -131,7 +134,7 @@ func mobileMain() {
 		}
 		m.invalidate()
 	})
-	mygo.App.OnOpenURL(func(link string) { m.connect(link) })
+	mygo.App.OnOpenURL(m.openMobileURL)
 	mygo.App.OnDidBecomeActive(func() { m.registerSystemPush() })
 	mygo.App.OnNotification(func(event mygo.NotificationEvent) {
 		if event.Clicked {
@@ -149,6 +152,7 @@ func mobileMain() {
 		m.loadSessionPreferences()
 		m.loadReadReceipts()
 		m.setupPush()
+		m.setupLiveActivity()
 		historyEpoch := m.historyEpoch
 		m.storage <- func() {
 			// Until this loads, tunnels use ephemeral keys, as before.
@@ -206,6 +210,7 @@ func mobileMain() {
 
 func (m *mobileApp) invalidate() {
 	m.syncScreenAwake()
+	m.syncLiveActivity()
 	if m.win != nil {
 		m.win.Invalidate()
 	}
@@ -246,6 +251,11 @@ func (m *mobileApp) detach() {
 }
 
 func (m *mobileApp) disconnect(forget bool) {
+	m.closePreview()
+	if forget {
+		m.stopLiveActivity()
+		m.saveLivePreference()
+	}
 	m.historySelection = nil
 	m.stopRecentPresence()
 	m.stopPolling()
@@ -601,6 +611,9 @@ func (m *mobileApp) contentView(c *ui.Context) {
 	m.sessionEndDialog(c)
 	m.connectionDialog(c)
 	m.connectionDiagnosticsDialog(c)
+	m.previewDialog(c)
+	m.usageDialog(c)
+	m.liveActivityDialog(c)
 	m.terminalHistory.view(c)
 	m.syncApproval(c)
 	if page := m.navigation.Path(); page != m.navigationPage {
@@ -704,6 +717,10 @@ func (m *mobileApp) header(c *ui.Context, title string, back func(), terminalPag
 			}
 		})
 		if terminalPage {
+			if mobileIconAction(c, "会话工具", "ellipsis").Clicked() {
+				m.live.tools = true
+				c.Blur()
+			}
 			m.approvalAction(c)
 		}
 		if terminalPage && m.term != nil && m.needsRecovery() {
@@ -712,16 +729,10 @@ func (m *mobileApp) header(c *ui.Context, title string, back func(), terminalPag
 			}).Clicked() {
 				m.connectionDetailsOpen = true
 			}
-		} else if terminalPage && m.stream != nil {
-			if enabled, _, _ := m.stream.ScreenStatus(); enabled {
-				if mobileIconAction(c, "查看终端历史", "rotate-ccw").Clicked() {
-					m.openTerminalHistory()
-				}
-			} else {
-				ui.Box(c).Size(44, 44).Shrink(0)
+		} else if !terminalPage {
+			if mobileIconAction(c, "订阅用量汇总", "activity").Clicked() {
+				m.openUsage()
 			}
-		} else {
-			ui.Box(c).Size(44, 44).Shrink(0)
 		}
 	})
 }
@@ -877,6 +888,12 @@ func (m *mobileApp) sessionsView(c *ui.Context) {
 
 func (m *mobileApp) terminalView(c *ui.Context) {
 	m.header(c, m.sessionTitle(m.selected), func() { m.resumeSID = ""; m.detach() }, true)
+	// System browser keyboard/inset changes must not resize the hidden PTY.
+	if m.preview.busy {
+		ui.Text(c, "开发页面预览中…").FontSize(14).Padding(16).TextColor(c.Theme().TextMuted)
+		ui.Box(c).Grow(1)
+		return
+	}
 	if m.term == nil {
 		c.Invalidate()
 		return

@@ -46,6 +46,14 @@ for key in ('bindings', 'frontendDist'):
     if config.get(key):
         config[key] = str(root / config[key])
 config['resources'] = [str(root / path) for path in config.get('resources', [])]
+ios = config.setdefault('ios', {})
+for target in [ios, *ios.get('extensions', [])]:
+    native = target.get('native', {})
+    for key in ('sources', 'resources', 'libraries'):
+        if key in native:
+            native[key] = [str(root / path) for path in native[key]]
+    if native.get('entryPoint'):
+        native['entryPoint'] = str(root / native['entryPoint'])
 launch = config.get('ios', {}).get('launchScreen', {})
 if launch.get('image'):
     launch['image'] = str(root / launch['image'])
@@ -53,6 +61,8 @@ if os.environ.get('IOS_PROVISIONING_PROFILE'):
     signing = config.setdefault('ios', {}).setdefault('signing', {})
     signing['style'] = 'manual'
     signing['provisioningProfile'] = os.environ['IOS_PROVISIONING_PROFILE']
+    if os.environ.get('IOS_ACTIVITY_PROVISIONING_PROFILE'):
+        signing.setdefault('exportProfiles', {})['com.daodao.retty.RettyActivity'] = os.environ['IOS_ACTIVITY_PROVISIONING_PROFILE']
     if os.environ.get('IOS_SIGNING_IDENTITY'):
         signing['identity'] = os.environ['IOS_SIGNING_IDENTITY']
 (stage / 'mygo.json').write_text(json.dumps(config, indent=2) + '\n')

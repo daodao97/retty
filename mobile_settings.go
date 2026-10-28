@@ -60,6 +60,18 @@ func (m *mobileApp) sessionSettingsDialog(c *ui.Context) {
 					}
 				})
 			}
+			if ui.Button(c, "开发页面预览").FillWidth().Height(44).Clicked() {
+				m.sessionSettingsOpen = false
+				m.openPreview()
+			}
+			if ui.Button(c, "订阅用量汇总").FillWidth().Height(44).Clicked() {
+				m.sessionSettingsOpen = false
+				m.openUsage()
+			}
+			liveEnabled := m.live.enabled
+			if mobileSettingSwitch(c, &liveEnabled, "锁屏实时状态", "activity", "锁屏实时状态", "打开会话工具，选择要在锁屏跟踪的会话").Changed() {
+				m.setLiveActivityEnabled(liveEnabled)
+			}
 			m.connectionDiagnosticsAction(c)
 		})
 	})

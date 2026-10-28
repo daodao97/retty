@@ -13,7 +13,7 @@ import (
 )
 
 // ProgramStatusSource identifies status reported directly by a terminal program,
-// rather than an agent-specific hook. OSC 7501 revision 0.3 is defined at
+// rather than an agent-specific hook. OSC 7501 revision 0.4 is defined at
 // https://www.superlogical.com/rex/docs/build/program-status.
 const ProgramStatusSource = "osc7501"
 const programStatusReply = "\x1b]7501;?\x1b\\"
@@ -419,13 +419,26 @@ func (t *programStatusTracker) agentState(fallback string) AgentState {
 // Codex's root OSC status is a less detailed view of the same activity as
 // its app-server lifecycle. Prefer the latter when it is connected: it has
 // the real thread/turn identity and includes the final reply at completion.
-// In particular, an OSC done/idle must not send a title-only notice while
-// the observer is still delivering the final answer and confirmed Stop.
+// OSC still supplies progress and display text for the matching phase. A
+// terminal turn event finishes immediately; metadata reconciles missed events.
+// OSC done/idle cannot attribute a completion to a particular Codex turn.
 func (t *programStatusTracker) agentStateWithLifecycle(tracker *agentTracker) AgentState {
 	a := t.agentState("")
 	structured := tracker.state
 	if a.ID != "codex" || a.SessionID != "osc7501:" || !tracker.codexLifecycle || structured.ID != "codex" || structured.State == "" {
 		return a
+	}
+	// OSC can describe a block (for example authentication) that has no
+	// corresponding app-server active flag. Keep the real thread identity.
+	if structured.State == agents.Running && a.State == agents.Waiting && a.Updated.After(structured.Updated) {
+		structured.State, structured.Reason = a.State, a.Reason
+		structured.WaitRevision = max(structured.WaitRevision+1, a.WaitRevision)
+	}
+	if a.State == structured.State && !a.Updated.Before(structured.Updated) {
+		structured.Label, structured.Message, structured.Progress = a.Label, a.Message, a.Progress
+		if a.State == agents.Waiting && a.Reason != "" {
+			structured.Reason = a.Reason
+		}
 	}
 	return structured
 }

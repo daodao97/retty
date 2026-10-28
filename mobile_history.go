@@ -35,6 +35,10 @@ func (m *mobileApp) clearSelectedDesktopHistory() {
 	if len(removed) == 0 {
 		return
 	}
+	if removed[m.live.desktop] {
+		m.stopLiveActivity()
+		m.saveLivePreference()
+	}
 	// Close only the phone's control tunnel if its record was selected. This
 	// never ends the desktop's sessions, and other desktops keep their records.
 	if activeRemoved {

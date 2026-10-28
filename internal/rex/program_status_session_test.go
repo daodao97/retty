@@ -268,3 +268,66 @@ func TestCodexLifecycleProgramStatusScope(t *testing.T) {
 		})
 	}
 }
+
+func TestCodexLifecycleMergesOSCDetailsWithoutChangingTurnIdentity(t *testing.T) {
+	now := time.Now()
+	var tracker agentTracker
+	var statuses programStatusTracker
+	report := func(event string, at time.Time) {
+		tracker.apply(AgentEvent{Agent: "codex", At: at, Input: agents.HookInput{
+			Event: event, SessionID: "root", TurnID: "turn", Source: agents.CodexLifecycleSource,
+		}})
+	}
+	report("UserPromptSubmit", now)
+	progress := 42
+	statuses.apply(ProgramStatus{State: "working", App: "codex", Progress: &progress, Title: "构建", Message: "正在编译"}, now.Add(time.Millisecond))
+	got := statuses.agentStateWithLifecycle(&tracker)
+	if got.State != agents.Running || got.Progress == nil || *got.Progress != 42 || got.Label != "构建" || got.Message != "正在编译" || got.SessionID != "root" || got.Source == ProgramStatusSource {
+		t.Fatal("OSC progress or structured identity lost", got)
+	}
+	report("PermissionRequest", now.Add(2*time.Millisecond))
+	statuses.apply(ProgramStatus{State: "blocked", App: "codex", Kind: "auth", Message: "需要登录"}, now.Add(3*time.Millisecond))
+	got = statuses.agentStateWithLifecycle(&tracker)
+	if got.State != agents.Waiting || got.Reason != "auth" || got.Message != "需要登录" || got.WaitRevision != tracker.state.WaitRevision {
+		t.Fatal("OSC waiting detail changed lifecycle identity", got)
+	}
+	report("Stop", now.Add(4*time.Millisecond))
+	completed := statuses.agentStateWithLifecycle(&tracker)
+	statuses.apply(ProgramStatus{State: "working", App: "codex"}, now.Add(5*time.Millisecond))
+	if got := statuses.agentStateWithLifecycle(&tracker); !got.Equal(completed) {
+		t.Fatal("delayed OSC working reopened a finished turn", got)
+	}
+	// Progress from the previous task must not appear on a new structured turn.
+	statuses.apply(ProgramStatus{State: "working", App: "codex", Progress: &progress}, now.Add(6*time.Millisecond))
+	report("UserPromptSubmit", now.Add(7*time.Millisecond))
+	if got := statuses.agentStateWithLifecycle(&tracker); got.Progress != nil || got.Message != "" {
+		t.Fatal("old OSC details carried into the next turn", got)
+	}
+}
+
+func TestCodexOSCBlockAndStructuredConfirmationShareNotice(t *testing.T) {
+	s := &session{agentToken: "fixture"}
+	now := time.Now()
+	report := func(event string) {
+		t.Helper()
+		now = now.Add(time.Millisecond)
+		_, _, err := s.reportAgent("fixture", &AgentEvent{Agent: "codex", At: now, Input: agents.HookInput{
+			Event: event, SessionID: "root", TurnID: "turn", Source: agents.CodexLifecycleSource,
+		}})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	report("UserPromptSubmit")
+	now = now.Add(time.Millisecond)
+	s.programStatus.apply(ProgramStatus{State: "blocked", App: "codex", Kind: "auth", Message: "请登录"}, now)
+	before := SessionInfo{ID: "pane", Agent: s.programStatus.agentStateWithLifecycle(&s.agent)}
+	if before.Agent.State != agents.Waiting || before.Agent.Reason != "auth" || before.Agent.SessionID != "root" {
+		t.Fatal("OSC-only block did not reach the shared state", before.Agent)
+	}
+	report("PermissionRequest")
+	after := SessionInfo{ID: "pane", Agent: s.programStatus.agentStateWithLifecycle(&s.agent)}
+	if AgentNoticeID("host", before) != AgentNoticeID("host", after) || AgentNoticeTransition(before, after) {
+		t.Fatal("structured confirmation duplicated the OSC waiting notice", before.Agent, after.Agent)
+	}
+}

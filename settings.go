@@ -25,6 +25,9 @@ type settings struct {
 	FilesSidePanel                   bool    `json:"filesSidePanel,omitempty"`
 	FilesWidth                       float32 `json:"filesWidth,omitempty"`
 	HideGitStatus                    bool    `json:"hideGitStatus,omitempty"`
+	HideUsageTray                    bool    `json:"hideUsageTray,omitempty"`
+	UsageTrayAgent                   string  `json:"usageTrayAgent,omitempty"`
+	UsageTrayAgentIcon               bool    `json:"usageTrayAgentIcon,omitempty"`
 	FontSize                         float32 `json:"fontSize,omitempty"`
 	LinkEditor                       string  `json:"linkEditor,omitempty"`
 	CopyRawText                      bool    `json:"copyRawText,omitempty"`
@@ -61,6 +64,9 @@ func readSettings() settings {
 	}
 	if s.DesktopLayout != "sidebar" {
 		s.DesktopLayout = ""
+	}
+	if s.UsageTrayAgent != "codex" && s.UsageTrayAgent != "claude" {
+		s.UsageTrayAgent = ""
 	}
 	if s.FilesDiffBase != "turn" && s.FilesDiffBase != "branch" {
 		s.FilesDiffBase = "head"

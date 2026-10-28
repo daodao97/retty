@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net"
 	"retty/internal/rex"
+	"sync"
 	"testing"
 	"time"
 )
@@ -171,5 +173,72 @@ func TestWatchConnectionStoppedDuringPollRetainsSocket(t *testing.T) {
 	}
 	if !ConnectionUsable(client) {
 		t.Fatal("stopped polling discarded the retained connection")
+	}
+}
+
+func TestResumeCancellationDoesNotWaitForStalledRedial(t *testing.T) {
+	testResumeAbandonsStalledRedial(t, false)
+}
+
+func TestResumeDeadlineDoesNotWaitForStalledRedial(t *testing.T) {
+	testResumeAbandonsStalledRedial(t, true)
+}
+
+func testResumeAbandonsStalledRedial(t *testing.T, deadline bool) {
+	t.Helper()
+	conn, peer := net.Pipe()
+	defer peer.Close()
+	redialStarted, releaseRedial := make(chan struct{}), make(chan struct{})
+	release := sync.OnceFunc(func() { close(releaseRedial) })
+	defer release()
+	lateConn, latePeer := net.Pipe()
+	defer latePeer.Close()
+	defer lateConn.Close()
+	client := rex.NewClient(conn, func(context.Context) (net.Conn, error) {
+		close(redialStarted)
+		// A transport may still be leaving a suspended network stack after
+		// its caller's deadline. Recovery must be free to open a new tunnel.
+		<-releaseRedial
+		return lateConn, nil
+	})
+	defer client.Close()
+	var ctx context.Context
+	var cancel context.CancelFunc
+	want := context.Canceled
+	if deadline {
+		ctx, cancel = context.WithTimeout(context.Background(), 50*time.Millisecond)
+		want = context.DeadlineExceeded
+	} else {
+		ctx, cancel = context.WithCancel(context.Background())
+	}
+	defer cancel()
+	done := make(chan error, 1)
+	go func() {
+		next, _, _, err := resumeConnection(ctx, client, nil, time.Millisecond)
+		if next != nil {
+			next.Close()
+		}
+		done <- err
+	}()
+	select {
+	case <-redialStarted:
+	case <-time.After(time.Second):
+		t.Fatal("redial did not start")
+	}
+	if !deadline {
+		cancel()
+	}
+	select {
+	case err := <-done:
+		if !errors.Is(err, want) {
+			t.Fatalf("recovery lost cancellation: %v", err)
+		}
+	case <-time.After(250 * time.Millisecond):
+		t.Fatal("canceled recovery is waiting for the old tunnel's redial")
+	}
+	release()
+	latePeer.SetReadDeadline(time.Now().Add(time.Second))
+	if _, err := io.Copy(io.Discard, latePeer); err != nil {
+		t.Fatalf("late canceled redial leaked its connection: %v", err)
 	}
 }

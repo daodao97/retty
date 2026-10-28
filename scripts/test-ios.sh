@@ -14,6 +14,11 @@ work=Path(sys.argv[1])
 for name in ('fixture.json','ios-finished'): (work/name).unlink(missing_ok=True)
 PYCODE
 case "${IOS_TEST_FLOW:-full}" in
+ features)
+  TEST_CASE=RettyUITests/RettyUITests/testMobilePreviewUsageAndActivity
+  RETTY_IOS_FEATURES_FIXTURE="$WORK/fixture.json" \
+   go test ./internal/remote -run '^TestTailcatIOSMobileFeatures$' -v -timeout 5m > "$WORK/host.log" 2>&1 &
+  ;;
  approval)
   TEST_CASE=RettyUITests/RettyUITests/testNativeAgentApproval
   RETTY_IOS_APPROVAL_FIXTURE="$WORK/fixture.json" \
@@ -34,7 +39,7 @@ case "${IOS_TEST_FLOW:-full}" in
   RETTY_IOS_INPUT_FIXTURE="$WORK/fixture.json" \
    go test ./internal/remote -run '^TestTailcatIOSInputContinuation$' -v -timeout 5m > "$WORK/host.log" 2>&1 &
   ;;
- *) echo "IOS_TEST_FLOW must be full, background, input or approval" >&2; exit 1 ;;
+ *) echo "IOS_TEST_FLOW must be full, background, input, approval or features" >&2; exit 1 ;;
 esac
 HOST_PID=$!
 finish() {

@@ -155,6 +155,7 @@ func RunCodexProxy(dir string, parent int, socket string) error {
 		connection, end := context.WithCancel(ctx)
 		defer end()
 		observer := newCodexObserver(connection)
+		go observer.reconcileMetadata(connection, socket)
 		store := approval.NewStore()
 		if closeApprovals, err := approval.Listen(connection, Dir(), os.Getenv("RETTY_SESSION"), store); err == nil {
 			defer closeApprovals()
@@ -236,6 +237,7 @@ type codexTurn struct {
 
 type codexObserver struct {
 	mu             sync.Mutex
+	revision       uint64 // guards metadata reads against newer transport events
 	pending        map[string]codexThreadRequest
 	pendingTurns   map[string]codexTurnRequest
 	ignoredThreads []string // recent temporary/subagent threads on this CLI connection
@@ -302,6 +304,7 @@ func (o *codexObserver) message(raw []byte, client bool) {
 	}
 	o.mu.Lock()
 	defer o.mu.Unlock()
+	o.revision++
 	if client {
 		switch message.Method {
 		case "thread/start", "thread/resume", "thread/fork":
@@ -427,14 +430,13 @@ func (o *codexObserver) message(raw []byte, client bool) {
 			return
 		}
 		o.turn = params.Turn.ID
-		o.finished = params.Turn.Status
-		o.finishIfIdle()
+		// The app-server's terminal turn event is authoritative. Waiting for
+		// a second idle notification can strand the pane in running forever.
+		o.finishTurn(params.Turn.Status)
 	case "thread/status/changed":
 		o.thread.Status = params.Status
-		if params.Status.Type == "active" && !o.active {
-			// Continuations can become active before turn/started arrives.
-			o.beginTurn("")
-		}
+		// Only a turn start (or a fresh metadata read) starts work. A delayed
+		// active notification must not reopen an already completed turn.
 		o.waiting(params.Status)
 		o.finishIfIdle()
 	}
@@ -451,8 +453,12 @@ func (o *codexObserver) finishIfIdle() {
 	if !o.active || o.finished == "" || o.thread.Status.Type != "idle" {
 		return
 	}
+	o.finishTurn(o.finished)
+}
+
+func (o *codexObserver) finishTurn(status string) {
 	event := ""
-	switch o.finished {
+	switch status {
 	case "completed":
 		event = "Stop"
 	case "interrupted":
