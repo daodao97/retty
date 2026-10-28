@@ -34,6 +34,9 @@ jobs:
           go-version-file: go.mod
           cache-dependency-path: go.sum
 
+      - name: Test CLI dependency guard
+        run: PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s scripts -p test_package_cli.py
+
       - name: Build and bundle CLI
         run: ./scripts/build-cli.sh --platform '${{ matrix.platform }}'
 

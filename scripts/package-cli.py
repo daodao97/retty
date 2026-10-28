@@ -13,6 +13,17 @@ import urllib.request
 
 ROOT = Path(__file__).resolve().parent.parent
 TARGETS = ("linux/amd64", "linux/arm64", "darwin/amd64", "darwin/arm64")
+# This APNs client uses only the standard library. Other MyGo packages remain
+# forbidden, including any UI dependency introduced transitively by this one.
+HEADLESS_MYGO_PACKAGES = {"github.com/egoist/mygo/push/apns"}
+
+
+def validate_dependencies(dependencies):
+    forbidden = [name for name in dependencies.splitlines()
+                 if (name == "github.com/egoist/mygo" or name.startswith("github.com/egoist/mygo/"))
+                 and name not in HEADLESS_MYGO_PACKAGES or name == "retty/internal/terminal"]
+    if forbidden:
+        raise RuntimeError("CLI unexpectedly depends on the graphics/UI runtime: " + ", ".join(forbidden))
 
 
 def native_library(spec, cache):
@@ -57,8 +68,7 @@ def main():
         goos, goarch = platform.split("/")
         platform_env = dict(env, GOOS=goos, GOARCH=goarch)
         dependencies = subprocess.check_output(["go", "list", "-tags", "retty_cli", "-deps", "./cmd/retty"], cwd=ROOT, env=platform_env, text=True)
-        if any(line.startswith("github.com/egoist/mygo") or line == "retty/internal/terminal" for line in dependencies.splitlines()):
-            raise RuntimeError("CLI unexpectedly depends on the graphics/UI runtime")
+        validate_dependencies(dependencies)
         name = f"retty-{goos}-{goarch}"
         package = output / name
         package.mkdir(exist_ok=True)
