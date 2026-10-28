@@ -109,7 +109,10 @@ while True:
 		count := 2
 		return agentusage.Snapshot{At: time.Now(), Readings: []agentusage.PublicReading{{Agent: "codex", Plan: "Fixture Pro", ResetCount: &count, Windows: []agentusage.Window{{Name: "5 小时", Used: 31, Reset: "今天 19:00"}}}}}
 	}
-	publisher := &activityPublisher{ctx: ctx, socket: rex.SocketPath(), provider: sender, entries: map[string]activityEntry{}, wake: make(chan struct{}, 1)}
+	publisher, err := newActivityPublisher(ctx, rex.SocketPath(), sender)
+	if err != nil {
+		t.Fatal(err)
+	}
 	bridge.mu.Lock()
 	bridge.activity = publisher
 	bridge.mu.Unlock()

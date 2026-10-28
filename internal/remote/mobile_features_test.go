@@ -69,9 +69,13 @@ func (s *recordingActivitySender) Send(_ context.Context, n apns.Notification) (
 func TestActivityPublisherDeduplicatesTransitionsAndEndsWithoutPTYOperations(t *testing.T) {
 	sender := &recordingActivitySender{}
 	s := rex.SessionInfo{ID: "session", Args: []string{"secret-command"}, Dir: "/secret/path", Agent: rex.AgentState{State: "running", Message: "private-prompt"}}
-	p := &activityPublisher{ctx: context.Background(), provider: sender, wake: make(chan struct{}, 1), entries: map[string]activityEntry{}, read: func(context.Context) (rex.Hello, []rex.SessionInfo, error) {
+	p, err := newActivityPublisher(context.Background(), "", sender)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p.read = func(context.Context) (rex.Hello, []rex.SessionInfo, error) {
 		return rex.Hello{Host: rex.HostInfo{ID: "desktop", Name: "Mac"}}, []rex.SessionInfo{s}, nil
-	}}
+	}
 	req := ActivityRegistration{DeviceID: strings.Repeat("a", 32), Token: strings.Repeat("b", 64), ActivityID: "apple-id", SessionID: s.ID}
 	if err := p.register(req); err != nil {
 		t.Fatal(err)
@@ -95,7 +99,7 @@ func TestActivityPublisherDeduplicatesTransitionsAndEndsWithoutPTYOperations(t *
 	s.Agent.State = "completed"
 	p.publish()
 	p.publish()
-	if len(sender.notices) != 3 || sender.notices[2].Payload.LiveActivity.Event != "end" || len(p.entries) != 0 {
+	if len(sender.notices) != 3 || sender.notices[2].Payload.LiveActivity.Event != "end" || len(p.manager.Targets()) != 0 {
 		t.Fatal("completed activity kept publishing")
 	}
 	state := ActivityContent(rex.HostInfo{ID: "desktop", Name: "Mac"}, s)
@@ -105,7 +109,10 @@ func TestActivityPublisherDeduplicatesTransitionsAndEndsWithoutPTYOperations(t *
 	}
 }
 func TestActivityTokenRotationAndUnregistration(t *testing.T) {
-	p := &activityPublisher{entries: map[string]activityEntry{}, wake: make(chan struct{}, 1)}
+	p, err := newActivityPublisher(context.Background(), "", &recordingActivitySender{})
+	if err != nil {
+		t.Fatal(err)
+	}
 	r := ActivityRegistration{DeviceID: strings.Repeat("a", 32), Token: strings.Repeat("b", 64), ActivityID: "id", SessionID: "sid"}
 	if err := r.validate(); err != nil {
 		t.Fatal(err)
@@ -113,18 +120,77 @@ func TestActivityTokenRotationAndUnregistration(t *testing.T) {
 	p.register(r)
 	r.Token = strings.Repeat("c", 64)
 	p.register(r)
-	if len(p.entries) != 1 {
+	if len(p.manager.Targets()) != 1 {
 		t.Fatal("rotation duplicated activity")
 	}
 	r.Disabled = true
 	p.register(r)
-	if len(p.entries) != 0 {
+	if len(p.manager.Targets()) != 0 {
 		t.Fatal("dismissed activity remained subscribed")
 	}
 	r.Disabled = false
 	r.Token = "alert-token"
 	if r.validate() == nil {
 		t.Fatal("invalid token accepted")
+	}
+}
+
+func TestActivityPublisherRejectsAReboundSessionDuringStateRead(t *testing.T) {
+	ctx, cancel := context.WithTimeout(t.Context(), time.Minute)
+	defer cancel()
+	sender := &recordingActivitySender{}
+	p, err := newActivityPublisher(ctx, "", sender)
+	if err != nil {
+		t.Fatal(err)
+	}
+	started, release, finished := make(chan struct{}), make(chan struct{}), make(chan struct{})
+	var reads atomic.Int32
+	p.read = func(ctx context.Context) (rex.Hello, []rex.SessionInfo, error) {
+		if reads.Add(1) == 1 {
+			close(started)
+			select {
+			case <-release:
+			case <-ctx.Done():
+				return rex.Hello{}, nil, ctx.Err()
+			}
+		}
+		return rex.Hello{Host: rex.HostInfo{ID: "host", Name: "Mac"}}, []rex.SessionInfo{
+			{ID: "first", Agent: rex.AgentState{State: "running"}},
+			{ID: "second", Agent: rex.AgentState{State: "waiting"}},
+		}, nil
+	}
+	req := ActivityRegistration{DeviceID: strings.Repeat("a", 32), Token: strings.Repeat("b", 64), ActivityID: "activity", SessionID: "first"}
+	if err := p.register(req); err != nil {
+		t.Fatal(err)
+	}
+	go func() { defer close(finished); p.publish() }()
+	select {
+	case <-started:
+	case <-ctx.Done():
+		t.Fatal("state read did not start")
+	}
+	req.SessionID = "second"
+	if err := p.register(req); err != nil {
+		t.Fatal(err)
+	}
+	close(release)
+	select {
+	case <-finished:
+	case <-ctx.Done():
+		t.Fatal("state read did not finish")
+	}
+	if len(sender.notices) != 0 {
+		t.Fatal("old routing snapshot reached the replacement session")
+	}
+	p.publish()
+	if len(sender.notices) != 1 {
+		t.Fatal("replacement session was not published")
+	}
+	var state ActivityState
+	json.Unmarshal(sender.notices[0].Payload.LiveActivity.ContentState, &state)
+	_, sid, ok := ParseActivityURL(state.URL)
+	if !ok || sid != "second" || state.Status != "waiting" {
+		t.Fatal("wrong replacement state", state)
 	}
 }
 

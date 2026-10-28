@@ -9,7 +9,6 @@ import (
 	"net"
 	"net/url"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/egoist/mygo/push/apns"
@@ -113,25 +112,23 @@ func RegisterActivity(ctx context.Context, client *rex.Client, req ActivityRegis
 	return nil
 }
 
-type activityEntry struct {
-	req      ActivityRegistration
-	expires  time.Time
-	last     string
-	sent     time.Time
-	revision uint64
-}
-type activitySender interface {
-	Send(context.Context, apns.Notification) (apns.Response, error)
-}
 type activityPublisher struct {
-	mu       sync.Mutex
-	entries  map[string]activityEntry
-	wake     chan struct{}
-	ctx      context.Context
-	socket   string
-	provider activitySender
-	read     func(context.Context) (rex.Hello, []rex.SessionInfo, error)
-	revision uint64
+	wake    chan struct{}
+	ctx     context.Context
+	socket  string
+	manager *apns.ActivityManager
+	read    func(context.Context) (rex.Hello, []rex.SessionInfo, error)
+}
+
+func newActivityPublisher(ctx context.Context, socket string, provider apns.ActivitySender) (*activityPublisher, error) {
+	manager, err := apns.NewActivityManager(provider, apns.ActivityManagerOptions{
+		MaxActivities: 32, Lifetime: 8 * time.Hour, RefreshInterval: time.Minute,
+		StaleAfter: 2 * time.Minute, DismissAfter: 10 * time.Minute, SendTimeout: 8 * time.Second,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &activityPublisher{ctx: ctx, socket: socket, manager: manager, wake: make(chan struct{}, 1)}, nil
 }
 
 func (b *Bridge) serveLiveActivity(conn net.Conn, socket string, line []byte) {
@@ -151,9 +148,11 @@ func (b *Bridge) serveLiveActivity(conn net.Conn, socket string, line []byte) {
 			if e != nil {
 				err = errors.New("主机尚未配置锁屏推送，请先配置 APNs")
 			} else {
-				p = &activityPublisher{ctx: b.imageContext, socket: socket, provider: provider, entries: map[string]activityEntry{}, wake: make(chan struct{}, 1)}
-				b.activity = p
-				go p.run()
+				p, err = newActivityPublisher(b.imageContext, socket, provider)
+				if err == nil {
+					b.activity = p
+					go p.run()
+				}
 			}
 		}
 		b.mu.Unlock()
@@ -169,23 +168,16 @@ func (b *Bridge) serveLiveActivity(conn net.Conn, socket string, line []byte) {
 }
 func (p *activityPublisher) register(req ActivityRegistration) error {
 	key := req.DeviceID + ":" + req.ActivityID
-	p.mu.Lock()
-	defer p.mu.Unlock()
 	if req.Disabled {
-		delete(p.entries, key)
+		p.manager.Remove(key)
 		return nil
 	}
-	if len(p.entries) >= 32 {
-		if _, ok := p.entries[key]; !ok {
+	if err := p.manager.Register(apns.ActivityRegistration{ID: key, DeviceToken: req.Token, ResourceID: req.SessionID}); err != nil {
+		if errors.Is(err, apns.ErrActivityLimit) {
 			return errors.New("锁屏状态设备数量已达上限")
 		}
+		return err
 	}
-	old := p.entries[key]
-	if old.req.Token == req.Token && old.req.SessionID == req.SessionID && time.Now().Before(old.expires) {
-		return nil
-	}
-	p.revision++
-	p.entries[key] = activityEntry{req: req, expires: time.Now().Add(8 * time.Hour), revision: p.revision}
 	select {
 	case p.wake <- struct{}{}:
 	default:
@@ -213,9 +205,7 @@ func (p *activityPublisher) sessions(ctx context.Context) (rex.Hello, []rex.Sess
 }
 func (p *activityPublisher) run() {
 	for {
-		p.mu.Lock()
-		active := len(p.entries) > 0
-		p.mu.Unlock()
+		active := len(p.manager.Targets()) > 0
 		var timer *time.Timer
 		var tick <-chan time.Time
 		if active {
@@ -238,17 +228,8 @@ func (p *activityPublisher) run() {
 	}
 }
 func (p *activityPublisher) publish() {
-	p.mu.Lock()
-	entries := make(map[string]activityEntry, len(p.entries))
-	for key, e := range p.entries {
-		if time.Now().After(e.expires) {
-			delete(p.entries, key)
-		} else {
-			entries[key] = e
-		}
-	}
-	p.mu.Unlock()
-	if len(entries) == 0 {
+	targets := p.manager.Targets()
+	if len(targets) == 0 {
 		return
 	}
 	ctx, cancel := context.WithTimeout(p.ctx, 8*time.Second)
@@ -261,42 +242,21 @@ func (p *activityPublisher) publish() {
 	for _, s := range sessions {
 		byID[s.ID] = s
 	}
-	for key, e := range entries {
+	for _, target := range targets {
 		if ctx.Err() != nil {
 			return
 		}
-		s, ok := byID[e.req.SessionID]
+		s, ok := byID[target.ResourceID]
 		if !ok {
-			s = rex.SessionInfo{ID: e.req.SessionID, Exited: true}
+			s = rex.SessionInfo{ID: target.ResourceID, Exited: true}
 		}
 		state := ActivityContent(h.Host, s)
 		stable, _ := json.Marshal(state)
-		if string(stable) == e.last && time.Since(e.sent) < 60*time.Second {
-			continue
-		}
-		now := time.Now()
-		state.UpdatedAt = now.Unix()
+		state.UpdatedAt = time.Now().Unix()
 		content, _ := json.Marshal(state)
-		payload := &apns.LiveActivityPayload{Timestamp: now.Unix(), Event: "update", ContentState: content, StaleDate: now.Add(2 * time.Minute).Unix()}
-		if activityEnded(state) {
-			payload.Event = "end"
-			payload.DismissalDate = now.Add(10 * time.Minute).Unix()
-		}
-		_, err := p.provider.Send(ctx, apns.Notification{DeviceToken: e.req.Token, Expiration: now.Add(2 * time.Minute), Payload: apns.Payload{LiveActivity: payload}})
-		var failure *apns.Error
-		permanent := errors.As(err, &failure) && (failure.Unregistered() || failure.Reason == "BadDeviceToken" || failure.Reason == "DeviceTokenNotForTopic")
-		remove := err == nil && payload.Event == "end" || permanent
-		p.mu.Lock()
-		if current, ok := p.entries[key]; ok && current.revision == e.revision {
-			if remove {
-				delete(p.entries, key)
-			} else if err == nil {
-				current.last = string(stable)
-				current.sent = now
-				p.entries[key] = current
-			}
-		}
-		p.mu.Unlock()
+		_ = p.manager.Publish(ctx, target, apns.ActivityUpdate{
+			ContentState: content, DeduplicationKey: string(stable), End: activityEnded(state),
+		})
 	}
 }
 

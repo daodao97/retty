@@ -37,6 +37,9 @@ jobs:
       - name: Test CLI dependency guard
         run: PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s scripts -p test_package_cli.py
 
+      - name: Test published APNs SDK stays headless
+        run: go test github.com/egoist/mygo/push/apns -run '^TestAPNsProductionDependenciesAreStandardLibraryOnly$'
+
       - name: Build and bundle CLI
         run: ./scripts/build-cli.sh --platform '${{ matrix.platform }}'
 

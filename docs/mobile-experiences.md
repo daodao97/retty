@@ -22,6 +22,8 @@ CLI 自己处理凭据，凭据、配置路径、账户内部标识和重置卡�
 
 前台使用 MyGo ActivityKit 接口；后台由当前网关读取既有会话状态并通过 APNs 的 `liveactivity` 通道更新。它不依赖手机后台轮询，也不重启既有 daemon 或通知 worker。主机网关必须持续在线，且配置与 `com.daodao.retty` 匹配的 APNs provider；设备开发签名使用 sandbox。ActivityKit 令牌与普通通知令牌不同，仅保存在网关内存，轮换时替换，结束/失效后删除，最长八小时过期。网关退出后卡片会变为过期状态，回到手机重试即可重新注册。
 
+令牌注册、版本校验、过期、并发发送、内容去重与失效令牌清理由 MyGo 的无界面 `apns.ActivityManager` 统一处理。Retty 负责配对连接的授权校验、把设备与活动绑定到会话、读取会话状态，以及生成锁屏文案和深链接。管理器不创建默认轮询；网关只在存在有效活动时读取既有状态，保持每分钟刷新、两分钟过期提示、结束后十分钟移除的策略。状态读取期间令牌或会话绑定改变时，旧快照不能向新的绑定提交更新。
+
 ## 构建与隔离验收
 
 MyGo 的通用浏览器、ActivityKit 桥接和 APNs 通道在 fork 的 main 上维护。Retty 的 `resources/ios/RettyLiveActivity.swift` 只负责 WidgetKit 界面。`mygo.json` 显式选择 native support，并嵌入 `com.daodao.retty.RettyActivity` 扩展。
