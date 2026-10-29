@@ -13,7 +13,10 @@ import (
 )
 
 type terminalPane struct {
-	SID                       string
+	SID string
+	// automationOpened is an automation's session opened in a tab at the
+	// person's request, kept as a tab across restarts.
+	automationOpened          bool
 	term                      *terminal.Terminal
 	stream                    *rex.Stream
 	remoteView                *sessionViewStream
@@ -153,7 +156,7 @@ func (v *terminalPane) render(a *App, c *ui.Context, k *colors, p *Pane) {
 func (v *terminalPane) kind() paneKind                   { return paneTerminal }
 func (v *terminalPane) split(a *App, p *Pane, down bool) { a.splitTerminal(down) }
 func (v *terminalPane) snapshot(p *Pane) *savedNode {
-	s := &savedNode{SID: cmp.Or(v.SID, v.recoverySID)}
+	s := &savedNode{SID: cmp.Or(v.SID, v.recoverySID), AutomationOpened: v.automationOpened}
 	if v.term != nil {
 		s.Cols, s.Rows = v.term.Size()
 	}

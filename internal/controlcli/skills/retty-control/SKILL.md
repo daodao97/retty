@@ -7,11 +7,13 @@ Use the installed `retty` executable; if it is absent from PATH inside Retty, us
 
 Read before controlling an existing terminal:
 
-1. `retty list --json` identifies sessions. Use the full returned ID, or an unambiguous prefix of at least four characters; titles and row numbers are not identities.
+1. `retty list --json` identifies sessions. Use the full returned ID, or an unambiguous prefix of at least four characters; titles and row numbers are not identities. An ambiguous prefix changes nothing, lists its matches and exits 3.
 2. `retty read ID --lines 200 --json` returns text, size and `output` version without attaching or resizing. Inspect it to confirm the intended terminal and its current activity.
 3. For authorized input, use `retty send ID --text 'literal text' --enter --if-output N`, with the returned output version when the target should remain unchanged. Omit `--enter` to avoid submitting. Use `--stdin` for exact multiline data, or `--key ctrl-c` for an authorized interruption. Sending writes once; after any transport error, read again before deciding whether to send more.
 
 Prefer a separate session for new work: `retty new --dir /absolute/project --json -- COMMAND ARG...` preserves argv and starts the process directly. `retty wait ID --until exit --exit --json` propagates its real exit status; timeout is 124 and cancellation is 130. `wait --until done|blocked|idle` waits for the corresponding explicit Agent state or shell state. A line sent to an existing shell has no per-command exit status: read its output or start a direct process instead. Do not treat an elapsed timeout as completion.
+
+Session commands exit 0 on success, 1 on failure, 2 for an invalid command line, 3 when the session is not found or ambiguous, and 4 when the session server or desktop GUI is unreachable. Branch on these instead of parsing messages. On 4, do not start or replace a server; report that the service is unavailable.
 
 `retty split ID --direction right|down --json -- COMMAND ARG...` requires the desktop GUI for that local service. The result is the new session ID. `retty actions --json` lists stable action IDs and whether CLI invocation is allowed; use `retty action ACTION_ID --target ID`. Close, restart, end-all, clear and update actions remain GUI-only. Do not substitute another destructive command when an action is denied.
 
@@ -24,6 +26,12 @@ retty report --state done --id build/tests --message 'Tests passed'
 ```
 
 Use `--state error` for failure and `retty report --state clear --id PARENT` to remove a task and its descendants. Reports replace the whole record; include progress/title/message again when they should remain. These reports share Retty's OSC 7501 state and notification deduplication; native Agent lifecycle hooks continue to operate. Report actual outcomes, not intent. Do not change unrelated hooks, skills or service configuration as part of session control.
+
+To hand a verifiable subgoal to another agent, run `retty new --dir /absolute/project -- retty goal --goal 'TEXT' --check 'COMMAND' --rounds 8 -- claude` (or `-- codex`). The runner splits the agent beside itself, sends the check's failing output back after each turn, and ends when the check exits 0; its own session reports the goal's state, so wait on the runner with `retty wait RUNNER_ID --until exit --exit`. `retty goal --target AGENT_ID --check 'COMMAND'` drives an existing agent instead. Do not report goal status on the agent's session: that replaces its lifecycle state. When someone gives the agent a prompt of their own, the goal waits for that turn to end before sending its next message; do not send input into a goal's agent on its behalf. Waiting on the next turn of an agent you instructed yourself uses `wait ID --until done --after N`, with N from that session's `agent.completionRevision` in `status --json` before sending.
+
+For recurring work, `retty automation add --goal 'TEXT' --every 2h --dir /absolute/project [--check 'COMMAND'] -- codex` saves an automation that runs such a goal every interval, reusing its previous agent while that agent runs; `automation list --json` shows the next run and last result, and `pause`, `resume`, `remove` and `run ID` change it. `--once` instead of `--every` runs it a single time, shown on the task board without a tab; use it for one-off work rather than `retty new`. Add an automation only when the person asked for a schedule: it keeps running after the app closes.
+
+An automation run's instruction names its run record; before finishing, submit a structured result with `retty automation result --run RUN_RECORD < result.json` (status ok|warning|blocked|failed, summary, numeric metrics with stable names, findings, blockers, artifacts, next). Report only what was observed.
 
 For the desktop's browser panes, run `retty browser help`. Use `browser list --json` to identify persistent `web-…` IDs and available remote host IDs. `browser open URL --beside SESSION_OR_BROWSER_ID` splits next to that pane and inherits its host; without `--beside`, it opens a tab. To choose another connected host, use the returned host ID with `--host`. A loopback URL on a remote pane uses that host's authenticated forwarded port; it must never be replaced by a local browser URL on connection failure.
 

@@ -37,6 +37,8 @@ macOS 会话服务和推送 worker 通过 launchd 启动，再加载用户的登
 
 launchd 注册只在服务需要启动时创建，不安装开机/登录启动项，不自动重启退出的服务。重复启动请求不会结束正在运行的实例。旧服务已经继承的环境不会因 GUI 更新而改变；有真实任务时保留它，待任务结束后再安排服务更新。
 
+唯一的例外是自动化定时器：存在启用中的自动化时，每个数据目录在 `~/Library/LaunchAgents/com.daodao.retty.automation.<hash>.plist` 安装一个 `StartInterval 60` 的任务，运行 `Retty -automation-tick`；最后一个自动化停用或删除时卸载，App 启动时只在 plist 已存在时检查路径。tick 只读 `<数据目录>/automations/`，有到期运行时才连接会话服务（未运行时按上面的正常路径启动），为每个到期自动化新建一个运行 `retty goal` 的终端。它不设 KeepAlive，不常驻，不改协议，也不替换或重启已有服务。上一次运行未结束或复用的 agent 正忙时跳过这一次；睡眠或关机错过的多次只补跑一次。日志写在数据目录的 `automation.log`。测试进程不会安装 LaunchAgent；手工验证时使用独立数据目录，结束后用 `retty automation remove` 删除，让定时器随之卸载。
+
 zsh 会话在返回提示符时清空遗留的 Kitty 键盘协议栈，防止 TUI 退出后 Ctrl+C 仍按 CSI-u 编码。ZLE 同时处理已在途的 Ctrl+C 按下/重复事件并忽略松开事件，保留用户已有的按键绑定。注入脚本由会话服务在创建 shell 时写入；GUI 更新不会修改已有 shell 的脚本或升级运行中的服务，这项修复在更新服务后创建的新会话中生效。不要为了启用它重启仍有真实任务的服务。
 
 ## 常用检查

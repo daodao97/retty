@@ -31,12 +31,20 @@ const Usage = `Retty session automation (never starts/restarts the server):
   retty new [--dir PATH] [--cols 80 --rows 24] [--json] [-- COMMAND ARG...]
   retty split [ID] [--direction right|down] [--dir PATH] [--json] [-- COMMAND ARG...]
   retty send [ID] (--text TEXT | --stdin | --key ctrl-c) [--enter] [--if-output N] [--json]
-  retty wait [ID] [--until exit|idle|done|blocked] [--timeout 5m] [--exit] [--json]
+  retty wait [ID] [--until exit|idle|done|blocked] [--after REVISION] [--timeout 5m] [--exit] [--json]
   retty report [ID] --state working|blocked|done|error|idle|clear
        [--id build/tests] [--app builder] [--title TEXT] [--message TEXT]
        [--progress 0..100] [--kind permission|question|auth] [--json]
   retty actions [--json]
   retty action ACTION_ID [--target ID] [--json]
+  retty goal (--goal TEXT [--dir PATH] [-- AGENT ARG...] | --target ID [--goal TEXT])
+       [--check CMD] [--rounds 8] [--turn-timeout 1h] [--check-timeout 10m]
+  retty automation add --goal TEXT [--title NAME] (--every 1h | --once) [--check CMD] [--dir PATH]
+       [--rounds 8] [--json] [-- AGENT ARG...]
+  retty automation list [--json]
+  retty automation (pause | resume | remove | run) ID
+  retty automation tick
+  retty automation result --run RUN_RECORD < RESULT.json
   retty browser help
   retty skill [--json]
 
@@ -46,7 +54,18 @@ Use --socket PATH or --data-dir PATH to select a server. Inside a Retty terminal
 the injected RETTY_AGENT_SOCKET selects its owning server. split/action require
 the desktop GUI in that data directory. Flags may follow ID; -- preserves argv.
 Read first. send writes once and never retries; on a connection error read again.
-wait --until exit --exit returns the command's real exit code (timeout: 124).
+Exit status: 0 ok, 1 failure, 2 invalid command line, 3 session not found or
+ambiguous (matches are listed, nothing changes), 4 server or desktop GUI
+unreachable, 124 timeout, 130 interrupted.
+wait --until exit --exit returns the command's real exit code instead.
+wait --until done|blocked --after N skips a result whose completionRevision or
+waitRevision (status --json) is not above N, so a loop never sees its last turn.
+goal starts AGENT (default claude) with TEXT, or drives --target, and after each
+turn runs CMD; exit 0 ends it, otherwise the output is sent back to the agent.
+A turn someone else starts in the agent ends before the goal sends again.
+automation runs such a goal every interval, reusing the last run's agent while
+it runs; a run still in progress or an agent in use skips that interval. The
+desktop app checks every minute, even when closed; elsewhere run tick from cron.
 new -- COMMAND starts that process directly; sending a shell line does not give
 Retty its exit status. Existing bare 'retty status' keeps the gateway status.
 `
@@ -77,11 +96,40 @@ func ExitCode(err error) int {
 	return 1
 }
 
+// Exit statuses shared with Rex's CLI, so a script can branch on why a command
+// failed instead of parsing its message.
+const (
+	ExitUsage       = 2 // invalid command line
+	ExitTarget      = 3 // session not found or ambiguous
+	ExitUnavailable = 4 // session server or desktop GUI unreachable
+)
+
+func usageError(err error) error { return &ExitError{Code: ExitUsage, Cause: err} }
+func targetError(format string, args ...any) error {
+	return &ExitError{Code: ExitTarget, Cause: fmt.Errorf(format, args...)}
+}
+
+// callDesktop reports an unreachable desktop GUI as such, while a refusal the
+// GUI answers itself (a GUI-only action, for instance) stays an ordinary failure.
+func callDesktop(ctx context.Context, dir string, req desktopcontrol.Request) (desktopcontrol.Result, error) {
+	result, err := desktopcontrol.Call(ctx, dir, req)
+	var op *net.OpError
+	if errors.As(err, &op) && op.Op == "dial" {
+		return result, &ExitError{Code: ExitUnavailable, Cause: err}
+	}
+	return result, err
+}
+
 type Options struct {
 	// DefaultDir distinguishes the headless CLI's RettyServer from GUI Retty.
 	DefaultDir string
 	// Dial is for isolated transports/tests; nil connects to the selected socket.
 	Dial func(context.Context, string) (net.Conn, error)
+	// SyncAutomations keeps the system timer in step with the automations of
+	// a data directory; nil means this executable installs none.
+	SyncAutomations func(dir string) error
+	// Executable handles `goal` in automation runs; empty is this binary.
+	Executable string
 }
 
 func Handles(args []string) bool {
@@ -91,7 +139,7 @@ func Handles(args []string) bool {
 	switch args[0] {
 	case "session", "list", "read", "new", "split", "send", "wait", "report", "actions", "action", "skill":
 		return true
-	case "browser":
+	case "browser", "goal", "automation":
 		return true
 	case "status":
 		// Preserve the gateway's original 'status [--data-dir PATH]' command.
@@ -115,6 +163,7 @@ type arguments struct {
 	json, ansi, stdin, enter, exit                                               bool
 	lines, cols, rows                                                            int
 	timeout                                                                      time.Duration
+	after                                                                        uint64
 	status                                                                       rex.ProgramStatus
 	progress                                                                     string
 	argv                                                                         []string
@@ -156,6 +205,7 @@ func parse(args []string, diagnostics io.Writer) (a arguments, err error) {
 		f.DurationVar(&a.timeout, "timeout", 5*time.Minute, "deadline (maximum 24h)")
 		f.StringVar(&a.until, "until", "exit", "exit, idle, done or blocked")
 		f.BoolVar(&a.exit, "exit", false, "propagate the process exit status")
+		f.Uint64Var(&a.after, "after", 0, "require a completion/wait revision above this one")
 	case "report":
 		f.StringVar(&a.status.State, "state", "", "program state")
 		f.StringVar(&a.status.ID, "id", "", "hierarchical task ID")
@@ -223,9 +273,11 @@ func parse(args []string, diagnostics io.Writer) (a arguments, err error) {
 
 // Resolve accepts exact IDs first, then unique prefixes, never fuzzy titles or
 // array indexes. Current means the caller's injected session, not GUI focus.
+// Every failure exits with ExitTarget; an ambiguous prefix changes nothing and
+// lists all of its matches, as Rex does, so the caller can choose a full ID.
 func Resolve(all []rex.SessionInfo, target string) (rex.SessionInfo, error) {
 	if target == "" {
-		return rex.SessionInfo{}, errors.New("specify a session ID (list --json); RETTY_SESSION is not set")
+		return rex.SessionInfo{}, targetError("specify a session ID (list --json); RETTY_SESSION is not set")
 	}
 	for _, s := range all {
 		if s.ID == target {
@@ -233,7 +285,7 @@ func Resolve(all []rex.SessionInfo, target string) (rex.SessionInfo, error) {
 		}
 	}
 	if len(target) < 4 {
-		return rex.SessionInfo{}, errors.New("session prefixes must contain at least 4 characters")
+		return rex.SessionInfo{}, targetError("session prefixes must contain at least 4 characters")
 	}
 	var matches []rex.SessionInfo
 	for _, s := range all {
@@ -242,10 +294,15 @@ func Resolve(all []rex.SessionInfo, target string) (rex.SessionInfo, error) {
 		}
 	}
 	if len(matches) == 0 {
-		return rex.SessionInfo{}, fmt.Errorf("no session matches %q", target)
+		return rex.SessionInfo{}, targetError("no session matches %q", target)
 	}
 	if len(matches) != 1 {
-		return rex.SessionInfo{}, fmt.Errorf("ambiguous session prefix %q; use the full ID", target)
+		var b strings.Builder
+		fmt.Fprintf(&b, "ambiguous session prefix %q matches %d sessions; use a full ID:", target, len(matches))
+		for _, s := range matches {
+			fmt.Fprintf(&b, "\n  %s  %s  %s  %s", s.ID, state(s), clean(s.Program), clean(s.Dir))
+		}
+		return rex.SessionInfo{}, targetError("%s", b.String())
 	}
 	return matches[0], nil
 }
@@ -254,13 +311,19 @@ func Run(ctx context.Context, args []string, input io.Reader, output, diagnostic
 	if len(args) > 0 && args[0] == "browser" {
 		return runBrowser(ctx, args[1:], output, diagnostics, options)
 	}
+	if len(args) > 0 && args[0] == "goal" {
+		return runGoal(ctx, args[1:], input, output, diagnostics, options)
+	}
+	if len(args) > 0 && args[0] == "automation" {
+		return runAutomation(ctx, args[1:], input, output, diagnostics, options)
+	}
 	a, err := parse(args, diagnostics)
 	if errors.Is(err, flag.ErrHelp) {
 		_, err = io.WriteString(output, Usage)
 		return err
 	}
 	if err != nil {
-		return err
+		return usageError(err)
 	}
 	if a.command == "skill" {
 		if a.json {
@@ -301,14 +364,14 @@ func Run(ctx context.Context, args []string, input io.Reader, output, diagnostic
 		dir = filepath.Dir(socket)
 	}
 	if (a.command == "split" || a.command == "actions" || a.command == "action") && a.dataDir == "" && filepath.Base(socket) != "server.sock" && (a.socket != "" || os.Getenv("RETTY_DIR") == "") {
-		return errors.New("GUI operations with a hashed session socket require --data-dir for its owning desktop")
+		return usageError(errors.New("GUI operations with a hashed session socket require --data-dir for its owning desktop"))
 	}
 	if a.command == "actions" || a.command == "action" {
 		req := desktopcontrol.Request{Op: a.command, SID: a.target}
 		if a.command == "action" {
 			req.Action = a.argv[0]
 		}
-		result, err := desktopcontrol.Call(ctx, dir, req)
+		result, err := callDesktop(ctx, dir, req)
 		if err != nil {
 			return err
 		}
@@ -326,13 +389,16 @@ func Run(ctx context.Context, args []string, input io.Reader, output, diagnostic
 	}
 	if a.command == "wait" {
 		if a.timeout <= 0 || a.timeout > 24*time.Hour {
-			return errors.New("timeout must be >0 and <=24h")
+			return usageError(errors.New("timeout must be >0 and <=24h"))
 		}
 		if a.until != "exit" && a.until != "idle" && a.until != "done" && a.until != "blocked" {
-			return errors.New("until must be exit, idle, done or blocked")
+			return usageError(errors.New("until must be exit, idle, done or blocked"))
 		}
 		if a.exit && a.until != "exit" {
-			return errors.New("--exit requires --until exit")
+			return usageError(errors.New("--exit requires --until exit"))
+		}
+		if a.after != 0 && a.until != "done" && a.until != "blocked" {
+			return usageError(errors.New("--after requires --until done or blocked"))
 		}
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, a.timeout)
@@ -351,7 +417,7 @@ func Run(ctx context.Context, args []string, input io.Reader, output, diagnostic
 	}
 	c, err := rex.ConnectDial(ctx, func(ctx context.Context) (net.Conn, error) { return dial(ctx, socket) })
 	if err != nil {
-		return fmt.Errorf("session server unavailable (no service was started): %w", err)
+		return &ExitError{Code: ExitUnavailable, Cause: fmt.Errorf("session server unavailable (no service was started): %w", err)}
 	}
 	defer c.Close()
 	stop := context.AfterFunc(ctx, func() { c.Close() })
@@ -433,13 +499,13 @@ func Run(ctx context.Context, args []string, input io.Reader, output, diagnostic
 		return err
 	case "split":
 		if a.direction != "right" && a.direction != "down" {
-			return errors.New("direction must be right or down")
+			return usageError(errors.New("direction must be right or down"))
 		}
 		o, err := a.createOptions()
 		if err != nil {
 			return err
 		}
-		result, err := desktopcontrol.Call(ctx, dir, desktopcontrol.Request{Op: "split", SID: s.ID, Direction: a.direction, Create: &o})
+		result, err := callDesktop(ctx, dir, desktopcontrol.Request{Op: "split", SID: s.ID, Direction: a.direction, Create: &o})
 		if err != nil {
 			return err
 		}
@@ -465,7 +531,7 @@ func Run(ctx context.Context, args []string, input io.Reader, output, diagnostic
 			if a.ifOutput != "" {
 				n, err := strconv.ParseUint(a.ifOutput, 10, 64)
 				if err != nil {
-					return err
+					return usageError(fmt.Errorf("--if-output: %w", err))
 				}
 				req.IfOutput = &n
 			}
@@ -476,7 +542,7 @@ func Run(ctx context.Context, args []string, input io.Reader, output, diagnostic
 			if a.progress != "" {
 				n, err := strconv.Atoi(a.progress)
 				if err != nil {
-					return err
+					return usageError(fmt.Errorf("--progress: %w", err))
 				}
 				a.status.Progress = &n
 			}
@@ -500,7 +566,7 @@ func Run(ctx context.Context, args []string, input io.Reader, output, diagnostic
 
 func (a arguments) createOptions() (rex.CreateOptions, error) {
 	if a.cols < 2 || a.cols > 1000 || a.rows < 2 || a.rows > 1000 {
-		return rex.CreateOptions{}, errors.New("columns/rows must be between 2 and 1000")
+		return rex.CreateOptions{}, usageError(errors.New("columns/rows must be between 2 and 1000"))
 	}
 	dir := a.dir
 	if dir != "" {
@@ -525,7 +591,7 @@ func (a arguments) input(in io.Reader) ([]byte, error) {
 		n++
 	}
 	if n > 1 {
-		return nil, errors.New("choose --text, --stdin or --key")
+		return nil, usageError(errors.New("choose --text, --stdin or --key"))
 	}
 	data := []byte(a.text)
 	if a.stdin {
@@ -539,7 +605,7 @@ func (a arguments) input(in io.Reader) ([]byte, error) {
 		keys := map[string]string{"enter": "\r", "tab": "\t", "escape": "\x1b", "ctrl-c": "\x03", "ctrl-d": "\x04"}
 		value, ok := keys[a.key]
 		if !ok {
-			return nil, errors.New("unsupported key; use enter, tab, escape, ctrl-c or ctrl-d")
+			return nil, usageError(errors.New("unsupported key; use enter, tab, escape, ctrl-c or ctrl-d"))
 		}
 		data = []byte(value)
 	}
@@ -547,7 +613,7 @@ func (a arguments) input(in io.Reader) ([]byte, error) {
 		data = append(data, '\r')
 	}
 	if len(data) == 0 || len(data) > rex.MaxControlInput {
-		return nil, errors.New("input must contain 1..65536 bytes")
+		return nil, usageError(errors.New("input must contain 1..65536 bytes"))
 	}
 	return data, nil
 }
@@ -608,10 +674,12 @@ func wait(ctx context.Context, c *rex.Client, sid string, a arguments, out io.Wr
 		switch a.until {
 		case "idle":
 			ready = ready || s.Idle
+		// A finished turn keeps its state until the next one starts. --after
+		// lets a caller that just sent input skip the result it already saw.
 		case "done":
-			ready = ready || s.Agent.State == "completed" || s.Agent.State == "failed"
+			ready = ready || (s.Agent.State == "completed" || s.Agent.State == "failed") && (a.after == 0 || s.Agent.CompletionRevision > a.after)
 		case "blocked":
-			ready = ready || s.Agent.State == "waiting"
+			ready = ready || s.Agent.State == "waiting" && (a.after == 0 || s.Agent.WaitRevision > a.after)
 		}
 		if ready {
 			if a.json {

@@ -41,6 +41,7 @@ func (a *App) view(c *ui.Context) {
 	}
 	a.shortcuts(c)
 	a.palette(c, k)
+	a.goalDialog(c, k)
 	a.settingsPage(c, k)
 	if !a.settingsOpen && a.diagnostics != nil && a.diagnostics.busy {
 		a.diagnostics.cancel()
@@ -69,6 +70,15 @@ func (a *App) view(c *ui.Context) {
 func (a *App) desktopContent(c *ui.Context, k *colors) {
 	ui.Row(c.Key("desktop-content")).Grow(1).MinWidth(0).MinHeight(0).Children(func() {
 		ui.Column(c.Key("pane-content")).Grow(1).Basis(0).FillHeight().MinWidth(0).MinHeight(0).Children(func() {
+			// The task board shows over the tab it was opened on; choosing
+			// another tab, or opening one, shows that tab.
+			if a.boardShown && a.taskBoard != nil && a.tab() == a.boardOver {
+				a.boardView(c, k, a.taskBoard)
+				return
+			}
+			if a.boardShown {
+				a.later(c, a.hideBoard)
+			}
 			if t := a.tab(); t != nil {
 				a.tabContent(c, k, t)
 			}

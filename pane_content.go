@@ -18,6 +18,7 @@ const (
 	paneBrowser  paneKind = "browser"
 	paneFiles    paneKind = "files"
 	paneDiff     paneKind = "diff"
+	paneBoard    paneKind = "board"
 )
 
 // Content owns its state and resources. The container owns placement, focus,
@@ -132,7 +133,8 @@ func (a *App) restorePaneContent(s *savedNode, host *desktopHost) *Pane {
 	if kind == "" && s.Browser != nil {
 		kind = paneBrowser
 	}
-	if kind == "" || kind == paneTerminal {
+	// The task board was a pane in an earlier version and is none now.
+	if kind == "" || kind == paneTerminal || kind == paneBoard {
 		return nil
 	}
 	var p *Pane

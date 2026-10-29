@@ -22,6 +22,7 @@ import (
 )
 
 type mobileApp struct {
+	automations                        mobileAutomations
 	preview                            mobilePreview
 	usage                              mobileUsage
 	live                               mobileLiveActivity
@@ -255,6 +256,8 @@ func (m *mobileApp) detach() {
 
 func (m *mobileApp) disconnect(forget bool) {
 	m.closePreview()
+	m.closeAutomations()
+	m.automations = mobileAutomations{epoch: m.automations.epoch}
 	if forget {
 		m.stopLiveActivity()
 		m.saveLivePreference()
@@ -477,6 +480,9 @@ func (m *mobileApp) openSession(s rex.SessionInfo) {
 	if m.client == nil {
 		return
 	}
+	if m.automations.open {
+		m.closeAutomations()
+	}
 	if m.selected.ID != s.ID {
 		// A window's unlock holds for the session it released only.
 		m.lockLost = false
@@ -616,6 +622,7 @@ func (m *mobileApp) contentView(c *ui.Context) {
 	m.connectionDiagnosticsDialog(c)
 	m.previewDialog(c)
 	m.usageDialog(c)
+	m.automationsDialog(c)
 	m.liveActivityDialog(c)
 	m.terminalHistory.view(c)
 	m.syncApproval(c)
@@ -855,6 +862,9 @@ func (m *mobileApp) sessionsView(c *ui.Context) {
 			ui.Text(c, "会话").FontSize(17).Bold().PassThrough()
 			ui.Text(c, fmt.Sprint(len(m.sessions))).FontSize(13).TextColor(c.Theme().TextMuted).PassThrough()
 		})
+		if mobileIconAction(c, "查看自动化", "clock").Disabled(m.degraded()).Clicked() {
+			m.openAutomations()
+		}
 		if ui.ButtonBase(c).Label("新建会话").Disabled(m.busy || m.reconnecting || m.connectionIssue != nil).Role(ui.RoleButton).Size(44, 44).Children(func() {
 			if m.busy && !m.reconnecting {
 				ui.Spinner(c).Size(18, 18).TextColor(c.Theme().Accent)

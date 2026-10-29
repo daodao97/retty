@@ -87,6 +87,8 @@ type Bridge struct {
 	usagePending *usageFlight
 	usageRead    func(context.Context) agentusage.Snapshot
 	activity     *activityPublisher
+
+	automationDir string
 }
 
 // OnClose registers cleanup before publishing this bridge to consumers.
@@ -116,7 +118,7 @@ type Options struct {
 }
 
 func Start(ctx context.Context, socket string, options Options) (*Bridge, error) {
-	b := &Bridge{approvalDir: rex.Dir(), server: &tailcat.Server{Logf: quiet, Region: options.BootstrapRegion}, conns: make(map[net.Conn]bool), devices: make(map[net.Conn]ConnectedDevice)}
+	b := &Bridge{automationDir: rex.Dir(), approvalDir: rex.Dir(), server: &tailcat.Server{Logf: quiet, Region: options.BootstrapRegion}, conns: make(map[net.Conn]bool), devices: make(map[net.Conn]ConnectedDevice)}
 	stateDir := options.StateDir
 	if stateDir != "" {
 		identity, lock, err := loadIdentity(ctx, stateDir)

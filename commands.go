@@ -105,6 +105,7 @@ var paletteCommands = []*command{
 	&cmdFilePane, &cmdDiffPane, &cmdTerminalPane,
 	&cmdSettings,
 	&cmdUsagePanel,
+	&cmdGoalNew, &cmdGoalAttach, &cmdAutomations,
 	&cmdCheckUpdates,
 	&cmdUpdateRemote,
 	&cmdNewTab, &cmdSplitRight, &cmdSplitDown, &cmdZoom, &cmdEqualize, &cmdClosePane, &cmdCloseTab,
@@ -154,6 +155,9 @@ func (a *App) menu() *mygo.Menu {
 		}},
 		{Label: "Shell", Submenu: []*mygo.MenuItem{
 			item(&cmdNewTab),
+			mygo.Separator(),
+			item(&cmdGoalNew),
+			item(&cmdAutomations),
 			mygo.Separator(),
 			item(&cmdSplitRight),
 			item(&cmdSplitDown),

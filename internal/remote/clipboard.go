@@ -67,6 +67,10 @@ func (b *Bridge) serveConnection(conn net.Conn, socket string) {
 		b.serveUsage(conn, line)
 		return
 	}
+	if req.Op == "automations-read" {
+		b.serveAutomations(conn, line)
+		return
+	}
 	if req.Op == "live-activity" {
 		b.serveLiveActivity(conn, socket, line)
 		return

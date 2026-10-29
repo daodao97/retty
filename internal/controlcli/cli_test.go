@@ -105,9 +105,13 @@ func TestWaitDeadlineDuringInitialReadReturns124(t *testing.T) {
 func TestResolveUsesStableIDsAndRejectsAmbiguity(t *testing.T) {
 	all := []rex.SessionInfo{{ID: "abcd0001", Title: "name"}, {ID: "abcd0002", Title: "other"}, {ID: "efgh0003"}}
 	for _, target := range []string{"", "abc", "abcd", "name", "0"} {
-		if _, err := Resolve(all, target); err == nil {
-			t.Fatal("guessed a target", target)
+		if _, err := Resolve(all, target); err == nil || ExitCode(err) != ExitTarget {
+			t.Fatal("guessed a target or lost its exit status", target, err)
 		}
+	}
+	// An ambiguous prefix names every match so the caller can pick one.
+	if _, err := Resolve(all, "abcd"); !strings.Contains(err.Error(), "abcd0001") || !strings.Contains(err.Error(), "abcd0002") {
+		t.Fatal("ambiguous matches not listed", err)
 	}
 	for _, target := range []string{"abcd0001", "efgh"} {
 		s, err := Resolve(all, target)
@@ -122,8 +126,29 @@ func TestAutomationReadDoesNotStartService(t *testing.T) {
 	t.Setenv("RETTY_AGENT_SOCKET", "")
 	count := 0
 	err := Run(context.Background(), []string{"list", "--data-dir", t.TempDir()}, strings.NewReader(""), io.Discard, io.Discard, Options{Dial: func(context.Context, string) (net.Conn, error) { count++; return nil, net.ErrClosed }})
-	if err == nil || count != 1 {
-		t.Fatal("read retried or started a service", count, err)
+	if err == nil || count != 1 || ExitCode(err) != ExitUnavailable {
+		t.Fatal("read retried, started a service or lost its exit status", count, err)
+	}
+}
+
+func TestInvalidCommandLinesExitWithUsageStatus(t *testing.T) {
+	t.Setenv("RETTY_SESSION", "")
+	t.Setenv("RETTY_AGENT_SOCKET", "")
+	dial := func(context.Context, string) (net.Conn, error) {
+		t.Fatal("dialed for an invalid command line")
+		return nil, net.ErrClosed
+	}
+	for _, args := range [][]string{
+		{"read", "--bogus"},
+		{"frobnicate"},
+		{"list", "extra"},
+		{"wait", "abcd", "--until", "later"},
+		{"wait", "abcd", "--after", "3"},
+	} {
+		err := Run(context.Background(), append(args, "--data-dir", t.TempDir()), strings.NewReader(""), io.Discard, io.Discard, Options{Dial: dial})
+		if ExitCode(err) != ExitUsage {
+			t.Fatal("invalid command line", args, err)
+		}
 	}
 }
 

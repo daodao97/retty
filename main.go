@@ -24,6 +24,7 @@ import (
 	"github.com/egoist/mygo/ui"
 
 	"retty/internal/agents"
+	"retty/internal/automation"
 	"retty/internal/controlcli"
 	"retty/internal/push"
 	"retty/internal/remote"
@@ -98,6 +99,15 @@ func main() {
 		}
 		return
 	}
+	// launchd runs the automation timer every minute. It reads the schedule
+	// and connects, starting a server as the app does, only for a due run.
+	if len(os.Args) == 2 && os.Args[1] == "-automation-tick" {
+		if err := automation.Tick(rex.Dir(), appExecutable(), rex.Connect, "", time.Now()); err != nil {
+			log.Print(err)
+			os.Exit(1)
+		}
+		return
+	}
 	// -server runs the session server; other arguments are AppKit's, as
 	// -NSWindowResizeTime, which it reads itself.
 	if len(os.Args) > 1 && os.Args[1] == "-server" {
@@ -109,7 +119,7 @@ func main() {
 	}
 	if controlcli.Handles(os.Args[1:]) {
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-		err := controlcli.Run(ctx, os.Args[1:], os.Stdin, os.Stdout, os.Stderr, controlcli.Options{})
+		err := controlcli.Run(ctx, os.Args[1:], os.Stdin, os.Stdout, os.Stderr, controlcli.Options{SyncAutomations: syncAutomations})
 		stop()
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "retty:", err)
@@ -128,6 +138,14 @@ func main() {
 	}
 	registerFonts()
 	loadSettings()
+	// A moved or updated app points the automation timer at its new path.
+	if !performanceRun {
+		go func() {
+			if err := syncAutomations(rex.Dir()); err != nil {
+				log.Print("无法更新自动化定时器：", err)
+			}
+		}()
+	}
 	// Only the desktop GUI owns updates. Daemons, hooks and iOS return above.
 	if !performanceRun {
 		if err := agents.UpgradeApprovalHook(); err != nil {

@@ -31,6 +31,7 @@ func (m *mobileApp) openDesktop(desktop desktopRecent) {
 }
 
 func (m *mobileApp) goHome() {
+	m.closeAutomations()
 	// Leaving a recovering page cancels its retries. A healthy connection may
 	// still be reused during this foreground visit until the app backgrounds.
 	if m.busy || m.reconnecting {
@@ -62,6 +63,7 @@ func (m *mobileApp) startPolling(client *rex.Client, generation int) {
 func (m *mobileApp) enterBackground() {
 	m.closePreview()
 	m.cancelUsage()
+	m.cancelAutomations()
 	m.cancelSpeech(true)
 	m.clearKeyboardModifiers()
 	if m.background {

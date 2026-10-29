@@ -162,7 +162,7 @@ func TestDesktopCompactLayoutAndSettingsFocus(t *testing.T) {
 		t.Fatalf("compact tab strip: %+v", tabs)
 	}
 	edge := tabs.X + tabs.W
-	for _, label := range []string{"New Tab", "打开文件浏览器", "打开浏览器窗格", "连接"} {
+	for _, label := range []string{"New Tab", "任务看板", "打开文件浏览器", "打开浏览器窗格", "连接"} {
 		button, ok := tt.Find(label)
 		if !ok || button.X != edge || button.W <= 0 || button.H != compactTitleH || button.X+button.W > 1000 {
 			t.Fatalf("compact toolbar control %q is missing, overlaps or is clipped: %+v", label, button)

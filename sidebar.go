@@ -69,6 +69,7 @@ func (a *App) sidebarLayout(c *ui.Context, k *colors, bar ui.TitleBar) {
 						a.sidebarTab(c, k, i, t)
 					}
 				})
+				a.sidebarAutomations(c, k)
 				a.sidebarProjectSessions(c, k)
 			})
 			a.sidebarVisibleTab = a.tab()
@@ -130,6 +131,7 @@ func (a *App) sidebarTitleBar(c *ui.Context, k *colors, bar ui.TitleBar) {
 		if compactTitleButton(c.Key("sidebar-new-tab"), k, "plus", "New Tab", false).BorderWidth(0).Tooltip("New Tab  ⌘T").Clicked() {
 			a.newTab(a.currentDir())
 		}
+		a.automationsToggle(c, k)
 		a.filesToggle(c, k)
 		a.browserButton(c, k)
 		if compactTitleButton(c.Key("desktop-connections"), k, "plug-connected", "连接", a.hasDesktopConnections()).BorderWidth(0).Tooltip("连接").Clicked() {

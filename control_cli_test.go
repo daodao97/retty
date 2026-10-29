@@ -5,12 +5,15 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
 
+	"retty/internal/automation"
 	"retty/internal/controlcli"
 	"retty/internal/desktopcontrol"
 	"retty/internal/rex"
@@ -86,6 +89,27 @@ func TestControlCLIIsolatedSessionLifecycle(t *testing.T) {
 	if _, err := run("wait", cat.ID, "--until", "done", "--timeout", "2s"); err != nil {
 		t.Fatal(err)
 	}
+	// A loop that sent the next instruction must not see the previous result.
+	status, err := run("status", cat.ID, "--json")
+	var finished rex.SessionInfo
+	if err != nil || json.Unmarshal([]byte(status), &finished) != nil || finished.Agent.CompletionRevision == 0 {
+		t.Fatal("completion revision missing", status, err)
+	}
+	after := strconv.FormatUint(finished.Agent.CompletionRevision, 10)
+	if _, err := run("wait", cat.ID, "--until", "done", "--after", after, "--timeout", "50ms"); controlcli.ExitCode(err) != 124 {
+		t.Fatal("wait --after accepted the result it was told to skip", err)
+	}
+	if _, err := run("wait", cat.ID, "--after", after, "--timeout", "50ms"); err == nil {
+		t.Fatal("--after accepted without --until done or blocked")
+	}
+	for _, state := range []string{"working", "done"} {
+		if _, err := run("report", cat.ID, "--state", state, "--id", "build/tests"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := run("wait", cat.ID, "--until", "done", "--after", after, "--timeout", "2s"); err != nil {
+		t.Fatal("wait --after missed the next completion", err)
+	}
 	if _, err := run("wait", cat.ID, "--timeout", "20ms"); controlcli.ExitCode(err) != 124 {
 		t.Fatal("timeout lost exit code", err)
 	}
@@ -101,6 +125,200 @@ func TestControlCLIIsolatedSessionLifecycle(t *testing.T) {
 	data, err = run("read", job.ID)
 	if err != nil || !strings.Contains(data, "final-output") || strings.Contains(data, "\x1b") {
 		t.Fatal("exited session cannot be read", data, err)
+	}
+}
+
+func TestControlCLIGoalSendsCheckFailuresUntilPass(t *testing.T) {
+	client, socket := desktopFixtureClient(t)
+	t.Setenv("RETTY_SESSION", "")
+	t.Setenv("RETTY_AGENT_SOCKET", "")
+	before, err := client.List()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		all, _ := client.List()
+		for _, s := range all {
+			if !slices.ContainsFunc(before, func(b rex.SessionInfo) bool { return b.ID == s.ID }) {
+				client.Kill(s.ID)
+			}
+		}
+	}()
+	// A stand-in agent reports each turn over OSC 7501, as any program can,
+	// and records every line it receives.
+	agent := `st() { printf '\033]7501;state=%s\033\\' "$1"; }; st working; st done; while IFS= read -r line; do st working; printf '%s\n' "$line" >> turns; st done; done`
+	dir := t.TempDir()
+	run := func(check, rounds string) (string, error) {
+		var out bytes.Buffer
+		err := controlcli.Run(context.Background(), []string{"goal", "--socket", socket, "--dir", dir, "--goal", "write turns", "--check", check, "--rounds", rounds, "--turn-timeout", "10s", "--", "/bin/sh", "-c", agent, "agent"}, strings.NewReader(""), &out, io.Discard, controlcli.Options{})
+		return out.String(), err
+	}
+	out, err := run("test -s turns", "3")
+	if err != nil || !strings.Contains(out, "目标达成 · 2 轮") {
+		t.Fatal(out, err)
+	}
+	turns, err := os.ReadFile(filepath.Join(dir, "turns"))
+	if err != nil || !strings.Contains(string(turns), "test -s turns") {
+		t.Fatal("follow-up lost the failed check", string(turns), err)
+	}
+	out, err = run("false", "1")
+	if controlcli.ExitCode(err) != 1 || !strings.Contains(out, "1 轮后检查仍失败") {
+		t.Fatal("goal did not stop at its round limit", out, err)
+	}
+}
+
+func TestControlCLIGoalIgnoresStartupDialogInput(t *testing.T) {
+	client, socket := desktopFixtureClient(t)
+	t.Setenv("RETTY_SESSION", "")
+	t.Setenv("RETTY_AGENT_SOCKET", "")
+	before, err := client.List()
+	if err != nil {
+		t.Fatal(err)
+	}
+	fresh := func() []rex.SessionInfo {
+		all, _ := client.List()
+		return slices.DeleteFunc(all, func(s rex.SessionInfo) bool {
+			return slices.ContainsFunc(before, func(b rex.SessionInfo) bool { return b.ID == s.ID })
+		})
+	}
+	defer func() {
+		for _, s := range fresh() {
+			client.Kill(s.ID)
+		}
+	}()
+	// Like Codex's folder trust prompt, this agent waits for an answer before
+	// its first lifecycle report, which comes some polls later.
+	agent := `st() { printf '\033]7501;state=%s\033\\' "$1"; }; IFS= read -r answer; sleep 1.5; st working; st done; while IFS= read -r line; do st working; printf '%s\n' "$line" >> turns; st done; done`
+	dir := t.TempDir()
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	done := make(chan error, 1)
+	var out bytes.Buffer
+	go func() {
+		done <- controlcli.Run(ctx, []string{"goal", "--socket", socket, "--dir", dir, "--goal", "write turns", "--check", "test -s turns", "--rounds", "3", "--", "/bin/sh", "-c", agent, "agent"}, strings.NewReader(""), &out, io.Discard, controlcli.Options{})
+	}()
+	var sid string
+	for deadline := time.Now().Add(5 * time.Second); sid == "" && time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
+		if s := fresh(); len(s) == 1 {
+			sid = s[0].ID
+		}
+	}
+	if sid == "" {
+		t.Fatal("goal did not start its agent")
+	}
+	// Answer after the 2-second grace period that follows the runner's send.
+	time.Sleep(2500 * time.Millisecond)
+	if err := client.SendInput(sid, rex.InputRequest{Data: []byte("\r")}); err != nil {
+		t.Fatal(err)
+	}
+	if err := <-done; err != nil || !strings.Contains(out.String(), "目标达成") || strings.Contains(out.String(), "已暂停") {
+		t.Fatal("answering a startup dialog paused the goal", out.String(), err)
+	}
+}
+
+func TestControlCLIAutomationStartsDueRuns(t *testing.T) {
+	client, socket := desktopFixtureClient(t)
+	t.Setenv("RETTY_SESSION", "")
+	t.Setenv("RETTY_AGENT_SOCKET", "")
+	before, err := client.List()
+	if err != nil {
+		t.Fatal(err)
+	}
+	fresh := func() []rex.SessionInfo {
+		all, _ := client.List()
+		return slices.DeleteFunc(all, func(s rex.SessionInfo) bool {
+			return slices.ContainsFunc(before, func(b rex.SessionInfo) bool { return b.ID == s.ID })
+		})
+	}
+	defer func() {
+		for _, s := range fresh() {
+			client.Kill(s.ID)
+		}
+	}()
+	// A stand-in runner records its arguments, one run per line, and exits.
+	tmp := t.TempDir()
+	// Commands default to RETTY_DIR; a mistaken argument must never reach
+	// the developer's own data directory and its timer.
+	t.Setenv("RETTY_DIR", filepath.Join(tmp, "default"))
+	data, project, runs := filepath.Join(tmp, "data"), filepath.Join(tmp, "project"), filepath.Join(tmp, "runs")
+	os.Mkdir(project, 0o700)
+	runner := filepath.Join(tmp, "runner")
+	if err := os.WriteFile(runner, []byte("#!/bin/sh\necho \"$*\" >> "+runs+"\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	synced := 0
+	options := controlcli.Options{Executable: runner, SyncAutomations: func(string) error { synced++; return nil }}
+	run := func(args ...string) (string, error) {
+		var out bytes.Buffer
+		// Options precede `-- AGENT`, which add keeps byte for byte.
+		args = append([]string{"automation", args[0], "--data-dir", data}, args[1:]...)
+		err := controlcli.Run(context.Background(), args, strings.NewReader(""), &out, io.Discard, options)
+		return strings.TrimSpace(out.String()), err
+	}
+	lines := func(n int) []string {
+		var got []string
+		for deadline := time.Now().Add(3 * time.Second); time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
+			content, _ := os.ReadFile(runs)
+			if got = strings.Split(strings.TrimSpace(string(content)), "\n"); len(content) > 0 && len(got) >= n {
+				break
+			}
+		}
+		return got
+	}
+	id, err := run("add", "--goal", "keep tests green", "--every", "1h", "--dir", project, "--check", "go test ./...", "--", "codex", "--no-daemon")
+	if err != nil || synced != 1 {
+		t.Fatal(id, err, synced)
+	}
+	// A new automation runs at once, then waits for its interval.
+	if _, err := run("tick", "--socket", socket); err != nil {
+		t.Fatal(err)
+	}
+	got := lines(1)
+	if len(got) != 1 || !strings.Contains(got[0], "goal --goal keep tests green --rounds 8 --state-file ") || !strings.HasSuffix(got[0], "--check go test ./... -- codex --no-daemon") {
+		t.Fatal("runner arguments", got)
+	}
+	first := fresh()
+	if len(first) != 1 {
+		t.Fatal("tick did not start one runner session", first)
+	}
+	if _, err := run("tick", "--socket", socket); err != nil || len(fresh()) != 1 {
+		t.Fatal("an automation ran before its interval", err, fresh())
+	}
+	// run starts one at once, replacing the finished runner's session.
+	for deadline := time.Now().Add(3 * time.Second); time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
+		if s := fresh(); len(s) == 1 && s[0].Exited {
+			break
+		}
+	}
+	if out, err := run("run", id[:6], "--socket", socket); err != nil || out != "ok" {
+		t.Fatal(out, err)
+	}
+	if len(lines(2)) != 2 {
+		t.Fatal("run did not start a run")
+	}
+	// The stand-in runner ended without recording its result, as a closed
+	// one does; the history keeps that run as interrupted.
+	if h := automation.History(data, id, 10); len(h) != 1 || h[0].State != "interrupted" {
+		t.Fatal("interrupted run not kept", h)
+	}
+	second := fresh()
+	if len(second) != 1 || second[0].ID == first[0].ID {
+		t.Fatal("finished runner session was not replaced", first, second)
+	}
+	if out, err := run("list"); err != nil || !strings.Contains(out, id) || !strings.Contains(out, "每 1h0m0s") || !strings.Contains(out, "running") {
+		t.Fatal("list", out, err)
+	}
+	if _, err := run("pause", id); err != nil {
+		t.Fatal(err)
+	}
+	if out, _ := run("list"); !strings.Contains(out, "已暂停") {
+		t.Fatal("pause not shown", out)
+	}
+	if _, err := run("remove", id); err != nil || synced != 3 {
+		t.Fatal("remove", err, synced)
+	}
+	if out, _ := run("list"); out != "" {
+		t.Fatal("removed automation listed", out)
 	}
 }
 

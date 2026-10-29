@@ -101,20 +101,32 @@ type App struct {
 	focusReq *Pane
 
 	// The command palette, settings and the tab being renamed.
-	paletteOpen           bool
-	paletteQuery          string
-	paletteSSHHosts       []string
-	paletteSSHLoading     bool
-	paletteSSHError       string
-	paletteSSHEpoch       uint64
-	settingsOpen          bool
-	settingsSection       int
-	settingsQuery         string
-	settingsModifiedOnly  bool
-	settingsInitialFocus  bool
-	renaming              *Tab
-	renameText            string
-	renameFocus           bool
+	paletteOpen          bool
+	paletteQuery         string
+	paletteSSHHosts      []string
+	paletteSSHLoading    bool
+	paletteSSHError      string
+	paletteSSHEpoch      uint64
+	settingsOpen         bool
+	settingsSection      int
+	settingsQuery        string
+	settingsModifiedOnly bool
+	settingsInitialFocus bool
+	renaming             *Tab
+	renameText           string
+	renameFocus          bool
+	goalSetup            *goalSetup
+	automations          automationsView
+	// openedAutomation are automation sessions opened in a tab on request;
+	// hiddenSessions are automation sessions the task board shows instead.
+	openedAutomation map[string]bool
+	hiddenSessions   map[string]bool
+	// setupSessions are agents setting up tasks; the task board shows
+	// them. taskBoard shows over boardOver's content while boardShown.
+	setupSessions         []setupSession
+	taskBoard             *boardPane
+	boardShown            bool
+	boardOver             *Tab
 	saveDue               bool
 	lastSave              time.Time
 	quitting              bool
@@ -422,6 +434,8 @@ func (a *App) selectTab(i int) {
 	if t.Focus != nil {
 		t.Focus.attention = false
 	}
+	// Choosing a tab shows it, also in place of the task board.
+	a.hideBoard()
 	a.focusReq = t.Focus
 	a.closeViewedPaneNotice()
 	a.changed()
@@ -633,18 +647,21 @@ type savedTab struct {
 }
 
 type savedNode struct {
-	Kind     paneKind      `json:"kind,omitempty"`
-	PaneID   string        `json:"paneId,omitempty"`
-	Files    *savedFiles   `json:"files,omitempty"`
-	Browser  *savedBrowser `json:"browser,omitempty"`
-	SID      string        `json:"sid,omitempty"`
-	Dir      string        `json:"dir,omitempty"`
-	Cols     int           `json:"cols,omitempty"`
-	Rows     int           `json:"rows,omitempty"`
-	Vertical bool          `json:"vertical,omitempty"`
-	Ratio    float32       `json:"ratio,omitempty"`
-	A        *savedNode    `json:"a,omitempty"`
-	B        *savedNode    `json:"b,omitempty"`
+	Kind    paneKind      `json:"kind,omitempty"`
+	PaneID  string        `json:"paneId,omitempty"`
+	Files   *savedFiles   `json:"files,omitempty"`
+	Browser *savedBrowser `json:"browser,omitempty"`
+	SID     string        `json:"sid,omitempty"`
+	// AutomationOpened keeps an automation's session the person opened
+	// in a tab; any other automation session gets none.
+	AutomationOpened bool       `json:"automationOpened,omitempty"`
+	Dir              string     `json:"dir,omitempty"`
+	Cols             int        `json:"cols,omitempty"`
+	Rows             int        `json:"rows,omitempty"`
+	Vertical         bool       `json:"vertical,omitempty"`
+	Ratio            float32    `json:"ratio,omitempty"`
+	A                *savedNode `json:"a,omitempty"`
+	B                *savedNode `json:"b,omitempty"`
 }
 
 func (a *App) snapshot() savedLayout { return a.snapshotHost(nil) }
@@ -729,7 +746,7 @@ func (a *App) restore() bool {
 			var p *Pane
 			if in, ok := live[s.SID]; ok && !used[s.SID] {
 				used[s.SID] = true
-				p = &Pane{ID: a.id(), content: &terminalPane{SID: s.SID, info: in, startDir: s.Dir}}
+				p = &Pane{ID: a.id(), content: &terminalPane{SID: s.SID, info: in, startDir: s.Dir, automationOpened: s.AutomationOpened}}
 				a.attach(p, in.Cols, in.Rows)
 			} else {
 				if a.hello.AgentRecovery && s.SID != "" && !used[s.SID] {
@@ -753,8 +770,43 @@ func (a *App) restore() bool {
 		n.A, n.B = load(s.A, t, n), load(s.B, t, n)
 		return n
 	}
+	// Automation sessions show on the task board, not in tabs, also when
+	// an earlier version saved one in the layout. Leaving one out only
+	// leaves it untabbed: it keeps running.
+	a.automations.reload()
+	var prune func(s *savedNode) *savedNode
+	prune = func(s *savedNode) *savedNode {
+		if s == nil {
+			return nil
+		}
+		if s.A == nil || s.B == nil {
+			in, ok := live[s.SID]
+			switch {
+			case !ok || s.Kind != "" && s.Kind != paneTerminal:
+			case s.AutomationOpened:
+				if a.openedAutomation == nil {
+					a.openedAutomation = map[string]bool{}
+				}
+				a.openedAutomation[s.SID] = true
+			case a.hiddenAutomationSession(in):
+				used[s.SID] = true
+				return nil
+			}
+			return s
+		}
+		x, y := prune(s.A), prune(s.B)
+		switch {
+		case x == nil:
+			return y
+		case y == nil:
+			return x
+		}
+		copied := *s
+		copied.A, copied.B = x, y
+		return &copied
+	}
 	for _, st := range l.Tabs {
-		if st.Root == nil {
+		if st.Root = prune(st.Root); st.Root == nil {
 			continue
 		}
 		t := &Tab{ID: a.id(), Name: st.Name}
@@ -772,7 +824,7 @@ func (a *App) restore() bool {
 	// Sessions no tab shows, as those of another window that crashed,
 	// get a tab of their own rather than running unseen.
 	for _, in := range sortedInfos(live) {
-		if used[in.ID] {
+		if used[in.ID] || a.hiddenAutomationSession(in) {
 			continue
 		}
 		a.addSessionTab(in)
@@ -812,8 +864,18 @@ func (a *App) syncSessionTabs(byID map[string]rex.SessionInfo) {
 		shown[p.terminal().SID] = true
 	}
 	added := false
+	reloaded := false
 	for _, in := range sortedInfos(byID) {
 		if in.ID == "" || in.Exited || shown[in.ID] || a.closedSessions[in.ID] {
+			continue
+		}
+		// Read the schedule once per pass, after the list: a runner records
+		// its agent a moment before polling may see the agent.
+		if !reloaded && !a.hiddenSessions[in.ID] {
+			a.automations.reload()
+			reloaded = true
+		}
+		if a.hiddenAutomationSession(in) {
 			continue
 		}
 		a.addSessionTab(in)
