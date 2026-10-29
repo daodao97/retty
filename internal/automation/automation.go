@@ -79,6 +79,11 @@ func historyPath(runPath string) string {
 // FinishRun records the end of a run and keeps it in the automation's
 // history, which the task board lists.
 func FinishRun(path string, change func(*Run)) error {
+	unlock, err := lockRun(path)
+	if err != nil {
+		return err
+	}
+	defer unlock()
 	var r Run
 	readJSON(path, &r)
 	change(&r)
@@ -287,7 +292,7 @@ func Remove(dir, id string) error {
 	if err := os.Remove(specPath(dir, id)); err != nil {
 		return err
 	}
-	for _, path := range []string{RunPath(dir, id), historyPath(RunPath(dir, id)), ResultPath(RunPath(dir, id))} {
+	for _, path := range []string{RunPath(dir, id), historyPath(RunPath(dir, id)), ResultPath(RunPath(dir, id)), RunPath(dir, id) + ".lock"} {
 		if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
 			return err
 		}
@@ -303,10 +308,33 @@ func LastRun(dir, id string) Run {
 
 // UpdateRun changes one field set of a run record, keeping the others.
 func UpdateRun(path string, change func(*Run)) error {
+	unlock, err := lockRun(path)
+	if err != nil {
+		return err
+	}
+	defer unlock()
 	var r Run
 	readJSON(path, &r)
 	change(&r)
 	return writeRun(path, r)
+}
+
+// lockRun holds a run record's own lock while it is read and written again.
+// The timer, the runner and the window each change some of its fields, and
+// an atomic write alone would let one of them drop another's change.
+func lockRun(path string) (func(), error) {
+	f, err := os.OpenFile(path+".lock", os.O_CREATE|os.O_RDWR, 0o600)
+	if err != nil {
+		return nil, err
+	}
+	if err = unix.Flock(int(f.Fd()), unix.LOCK_EX); err != nil {
+		f.Close()
+		return nil, err
+	}
+	return func() {
+		unix.Flock(int(f.Fd()), unix.LOCK_UN)
+		f.Close()
+	}, nil
 }
 
 func writeRun(path string, r Run) error {
@@ -437,12 +465,24 @@ func Tick(dir, exe string, connect func() (*rex.Client, error), only string, now
 		} else {
 			argv = append(append(argv, "--"), a.Agent...)
 		}
+		creating := time.Now()
 		info, err := c.Create(rex.CreateOptions{Dir: a.Dir, Command: argv, Cols: 100, Rows: 24})
 		if err != nil {
 			errs = append(errs, fmt.Errorf("automation %s: %w", a.ID, err))
 			continue
 		}
-		errs = append(errs, writeRun(RunPath(dir, a.ID), Run{Started: now, Runner: info.ID, Agent: agent, State: "running", Updated: now}))
+		errs = append(errs, UpdateRun(RunPath(dir, a.ID), func(r *Run) {
+			next := Run{Started: now, Runner: info.ID, Agent: agent, State: "running", Updated: now}
+			// A quick runner may have recorded its agent and progress before
+			// this: those are this run's, newer than what the timer knows.
+			if r.Updated.After(creating) {
+				next.Agent, next.State, next.Message, next.Updated = r.Agent, r.State, r.Message, r.Updated
+				if r.Finished.After(creating) {
+					next.Finished, next.Rounds, next.Summary, next.Result = r.Finished, r.Rounds, r.Summary, r.Result
+				}
+			}
+			*r = next
+		}))
 	}
 	return errors.Join(errs...)
 }

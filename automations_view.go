@@ -21,9 +21,11 @@ type automationsView struct {
 	list []automation.Automation
 	runs map[string]automation.Run
 	err  string
-	// loaded is when the files were read.
-	loaded    time.Time
-	collapsed bool
+	// loaded is when the files were read; refreshing is a read off the UI
+	// thread not taken yet.
+	loaded     time.Time
+	refreshing bool
+	collapsed  bool
 	// removing is the automation whose delete button asks to be confirmed,
 	// since when; the question lapses after a few seconds.
 	removing    string
@@ -36,18 +38,53 @@ const removeConfirmWindow = 4 * time.Second
 
 var cmdAutomations = command{ID: "automation.list", Title: "任务看板", Run: func(a *App) { a.openBoard("") }}
 
-func (v *automationsView) reload() {
-	v.loaded = time.Now()
-	dir := rex.Dir()
+// automationsRead is the schedule as its files hold it.
+type automationsRead struct {
+	list []automation.Automation
+	runs map[string]automation.Run
+	err  string
+}
+
+func readAutomations(dir string) automationsRead {
 	list, err := automation.List(dir)
-	v.list, v.err = list, ""
+	r := automationsRead{list: list, runs: make(map[string]automation.Run, len(list))}
 	if err != nil {
-		v.err = err.Error()
+		r.err = err.Error()
 	}
-	v.runs = make(map[string]automation.Run, len(list))
 	for _, a := range list {
-		v.runs[a.ID] = automation.LastRun(dir, a.ID)
+		r.runs[a.ID] = automation.LastRun(dir, a.ID)
 	}
+	return r
+}
+
+func (v *automationsView) take(r automationsRead, at time.Time) {
+	v.list, v.runs, v.err, v.loaded = r.list, r.runs, r.err, at
+}
+
+// reload reads the schedule at once, for a decision that depends on it, as
+// whether a session gets a tab.
+func (v *automationsView) reload() { v.take(readAutomations(rex.Dir()), time.Now()) }
+
+// refreshAutomations reads the schedule again off the UI thread once it is
+// older than age, for the sidebar's and the board's periodic refresh: with
+// a few automations that is a few dozen file reads, too slow for a frame.
+func (a *App) refreshAutomations(c *ui.Context, age time.Duration) {
+	v := &a.automations
+	if v.refreshing || time.Since(v.loaded) <= age {
+		return
+	}
+	v.refreshing = true
+	services, dir, started := c.Services(), rex.Dir(), time.Now()
+	go func() {
+		read := readAutomations(dir)
+		a.laterFrom(services, func() {
+			v.refreshing = false
+			// A reload made meanwhile read newer files.
+			if v.loaded.Before(started) {
+				v.take(read, started)
+			}
+		})
+	}()
 }
 
 // hiddenAutomationSession tells that a session belongs to an automation
@@ -250,9 +287,7 @@ func (a *App) automationsToggle(c *ui.Context, k *colors) {
 // each run's state, so a background run is visible at a glance.
 func (a *App) sidebarAutomations(c *ui.Context, k *colors) {
 	v := &a.automations
-	if time.Since(v.loaded) > 5*time.Second {
-		v.reload()
-	}
+	a.refreshAutomations(c, 5*time.Second)
 	c.After(5 * time.Second)
 	ui.Row(c.Key("automations-heading")).FillWidth().Height(34).Shrink(0).Padding(0, 10).
 		BorderWidth(1, 0, 0, 0).BorderColor(k.headerBorder).AlignItems(ui.Center).Children(func() {

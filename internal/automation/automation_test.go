@@ -3,9 +3,43 @@ package automation
 import (
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 )
+
+// TestUpdateRunKeepsConcurrentChanges changes one record from many writers
+// at once, as the timer, a runner and the window do: none loses another's
+// change.
+func TestUpdateRunKeepsConcurrentChanges(t *testing.T) {
+	dir := t.TempDir()
+	a, err := New(Automation{Goal: "g", Every: "1h", Dir: "/tmp"}, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = Save(dir, a); err != nil {
+		t.Fatal(err)
+	}
+	path := RunPath(dir, a.ID)
+	var wg sync.WaitGroup
+	for range 32 {
+		wg.Go(func() {
+			if err := UpdateRun(path, func(r *Run) { r.Rounds++ }); err != nil {
+				t.Error(err)
+			}
+		})
+	}
+	wg.Wait()
+	if got := LastRun(dir, a.ID).Rounds; got != 32 {
+		t.Fatalf("rounds = %d after 32 concurrent updates", got)
+	}
+	if err = Remove(dir, a.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = os.Stat(path + ".lock"); !os.IsNotExist(err) {
+		t.Fatal("run lock kept after remove")
+	}
+}
 
 func TestDueRunsOnceAfterMissedIntervals(t *testing.T) {
 	now := time.Date(2026, 10, 28, 9, 0, 0, 0, time.UTC)

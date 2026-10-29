@@ -142,12 +142,24 @@ func (a *App) openAutomationTab(b *boardPane, in rex.SessionInfo) {
 
 // fetchBoard reads the selected automation's history, its runner's
 // progress and its agent's session, and finds the setup agents running.
+// The sessions come from the window's own poll, which lists them every half
+// second anyway; the board lists them itself only before that poll has.
 func (a *App) fetchBoard(b *boardPane) {
-	id, client, epoch, dir := b.selected, a.client, b.epoch, rex.Dir()
+	id, client, epoch, dir, services := b.selected, a.client, b.epoch, rex.Dir(), a.services
 	last := a.automations.runs[id]
 	setup, isSetup := strings.CutPrefix(id, setupPrefix)
 	if isSetup {
 		last = automation.Run{Agent: setup}
+	}
+	var polled []rex.SessionInfo
+	if byID, ok := a.pollSnapshots[nil]; ok && client != nil {
+		polled = sortedInfos(byID)
+	}
+	// An agent with no output since the preview's snapshot keeps its
+	// screen, and the board reads no snapshot of it.
+	shownSID, shownOutput := "", uint64(0)
+	if b.term != nil {
+		shownSID, shownOutput = b.termSID, b.termOutput
 	}
 	b.fetching = true
 	go func() {
@@ -155,36 +167,37 @@ func (a *App) fetchBoard(b *boardPane) {
 		if id != "" && !isSetup {
 			history = automation.History(dir, id, 50)
 		}
-		var runner, agent rex.SessionInfo
-		var found []setupSession
-		alive := map[string]rex.SessionInfo{}
-		failure := ""
-		if client != nil {
+		infos, listed, failure := polled, polled != nil, ""
+		if !listed && client != nil {
 			if all, err := client.List(); err != nil {
 				failure = err.Error()
 			} else {
-				for _, s := range all {
-					switch s.ID {
-					case last.Runner:
-						runner = s
-					case last.Agent:
-						agent = s
-					}
-					if s.Exited {
-						continue
-					}
-					alive[s.ID] = s
-					if request := setupRequest(s); request != "" {
-						found = append(found, setupSession{info: s, request: request})
-					}
-				}
+				infos, listed = all, true
+			}
+		}
+		var runner, agent rex.SessionInfo
+		var found []setupSession
+		alive := map[string]rex.SessionInfo{}
+		for _, s := range infos {
+			switch s.ID {
+			case last.Runner:
+				runner = s
+			case last.Agent:
+				agent = s
+			}
+			if s.Exited {
+				continue
+			}
+			alive[s.ID] = s
+			if request := setupRequest(s); request != "" {
+				found = append(found, setupSession{info: s, request: request})
 			}
 		}
 		// A read-only snapshot: the board never attaches, so it neither
 		// resizes the session nor writes into it.
 		var snap rex.HistorySnapshot
 		haveSnap := false
-		if client != nil && agent.ID != "" {
+		if client != nil && agent.ID != "" && (agent.ID != shownSID || agent.Output != shownOutput) {
 			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 			if got, err := client.History(ctx, agent.ID, 200); err == nil {
 				snap = got
@@ -192,8 +205,8 @@ func (a *App) fetchBoard(b *boardPane) {
 			}
 			cancel()
 		}
-		a.laterFrom(a.services, func() {
-			if client != nil && failure == "" {
+		a.laterFrom(services, func() {
+			if listed {
 				a.mergeSetups(found, alive)
 			}
 			if b.epoch != epoch {
@@ -245,11 +258,10 @@ var runStateLabels = map[string]string{"running": "运行中", "done": "达成",
 
 func (a *App) boardView(c *ui.Context, k *colors, b *boardPane) {
 	v := &a.automations
-	if time.Since(v.loaded) > 2*time.Second {
-		v.reload()
-	}
+	a.refreshAutomations(c, 2*time.Second)
+	// Until the schedule is first read, the selection may be one it holds.
 	_, setup := a.setupSession(b.selected)
-	if !setup && !slices.ContainsFunc(v.list, func(x automation.Automation) bool { return x.ID == b.selected }) {
+	if !setup && !v.loaded.IsZero() && !slices.ContainsFunc(v.list, func(x automation.Automation) bool { return x.ID == b.selected }) {
 		next := ""
 		if len(v.list) > 0 {
 			next = v.list[0].ID

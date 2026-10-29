@@ -18,7 +18,7 @@ func TestSidebarListsAutomations(t *testing.T) {
 		t.Fatal("empty automations section hidden")
 	}
 	// The timer adds runs while the window is open; the sidebar reads the
-	// files again after a few seconds, here at once.
+	// files again after a few seconds, here at once, off the UI thread.
 	item, err := automation.New(automation.Automation{Goal: "每天整理 issue", Every: "24h", Dir: "/tmp"}, time.Now())
 	if err != nil {
 		t.Fatal(err)
@@ -32,10 +32,7 @@ func TestSidebarListsAutomations(t *testing.T) {
 		t.Fatal(err)
 	}
 	a.automations.loaded = time.Time{}
-	tt.Frame()
-	if !tt.HasText("每天整理 issue") {
-		t.Fatal("automation not listed in the sidebar")
-	}
+	waitFor(t, tt, "automation listed in the sidebar", func() bool { return tt.HasText("每天整理 issue") })
 	if !tt.HasText(time.Now().Add(24 * time.Hour).Format("01-02 15:04")) {
 		t.Fatal("next run not shown")
 	}
