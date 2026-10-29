@@ -76,33 +76,27 @@ func historyPath(runPath string) string {
 	return strings.TrimSuffix(runPath, ".run.json") + ".history.jsonl"
 }
 
+// lockPath is the file whose lock guards a run record's changes.
+func lockPath(runPath string) string { return runPath + ".lock" }
+
 // FinishRun records the end of a run and keeps it in the automation's
 // history, which the task board lists.
 func FinishRun(path string, change func(*Run)) error {
-	unlock, err := lockRun(path)
-	if err != nil {
-		return err
-	}
-	defer unlock()
-	var r Run
-	readJSON(path, &r)
-	change(&r)
-	if err := writeRun(path, r); err != nil {
-		return err
-	}
-	line, err := json.Marshal(r)
-	if err != nil {
-		return err
-	}
-	var lines []string
-	if data, err := os.ReadFile(historyPath(path)); err == nil {
-		lines = strings.FieldsFunc(string(data), func(r rune) bool { return r == '\n' })
-	}
-	lines = append(lines, string(line))
-	if len(lines) > historyLimit {
-		lines = lines[len(lines)-historyLimit:]
-	}
-	return atomicfile.Write(historyPath(path), []byte(strings.Join(lines, "\n")+"\n"))
+	return changeRun(path, change, func(r Run) error {
+		line, err := json.Marshal(r)
+		if err != nil {
+			return err
+		}
+		var lines []string
+		if data, err := os.ReadFile(historyPath(path)); err == nil {
+			lines = strings.FieldsFunc(string(data), func(r rune) bool { return r == '\n' })
+		}
+		lines = append(lines, string(line))
+		if len(lines) > historyLimit {
+			lines = lines[len(lines)-historyLimit:]
+		}
+		return atomicfile.Write(historyPath(path), []byte(strings.Join(lines, "\n")+"\n"))
+	})
 }
 
 // History returns up to n past runs, newest first. A damaged line is
@@ -292,7 +286,8 @@ func Remove(dir, id string) error {
 	if err := os.Remove(specPath(dir, id)); err != nil {
 		return err
 	}
-	for _, path := range []string{RunPath(dir, id), historyPath(RunPath(dir, id)), ResultPath(RunPath(dir, id)), RunPath(dir, id) + ".lock"} {
+	run := RunPath(dir, id)
+	for _, path := range []string{run, historyPath(run), ResultPath(run), lockPath(run)} {
 		if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
 			return err
 		}
@@ -308,6 +303,12 @@ func LastRun(dir, id string) Run {
 
 // UpdateRun changes one field set of a run record, keeping the others.
 func UpdateRun(path string, change func(*Run)) error {
+	return changeRun(path, change, nil)
+}
+
+// changeRun reads a run record, changes it and writes it again under its
+// lock, then passes what it wrote to after, if any, still under the lock.
+func changeRun(path string, change func(*Run), after func(Run) error) error {
 	unlock, err := lockRun(path)
 	if err != nil {
 		return err
@@ -316,14 +317,17 @@ func UpdateRun(path string, change func(*Run)) error {
 	var r Run
 	readJSON(path, &r)
 	change(&r)
-	return writeRun(path, r)
+	if err := writeRun(path, r); err != nil || after == nil {
+		return err
+	}
+	return after(r)
 }
 
 // lockRun holds a run record's own lock while it is read and written again.
 // The timer, the runner and the window each change some of its fields, and
 // an atomic write alone would let one of them drop another's change.
 func lockRun(path string) (func(), error) {
-	f, err := os.OpenFile(path+".lock", os.O_CREATE|os.O_RDWR, 0o600)
+	f, err := os.OpenFile(lockPath(path), os.O_CREATE|os.O_RDWR, 0o600)
 	if err != nil {
 		return nil, err
 	}
@@ -472,16 +476,17 @@ func Tick(dir, exe string, connect func() (*rex.Client, error), only string, now
 			continue
 		}
 		errs = append(errs, UpdateRun(RunPath(dir, a.ID), func(r *Run) {
-			next := Run{Started: now, Runner: info.ID, Agent: agent, State: "running", Updated: now}
 			// A quick runner may have recorded its agent and progress before
-			// this: those are this run's, newer than what the timer knows.
+			// this: those are this run's, newer than what the timer knows, and
+			// only an end recorded before Create is an earlier run's.
 			if r.Updated.After(creating) {
-				next.Agent, next.State, next.Message, next.Updated = r.Agent, r.State, r.Message, r.Updated
-				if r.Finished.After(creating) {
-					next.Finished, next.Rounds, next.Summary, next.Result = r.Finished, r.Rounds, r.Summary, r.Result
+				r.Started, r.Runner = now, info.ID
+				if !r.Finished.After(creating) {
+					r.Finished, r.Rounds, r.Summary, r.Result = time.Time{}, 0, "", nil
 				}
+				return
 			}
-			*r = next
+			*r = Run{Started: now, Runner: info.ID, Agent: agent, State: "running", Updated: now}
 		}))
 	}
 	return errors.Join(errs...)

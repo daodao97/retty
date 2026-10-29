@@ -157,22 +157,19 @@ func (a *App) fetchBoard(b *boardPane) {
 	}
 	// An agent with no output since the preview's snapshot keeps its
 	// screen, and the board reads no snapshot of it.
-	shownSID, shownOutput := "", uint64(0)
-	if b.term != nil {
-		shownSID, shownOutput = b.termSID, b.termOutput
-	}
+	shownSID, shownOutput := b.termSID, b.termOutput
 	b.fetching = true
 	go func() {
 		var history []automation.Run
 		if id != "" && !isSetup {
 			history = automation.History(dir, id, 50)
 		}
-		infos, listed, failure := polled, polled != nil, ""
-		if !listed && client != nil {
+		infos, failure := polled, ""
+		if polled == nil && client != nil {
 			if all, err := client.List(); err != nil {
 				failure = err.Error()
 			} else {
-				infos, listed = all, true
+				infos = all
 			}
 		}
 		var runner, agent rex.SessionInfo
@@ -206,7 +203,7 @@ func (a *App) fetchBoard(b *boardPane) {
 			cancel()
 		}
 		a.laterFrom(services, func() {
-			if listed {
+			if client != nil && failure == "" {
 				a.mergeSetups(found, alive)
 			}
 			if b.epoch != epoch {

@@ -18,9 +18,7 @@ import (
 // lives in files the minute timer reads, so the window reads them again
 // every few seconds, not on every frame.
 type automationsView struct {
-	list []automation.Automation
-	runs map[string]automation.Run
-	err  string
+	automationsRead
 	// loaded is when the files were read; refreshing is a read off the UI
 	// thread not taken yet.
 	loaded     time.Time
@@ -58,7 +56,7 @@ func readAutomations(dir string) automationsRead {
 }
 
 func (v *automationsView) take(r automationsRead, at time.Time) {
-	v.list, v.runs, v.err, v.loaded = r.list, r.runs, r.err, at
+	v.automationsRead, v.loaded = r, at
 }
 
 // reload reads the schedule at once, for a decision that depends on it, as
@@ -205,11 +203,14 @@ func (a *App) runAutomation(id, exe string) {
 				return (&net.Dialer{Timeout: 3 * time.Second}).DialContext(ctx, "unix", socket)
 			})
 		}, id, time.Now())
+		read, at := readAutomations(dir), time.Now()
 		a.laterFrom(a.services, func() {
 			if err != nil {
 				a.err = "自动化运行失败：" + err.Error()
 			}
-			a.automations.reload()
+			if a.automations.loaded.Before(at) {
+				a.automations.take(read, at)
+			}
 		})
 	}()
 }
