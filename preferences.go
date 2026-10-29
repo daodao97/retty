@@ -43,22 +43,13 @@ func (a *App) settingsPage(c *ui.Context, k *colors) {
 		return
 	}
 	original := c.Theme()
-	theme := *original
-	side, selected := ui.Hex("#f0f1f4"), ui.Hex("#dbe6fa")
-	theme.Background, theme.Text, theme.TextMuted = ui.Hex("#fafbfc"), ui.Hex("#24272d"), ui.Hex("#777c85")
-	if original.Dark {
-		side, selected = ui.Hex("#202327"), ui.Hex("#293d60")
-		theme.Background, theme.Text, theme.TextMuted = ui.Hex("#191c20"), ui.Hex("#d5d7db"), ui.Hex("#8d9198")
-		theme.Surface, theme.Border = ui.Hex("#25282d"), ui.Hex("#3b3f46")
-	}
-	theme.Accent, theme.AccentHover, theme.AccentPressed = ui.Hex("#85aaf4"), ui.Hex("#99b9fa"), ui.Hex("#7099e5")
-	theme.FontSize, theme.Spacing, theme.Radius = 13, 3.5, 5
+	theme, side, selected := settingsTheme(original)
 	c.SetTheme(&theme)
 	defer c.SetTheme(original)
 	width, height := c.Size()
-	sideWidth, contentPad := float32(216), float32(32)
+	sideWidth, contentPad := float32(216), float32(space3XL)
 	if width < 720 {
-		sideWidth, contentPad = 152, 18
+		sideWidth, contentPad = 152, spaceXL
 	}
 	ui.DialogBase(c, &a.settingsOpen, func(backdrop, panel ui.Element) {
 		backdrop.Background(theme.Background)
@@ -67,12 +58,12 @@ func (a *App) settingsPage(c *ui.Context, k *colors) {
 			ui.Column(c.Key("settings-sidebar")).Width(sideWidth).FillHeight().Shrink(0).
 				Background(side).BorderWidth(0, 1, 0, 0).BorderColor(theme.Border).Children(func() {
 				ui.Box(c).FillWidth().Height(48).DragWindow()
-				ui.Column(c).FillWidth().Padding(8, 12, 0, 12).Gap(12).Children(func() {
-					ui.Text(c, "设置").Margin(0, 8).FontSize(11).TextColor(theme.TextMuted)
-					ui.Row(c).FillWidth().Padding(7, 8).Gap(8).AlignItems(ui.Center).Children(func() {
+				ui.Column(c).FillWidth().Padding(spaceM, spaceL, 0, spaceL).Gap(spaceL).Children(func() {
+					ui.Text(c, "设置").Margin(0, spaceM).FontSize(textCaption).TextColor(theme.TextMuted)
+					ui.Row(c).FillWidth().Padding(spaceS, spaceM).Gap(spaceM).AlignItems(ui.Center).Children(func() {
 						ui.Icon(c, icon("search")).Size(15, 15).TextColor(theme.TextMuted)
 						in := ui.TextInputBase(c, &a.settingsQuery).Grow(1).MinWidth(0).
-							Placeholder("搜索设置…").Label("Search settings").FontSize(12)
+							Placeholder("搜索设置…").Label("Search settings").FontSize(textSmall)
 						if a.settingsInitialFocus {
 							in.Focus()
 						}
@@ -85,11 +76,11 @@ func (a *App) settingsPage(c *ui.Context, k *colors) {
 						}
 					})
 				})
-				ui.Scroll(c).Grow(1).MinHeight(0).Padding(12).Gap(5).Children(func() {
+				ui.Scroll(c).Grow(1).MinHeight(0).Padding(spaceL).Gap(spaceXS).Children(func() {
 					for i, section := range settingsSections {
 						active := a.settingsSection == i && strings.TrimSpace(a.settingsQuery) == "" && !a.settingsModifiedOnly
 						b := ui.ButtonBase(c.Key(section.label)).Label(section.label).FillWidth().Height(30).
-							Padding(0, 9).Gap(9).Radius(7).AlignItems(ui.Center).Justify(ui.Start)
+							Padding(0, spaceM).Gap(spaceM).Radius(radiusM).AlignItems(ui.Center).Justify(ui.Start)
 						if active {
 							b.Background(selected)
 						} else if b.Hovered() {
@@ -97,15 +88,16 @@ func (a *App) settingsPage(c *ui.Context, k *colors) {
 						}
 						b.Children(func() {
 							ui.Icon(c, icon(section.glyph)).Size(15, 15).TextColor(theme.TextMuted)
-							ui.Text(c, section.title).FontSize(13).FontWeight(500).TextColor(theme.Text)
+							ui.Text(c, section.title).FontSize(textBody).FontWeight(500).TextColor(theme.Text)
 						})
 						if b.Clicked() {
 							a.settingsSection, a.settingsQuery, a.settingsModifiedOnly = i, "", false
 						}
 					}
 				})
-				ui.Row(c).FillWidth().Height(42).Padding(0, 18).AlignItems(ui.Center).Children(func() {
-					ui.Checkbox(c, &a.settingsModifiedOnly, "仅显示已修改").Label("Only modified settings").FontSize(11)
+				// The checkbox lines up with the section icons above it.
+				ui.Row(c).FillWidth().Height(42).Padding(0, spaceL+spaceM).AlignItems(ui.Center).Children(func() {
+					ui.Checkbox(c, &a.settingsModifiedOnly, "仅显示已修改").Label("Only modified settings").FontSize(textCaption)
 				})
 			})
 			ui.Column(c.Key("settings-main")).Grow(1).MinWidth(0).FillHeight().Children(func() {
@@ -117,21 +109,21 @@ func (a *App) settingsPage(c *ui.Context, k *colors) {
 				}
 				ui.Row(c).FillWidth().Height(84).Padding(0, contentPad).Justify(ui.Center).AlignItems(ui.Center).Children(func() {
 					ui.Box(c).Grow(1).MaxWidth(640).Children(func() {
-						ui.Text(c, title).FontSize(19).FontWeight(600).TextColor(theme.Text)
+						ui.Text(c, title).FontSize(textHeading).FontWeight(600).TextColor(theme.Text)
 					})
 				})
 				ui.Scroll(c.Key(fmt.Sprintf("settings-content-%d", a.settingsSection))).Grow(1).MinHeight(0).
-					FillWidth().Padding(0, contentPad, 28, contentPad).Children(func() {
+					FillWidth().Padding(0, contentPad, space2XL, contentPad).Children(func() {
 					ui.Column(c).FillWidth().MaxWidth(640).AlignSelf(ui.Center).Children(func() { a.settingsContent(c, &theme) })
 				})
 				ui.Row(c).FillWidth().Height(44).Padding(0, contentPad).Justify(ui.End).AlignItems(ui.Center).Children(func() {
-					ui.Text(c, "更改会自动保存").FontSize(11).TextColor(theme.TextMuted).Margin(0, 12)
+					ui.Text(c, "更改会自动保存").FontSize(textCaption).TextColor(theme.TextMuted).Margin(0, spaceL)
 					if ui.Button(c, "完成").Label("Done").Clicked() {
 						a.settingsOpen = false
 					}
 				})
 			})
-			if iconButton(c, k, "x", "Close Settings", 26, 16).Absolute().Top(9).Right(12).Focusable().Tooltip("关闭设置  Esc").Clicked() {
+			if iconButton(c, k, "x", "Close Settings", 26, 16).Absolute().Top(9).Right(spaceL).Focusable().Tooltip("关闭设置  Esc").Clicked() {
 				a.settingsOpen = false
 			}
 		})
@@ -139,8 +131,8 @@ func (a *App) settingsPage(c *ui.Context, k *colors) {
 	a.settingsInitialFocus = false
 	if a.usage != nil && a.usage.resetOpen && a.usage.panel == nil {
 		ui.DialogBase(c, &a.usage.resetOpen, func(back, panel ui.Element) {
-			back.Background(ui.RGBA(0, 0, 0, .3))
-			panel.Width(360).MaxWidthPercent(95).Padding(20).Radius(12).Background(theme.Background).Column()
+			back.Background(k.scrim)
+			panel.Width(360).MaxWidthPercent(95).Padding(space2XL).Radius(radiusL).Background(theme.Background).Column()
 			a.usageResetConfirmation(c, a.usage.reading("codex"))
 		})
 	}
@@ -260,8 +252,8 @@ func (a *App) preferenceItems() []preferenceItem {
 		{id: "font-size", title: "字体大小", label: "Terminal font size", detail: "调整所有终端窗格的文字大小。也可使用 ⌘+、⌘− 和 ⌘0。", group: "文字", section: 1,
 			modified: prefs.FontSize != defaultFontSize, reset: func() { a.setFontSize(defaultFontSize) },
 			control: func(c *ui.Context) {
-				ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-					ui.Text(c, fmt.Sprintf("%.1f pt", prefs.FontSize)).FontSize(13).TextColor(c.Theme().Text)
+				ui.Row(c).Gap(spaceM).AlignItems(ui.Center).Children(func() {
+					ui.Text(c, fmt.Sprintf("%.1f pt", prefs.FontSize)).FontSize(textBody).TextColor(c.Theme().Text)
 					size := float64(prefs.FontSize)
 					step := ui.Stepper(c, &size, 8, 32, 0.5).Label("Terminal font size")
 					if step.Focused() {
@@ -365,7 +357,7 @@ func (a *App) preferenceItems() []preferenceItem {
 			reset: func() { a.changeAgentHooks(id, false) },
 			control: func(c *ui.Context) {
 				if a.agentHookBusy == id {
-					ui.Text(c, "处理中…").FontSize(12)
+					ui.Text(c, "处理中…").FontSize(textSmall)
 					return
 				}
 				if ui.Button(c, action).Label(verb + " " + name + " integration").Clicked() {
@@ -466,15 +458,15 @@ func (a *App) settingsContent(c *ui.Context, theme *ui.Theme) {
 		return
 	}
 	if a.settingsSection == 3 && query == "" && !a.settingsModifiedOnly {
-		ui.Text(c, "Retty").FontSize(17).FontWeight(600).TextColor(theme.Text).Margin(12, 0)
-		ui.Text(c, "Reconnect TTY · Relay TTY").FontSize(13).TextColor(theme.TextMuted)
-		ui.Text(c, "换个屏幕，接着工作。电脑、手机与服务器上的持久终端会话。").FontSize(12).TextColor(theme.TextMuted).Margin(16, 0)
-		ui.Text(c, "开源地址").FontSize(11).TextColor(theme.TextMuted).Margin(12, 0, 6, 0)
-		ui.Link(c, "https://github.com/daodao97/retty", "https://github.com/daodao97/retty").FontSize(12).FillWidth()
+		ui.Text(c, "Retty").FontSize(textTitle).FontWeight(600).TextColor(theme.Text).Margin(spaceL, 0)
+		ui.Text(c, "Reconnect TTY · Relay TTY").FontSize(textBody).TextColor(theme.TextMuted)
+		ui.Text(c, "换个屏幕，接着工作。电脑、手机与服务器上的持久终端会话。").FontSize(textSmall).TextColor(theme.TextMuted).Margin(spaceXL, 0)
+		ui.Text(c, "开源地址").FontSize(textCaption).TextColor(theme.TextMuted).Margin(spaceL, 0, spaceS, 0)
+		ui.Link(c, "https://github.com/daodao97/retty", "https://github.com/daodao97/retty").FontSize(textSmall).FillWidth()
 		return
 	}
 	if a.agentHookError != "" && (a.settingsSection == 2 || query != "") {
-		ui.Text(c, a.agentHookError).FontSize(12).TextColor(ui.Hex("#e56c6c")).Margin(8, 0)
+		ui.Text(c, a.agentHookError).FontSize(textSmall).TextColor(colorsOf(c).danger).Margin(spaceM, 0)
 	}
 	group, count := "", 0
 	for _, item := range a.preferenceItems() {
@@ -490,24 +482,24 @@ func (a *App) settingsContent(c *ui.Context, theme *ui.Theme) {
 		key := fmt.Sprintf("%d-%s", item.section, item.group)
 		if key != group {
 			if count > 0 {
-				ui.Box(c).FillWidth().Height(1).Background(theme.Border).Margin(24, 0)
+				ui.Box(c).FillWidth().Height(1).Background(theme.Border).Margin(space2XL, 0)
 			}
 			name := item.group
 			if query != "" || a.settingsModifiedOnly {
 				name = settingsSections[item.section].title + " · " + name
 			}
-			ui.Text(c, name).FontSize(14).FontWeight(600).TextColor(theme.Text).Margin(12, 0, 14, 0)
+			ui.Text(c, name).FontSize(textTitle).FontWeight(600).TextColor(theme.Text).Margin(spaceL, 0, spaceL, 0)
 			group = key
 		}
-		ui.Row(c.Key(item.id)).FillWidth().Padding(14, 0).Gap(20).AlignItems(ui.Center).Children(func() {
-			ui.Column(c).Grow(1).MinWidth(0).Gap(6).Children(func() {
-				ui.Text(c, item.title).FontSize(13).FontWeight(500).TextColor(theme.Text)
-				ui.Text(c, item.detail).FontSize(11.5).TextColor(theme.TextMuted)
+		ui.Row(c.Key(item.id)).FillWidth().Padding(spaceL, 0).Gap(space2XL).AlignItems(ui.Center).Children(func() {
+			ui.Column(c).Grow(1).MinWidth(0).Gap(spaceS).Children(func() {
+				ui.Text(c, item.title).FontSize(textBody).FontWeight(500).TextColor(theme.Text)
+				ui.Text(c, item.detail).FontSize(textSmall).TextColor(theme.TextMuted)
 				if item.modified {
-					ui.Row(c).Gap(14).AlignItems(ui.Center).Children(func() {
-						ui.Text(c, "已修改").FontSize(11).TextColor(theme.TextMuted)
-						b := ui.ButtonBase(c).Label("Restore default "+item.label).Padding(2, 0).Radius(3).Disabled(item.disabled)
-						b.Children(func() { ui.Text(c, "恢复默认值").FontSize(11).FontWeight(500).TextColor(theme.Text) })
+					ui.Row(c).Gap(spaceL).AlignItems(ui.Center).Children(func() {
+						ui.Text(c, "已修改").FontSize(textCaption).TextColor(theme.TextMuted)
+						b := ui.ButtonBase(c).Label("Restore default "+item.label).Padding(space2XS, 0).Radius(radiusS).Disabled(item.disabled)
+						b.Children(func() { ui.Text(c, "恢复默认值").FontSize(textCaption).FontWeight(500).TextColor(theme.Text) })
 						if b.Clicked() {
 							item.reset()
 							c.Invalidate()
@@ -524,6 +516,6 @@ func (a *App) settingsContent(c *ui.Context, theme *ui.Theme) {
 		if query == "" {
 			message = "所有设置均使用默认值"
 		}
-		ui.Text(c, message).FontSize(13).TextColor(theme.TextMuted).Margin(24, 0)
+		ui.Text(c, message).FontSize(textBody).TextColor(theme.TextMuted).Margin(space2XL, 0)
 	}
 }

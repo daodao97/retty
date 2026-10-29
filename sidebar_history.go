@@ -183,17 +183,18 @@ func (a *App) sidebarProjectSessions(c *ui.Context, k *colors) {
 		a.agentHistory = &sidebarAgentHistory{selected: -1}
 	}
 	h := a.agentHistory
-	ui.Row(c.Key("project-sessions-heading")).FillWidth().Height(34).Shrink(0).Padding(0, 10).
+	// The heading's chevron lines up with the project rows' below it.
+	ui.Row(c.Key("project-sessions-heading")).FillWidth().Height(34).Shrink(0).Padding(0, spaceM+space2XS).
 		BorderWidth(1, 0, 0, 0).BorderColor(k.headerBorder).AlignItems(ui.Center).Children(func() {
 		toggle := ui.ButtonBase(c.Key("toggle-project-history")).Label("项目会话").Expanded(h.expanded).
-			Focusable().Grow(1).MinWidth(0).Height(33).Gap(6).AlignItems(ui.Center).Cursor(ui.CursorPointer)
+			Focusable().Grow(1).MinWidth(0).Height(33).Gap(spaceS).AlignItems(ui.Center).Cursor(ui.CursorPointer)
 		toggle.Children(func() {
 			arrow := "chevron-right"
 			if h.expanded {
 				arrow = "chevron-down"
 			}
 			ui.Icon(c, icon(arrow)).Size(12, 12).TextColor(k.iconMuted).Shrink(0)
-			ui.Text(c, "项目会话").FontSize(10.5).FontWeight(600).TextColor(k.textFaint).Grow(1)
+			ui.Text(c, "项目会话").FontSize(textCaption).FontWeight(600).TextColor(k.textFaint).Grow(1)
 		})
 		if toggle.Clicked() {
 			h.expanded = !h.expanded
@@ -209,14 +210,14 @@ func (a *App) sidebarProjectSessions(c *ui.Context, k *colors) {
 	a.refreshAgentHistory(c, false)
 	c.After(15 * time.Second)
 	if h.err != "" {
-		ui.Text(c, "部分会话未能读取").FontSize(10.5).TextColor(k.textMuted).Padding(4, 12).Tooltip(h.err).Shrink(0)
+		ui.Text(c, "部分会话未能读取").FontSize(textMicro).TextColor(k.textMuted).Padding(spaceXS, spaceL).Tooltip(h.err).Shrink(0)
 	}
 	if len(h.projects) == 0 {
 		message := "暂无 Codex / Claude Code 会话"
 		if !h.loaded {
 			message = "正在读取会话…"
 		}
-		ui.Text(c, message).FontSize(10.5).TextColor(k.textFaint).Padding(8, 12).FillWidth().Wrap()
+		ui.Text(c, message).FontSize(textMicro).TextColor(k.textFaint).Padding(spaceM, spaceL).FillWidth().Wrap()
 		ui.Spacer(c)
 		return
 	}
@@ -274,16 +275,16 @@ func (a *App) sidebarHistoryRow(c *ui.Context, k *colors, h *sidebarAgentHistory
 		accessible = "恢复 " + programOf(s.Agent).Name + " 会话 " + label
 	}
 	b := ui.ButtonBase(c.Key(key)).Label(accessible).Tooltip(tooltip).Grow(1).MinWidth(0).Height(30).
-		Padding(0, 2).Gap(6).AlignItems(ui.Center).Cursor(ui.CursorPointer).Radius(4)
+		Padding(0, space2XS).Gap(spaceS).AlignItems(ui.Center).Cursor(ui.CursorPointer).Radius(radiusS)
 	// Outline owns the full row's hover and selection background.
 	b.Children(func() {
 		programIcon(c, glyph).Size(14, 14).TextColor(color).Shrink(0)
-		ui.Text(c, label).FontSize(11).TextColor(k.textMuted).SingleLine().Ellipsis("…").Grow(1).MinWidth(0)
+		ui.Text(c, label).FontSize(textCaption).TextColor(k.textMuted).SingleLine().Ellipsis("…").Grow(1).MinWidth(0)
 		if session && s.Branch != "" {
-			ui.Text(c, s.Branch).FontSize(9.5).TextColor(k.textFaint).SingleLine().Ellipsis("…").MaxWidth(80).Shrink(1)
+			ui.Text(c, s.Branch).FontSize(textMicro).TextColor(k.textFaint).SingleLine().Ellipsis("…").MaxWidth(80).Shrink(1)
 		}
 		if !session {
-			ui.Text(c, fmt.Sprint(len(h.children[key]))).FontSize(10).TextColor(k.textFaint).Shrink(0)
+			ui.Text(c, fmt.Sprint(len(h.children[key]))).FontSize(textMicro).TextColor(k.textFaint).Shrink(0)
 		}
 	})
 	if b.Clicked() {

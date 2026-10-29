@@ -14,19 +14,15 @@ func (a *App) sidebarLayout(c *ui.Context, k *colors, bar ui.TitleBar) {
 	if width < 720 {
 		sideWidth = 188
 	}
-	side, border := k.track, k.headerBorder
-	if !c.Theme().Dark {
-		side, border = ui.Hex("#f0f1f4"), k.panelBorder
-	}
 	ui.Row(c.Key("sidebar-layout")).Fill().Children(func() {
 		if !prefs.SidebarCollapsed {
 			ui.Column(c.Key("tab-sidebar")).Label("Tab sidebar").Width(sideWidth).Shrink(0).FillHeight().
-				Background(side).BorderWidth(0, 1, 0, 0).BorderColor(border).Children(func() {
+				Background(k.sidebar).BorderWidth(0, 1, 0, 0).BorderColor(k.sidebarBorder).Children(func() {
 				left := float32(0)
 				if bar.Left > 0 {
-					left = bar.Left + 8
+					left = bar.Left + spaceM
 				}
-				ui.Row(c).Height(compactTitleH).FillWidth().Padding(0, 8, 0, left).AlignItems(ui.Center).DragWindow().Children(func() {
+				ui.Row(c).Height(compactTitleH).FillWidth().Padding(0, spaceM, 0, left).AlignItems(ui.Center).DragWindow().Children(func() {
 					ui.Spacer(c)
 					a.collapseSidebarButton(c, k)
 				})
@@ -54,7 +50,7 @@ func (a *App) sidebarLayout(c *ui.Context, k *colors, bar ui.TitleBar) {
 					}
 				}
 				tabs := ui.Scroll(c.Key("sidebar-tabs")).Label("Sidebar tabs").Role(ui.RoleTabList).
-					MinHeight(0).FillWidth().Padding(10, 8).Gap(4)
+					MinHeight(0).FillWidth().Padding(spaceM).Gap(spaceXS)
 				if a.agentHistory != nil && a.agentHistory.expanded {
 					tabs.Height(min(listHeight, max(96, height*0.4))).Shrink(0)
 				} else {
@@ -108,11 +104,11 @@ func (a *App) expandSidebarButton(c *ui.Context, k *colors) {
 }
 
 func (a *App) sidebarTitleBar(c *ui.Context, k *colors, bar ui.TitleBar) {
-	left := float32(8)
+	left := float32(spaceM)
 	if prefs.SidebarCollapsed && bar.Left > 0 {
-		left = bar.Left + 8
+		left = bar.Left + spaceM
 	}
-	ui.Row(c).Height(compactTitleH).FillWidth().Padding(0, bar.Right, 0, left).Gap(6).
+	ui.Row(c).Height(compactTitleH).FillWidth().Padding(0, bar.Right, 0, left).Gap(spaceS).
 		Background(k.track).BorderWidth(0, 0, 1, 0).BorderColor(k.headerBorder).AlignItems(ui.Center).DragWindow().Children(func() {
 		if prefs.SidebarCollapsed {
 			a.expandSidebarButton(c, k)
@@ -123,7 +119,7 @@ func (a *App) sidebarTitleBar(c *ui.Context, k *colors, bar ui.TitleBar) {
 				if prefs.SidebarCollapsed && a.renaming == t {
 					a.renameField(c, t, name)
 				} else {
-					ui.Text(c, strings.TrimSpace(name+" "+detail)).Label("Current session").FontSize(11.5).
+					ui.Text(c, strings.TrimSpace(name+" "+detail)).Label("Current session").FontSize(textCaption).
 						TextColor(k.textMuted).SingleLine().Ellipsis("…").Grow(1).MinWidth(0)
 				}
 			}
@@ -144,7 +140,7 @@ func (a *App) sidebarTab(c *ui.Context, k *colors, i int, t *Tab) {
 	active := i == a.active
 	name, detail := t.label()
 	row := ui.Row(c.Key(t.ID)).Label(strings.TrimSpace(name+" "+detail)).Role(ui.RoleTab).Selected(active).
-		FillWidth().Height(40).Shrink(0).Padding(0, 9).Gap(8).Radius(7).AlignItems(ui.Center).Cursor(ui.CursorPointer)
+		FillWidth().Height(40).Shrink(0).Padding(0, spaceM).Gap(spaceM).Radius(radiusM).AlignItems(ui.Center).Cursor(ui.CursorPointer)
 	if active {
 		row.Background(k.panelSel)
 		if a.sidebarVisibleTab != t {
@@ -173,11 +169,11 @@ func (a *App) sidebarTab(c *ui.Context, k *colors, i int, t *Tab) {
 			}
 		}
 		programIcon(c, glyph).Size(17, 17).TextColor(color).Shrink(0)
-		ui.Column(c).Grow(1).MinWidth(0).Gap(3).Children(func() {
+		ui.Column(c).Grow(1).MinWidth(0).Gap(space2XS).Children(func() {
 			if a.renaming == t {
 				a.renameField(c, t, name)
 			} else {
-				ui.Text(c, name).FontSize(12).FontWeight(500).TextColor(k.text).SingleLine().Ellipsis("…").FillWidth()
+				ui.Text(c, name).FontSize(textSmall).FontWeight(500).TextColor(k.text).SingleLine().Ellipsis("…").FillWidth()
 			}
 			meta := detail
 			if git := a.paneGit(t.Focus); git != nil && git.Branch != "" && git.Branch != git.Default {
@@ -193,7 +189,7 @@ func (a *App) sidebarTab(c *ui.Context, k *colors, i int, t *Tab) {
 				}
 			}
 			if meta != "" {
-				ui.Text(c, meta).FontSize(10.5).TextColor(k.textFaint).SingleLine().Ellipsis("…").FillWidth()
+				ui.Text(c, meta).FontSize(textMicro).TextColor(k.textFaint).SingleLine().Ellipsis("…").FillWidth()
 			}
 		})
 		ui.Box(c.Key("tab-action")).Size(18, 18).Shrink(0).Center().Children(func() {

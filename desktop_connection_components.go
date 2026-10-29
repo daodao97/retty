@@ -2,23 +2,6 @@ package main
 
 import "github.com/egoist/mygo/ui"
 
-func desktopConnectionTheme(original *ui.Theme) ui.Theme {
-	theme := *original
-	k := &lightColors
-	if theme.Dark {
-		k = &darkColors
-		theme.Background = ui.Hex("#1c1e21")
-		theme.Surface = ui.Hex("#25272b")
-	} else {
-		theme.Background = ui.Hex("#f5f6f8")
-		theme.Surface = ui.Hex("#ffffff")
-	}
-	theme.Text, theme.TextMuted, theme.Border = k.text, k.textMuted, k.panelBorder
-	theme.SurfaceHover, theme.SurfacePressed = k.hover, k.pressed
-	theme.FontSize, theme.Radius, theme.Spacing = 13, 7, 4
-	return theme
-}
-
 func desktopConnectionIconAction(c *ui.Context, label, glyph string) ui.Element {
 	k := colorsOf(c)
 	b := ui.ButtonBase(c).Label(label).Role(ui.RoleButton).Size(28, 28).Radius(5).Tooltip(label)

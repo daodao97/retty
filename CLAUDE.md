@@ -63,3 +63,5 @@ The installed app's daemon owns the user's real shells and agents. Never batch-k
 ## Conventions
 
 Comments are full-sentence prose in the style of the existing code (often explaining *why*, Rex-like behavior referenced as "as Rex does"); match that tone and density.
+
+UI code uses the color, spacing, radius and type tokens in `style.go`, not literal values; [docs/ui-design.md](docs/ui-design.md) says which to use where and which views are still to migrate.

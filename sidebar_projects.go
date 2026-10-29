@@ -88,15 +88,15 @@ func (a *App) sidebarProjectTabs(c *ui.Context, k *colors, groups []sidebarProje
 	for _, group := range groups {
 		open := a.sidebarProjectOpen[group.key]
 		name, tooltip := group.label, group.dir
-		ui.Column(c.Key(group.key)).FillWidth().Shrink(0).Gap(3).Children(func() {
+		ui.Column(c.Key(group.key)).FillWidth().Shrink(0).Gap(spaceXS).Children(func() {
 			header := ui.ButtonBase(c.Key("project-header")).Label("项目 "+name).Tooltip(tooltip).
-				Expanded(open).FillWidth().Height(36).Shrink(0).Padding(0, 9).Gap(8).Radius(7).AlignItems(ui.Center)
+				Expanded(open).FillWidth().Height(36).Shrink(0).Padding(0, spaceM).Gap(spaceM).Radius(radiusM).AlignItems(ui.Center)
 			if header.Hovered() {
 				header.Background(k.hover)
 			}
 			header.Children(func() {
 				ui.Icon(c, icon("folder-open")).Size(17, 17).TextColor(k.iconMuted).Shrink(0)
-				ui.Text(c, name).FontSize(12).FontWeight(500).TextColor(k.text).SingleLine().Ellipsis("…").Grow(1).MinWidth(0)
+				ui.Text(c, name).FontSize(textSmall).FontWeight(500).TextColor(k.text).SingleLine().Ellipsis("…").Grow(1).MinWidth(0)
 				glyph := "chevron-right"
 				if open {
 					glyph = "chevron-down"
@@ -108,7 +108,7 @@ func (a *App) sidebarProjectTabs(c *ui.Context, k *colors, groups []sidebarProje
 				c.Invalidate()
 			}
 			if open {
-				ui.Column(c.Key("project-tabs")).FillWidth().Shrink(0).Padding(0, 0, 0, 16).Gap(4).Children(func() {
+				ui.Column(c.Key("project-tabs")).FillWidth().Shrink(0).Padding(0, 0, 0, spaceXL).Gap(spaceXS).Children(func() {
 					for _, item := range group.tabs {
 						a.sidebarTab(c, k, item.index, item.tab)
 					}

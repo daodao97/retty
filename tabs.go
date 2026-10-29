@@ -25,7 +25,7 @@ func (a *App) tabItem(c *ui.Context, k *colors, i int, t *Tab) {
 	bottom := float32(1)
 	bg := k.track
 	e := ui.Row(c.Key(t.ID)).Grow(1).Basis(0).MinWidth(0).Height(compactTitleH).
-		Padding(0, 8).Gap(6).AlignItems(ui.Center).Role(ui.RoleTab).Selected(active)
+		Padding(0, spaceM).Gap(spaceS).AlignItems(ui.Center).Role(ui.RoleTab).Selected(active)
 	name, detail := t.label()
 	e.Label(name + " " + detail)
 	if agentPane, agentState := tabAgentState(t); agentPane != nil {
@@ -69,7 +69,7 @@ func (a *App) bindTabItem(k *colors, e ui.Element, i int, t *Tab) {
 // away keeps it, Escape goes back, and an empty name follows the panes
 // again.
 func (a *App) renameField(c *ui.Context, t *Tab, name string) {
-	in := ui.TextInput(c, &a.renameText).Placeholder(name).Grow(1).MinWidth(0).Height(22).FontSize(13).AutoFocus()
+	in := ui.TextInput(c, &a.renameText).Placeholder(name).Grow(1).MinWidth(0).Height(22).FontSize(textBody).AutoFocus()
 	done := func(keep bool) {
 		if keep {
 			t.Name = strings.TrimSpace(a.renameText)

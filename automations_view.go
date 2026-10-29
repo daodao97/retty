@@ -290,17 +290,18 @@ func (a *App) sidebarAutomations(c *ui.Context, k *colors) {
 	v := &a.automations
 	a.refreshAutomations(c, 5*time.Second)
 	c.After(5 * time.Second)
-	ui.Row(c.Key("automations-heading")).FillWidth().Height(34).Shrink(0).Padding(0, 10).
+	// The heading's chevron lines up with the project rows' below it.
+	ui.Row(c.Key("automations-heading")).FillWidth().Height(34).Shrink(0).Padding(0, spaceM+space2XS).
 		BorderWidth(1, 0, 0, 0).BorderColor(k.headerBorder).AlignItems(ui.Center).Children(func() {
 		toggle := ui.ButtonBase(c.Key("toggle-automations")).Label("自动化分组").Expanded(!v.collapsed).
-			Focusable().Grow(1).MinWidth(0).Height(33).Gap(6).AlignItems(ui.Center).Cursor(ui.CursorPointer)
+			Focusable().Grow(1).MinWidth(0).Height(33).Gap(spaceS).AlignItems(ui.Center).Cursor(ui.CursorPointer)
 		toggle.Children(func() {
 			arrow := "chevron-down"
 			if v.collapsed {
 				arrow = "chevron-right"
 			}
 			ui.Icon(c, icon(arrow)).Size(12, 12).TextColor(k.iconMuted).Shrink(0)
-			ui.Text(c, "自动化").FontSize(10.5).FontWeight(600).TextColor(k.textFaint).Grow(1)
+			ui.Text(c, "自动化").FontSize(textCaption).FontWeight(600).TextColor(k.textFaint).Grow(1)
 		})
 		if toggle.Clicked() {
 			v.collapsed = !v.collapsed
@@ -314,11 +315,11 @@ func (a *App) sidebarAutomations(c *ui.Context, k *colors) {
 		return
 	}
 	if len(v.list) == 0 {
-		ui.Text(c, "点 + 描述任务，agent 会帮你设置，如「每小时检查系统错误」").FontSize(10.5).TextColor(k.textFaint).Padding(2, 12, 8, 12).FillWidth().Wrap().Shrink(0)
+		ui.Text(c, "点 + 描述任务，agent 会帮你设置，如「每小时检查系统错误」").FontSize(textMicro).TextColor(k.textFaint).Padding(space2XS, spaceL, spaceM, spaceL).FillWidth().Wrap().Shrink(0)
 		return
 	}
 	now := time.Now()
-	ui.Scroll(c.Key("sidebar-automations")).Label("自动化列表").MaxHeight(160).Shrink(0).FillWidth().Padding(0, 8, 6, 8).Children(func() {
+	ui.Scroll(c.Key("sidebar-automations")).Label("自动化列表").MaxHeight(160).Shrink(0).FillWidth().Padding(0, spaceM, spaceS, spaceM).Children(func() {
 		for _, item := range v.list {
 			run := v.runs[item.ID]
 			tooltip := item.Name() + "\n" + automationSchedule(item, run, now) + "\n" + displayDir(item.Dir)
@@ -326,14 +327,14 @@ func (a *App) sidebarAutomations(c *ui.Context, k *colors) {
 				tooltip += "\n" + result
 			}
 			b := ui.ButtonBase(c.Key("sidebar-automation-"+item.ID)).Label("自动化 "+item.Name()).Tooltip(tooltip).
-				FillWidth().Height(30).Padding(0, 6).Gap(6).AlignItems(ui.Center).Cursor(ui.CursorPointer).Radius(4)
+				FillWidth().Height(30).Padding(0, spaceS).Gap(spaceS).AlignItems(ui.Center).Cursor(ui.CursorPointer).Radius(radiusS)
 			if b.Hovered() || b.FocusVisible() {
 				b.Background(k.hover)
 			}
 			b.Children(func() {
-				ui.Text(c, "●").FontSize(9).TextColor(automationColor(k, item, run)).Shrink(0)
-				ui.Text(c, item.Name()).FontSize(11).TextColor(k.textMuted).SingleLine().Ellipsis("…").Grow(1).MinWidth(0)
-				ui.Text(c, automationWhen(item, run, now)).FontSize(9.5).TextColor(k.textFaint).Shrink(0)
+				ui.Box(c).Size(6, 6).Radius(3).Background(automationColor(k, item, run)).Shrink(0)
+				ui.Text(c, item.Name()).FontSize(textCaption).TextColor(k.textMuted).SingleLine().Ellipsis("…").Grow(1).MinWidth(0)
+				ui.Text(c, automationWhen(item, run, now)).FontSize(textMicro).TextColor(k.textFaint).Shrink(0)
 			})
 			if b.Clicked() {
 				a.openBoard(item.ID)
@@ -347,13 +348,13 @@ func (a *App) sidebarAutomations(c *ui.Context, k *colors) {
 func stateColor(k *colors, state string) ui.Color {
 	switch state {
 	case "running":
-		return ui.Hex("#3b82f6")
+		return k.info
 	case "done":
-		return ui.Hex("#22c55e")
+		return k.success
 	case "failed", "interrupted":
-		return ui.Hex("#ef4444")
+		return k.danger
 	case "skipped":
-		return ui.Hex("#f59e0b")
+		return k.warning
 	}
 	return k.textFaint
 }

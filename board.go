@@ -274,17 +274,18 @@ func (a *App) boardView(c *ui.Context, k *colors, b *boardPane) {
 	ui.Row(c.Key("board")).Fill().Children(func() {
 		ui.Column(c.Key("board-list")).Label("任务列表").Width(300).Shrink(0).FillHeight().
 			BorderWidth(0, 1, 0, 0).BorderColor(k.headerBorder).Children(func() {
-			ui.Row(c).Height(52).Padding(0, 10, 0, 20).Gap(8).AlignItems(ui.Center).Shrink(0).Children(func() {
-				ui.Text(c, "任务").FontSize(13.5).FontWeight(600).TextColor(k.text)
-				ui.Text(c, fmt.Sprint(len(v.list)+len(a.setupSessions))).FontSize(12).TextColor(k.textFaint).Grow(1)
+			// The heading starts where the rows' text does: the list's inset and a row's.
+			ui.Row(c).Height(52).Padding(0, spaceM, 0, spaceM+spaceL).Gap(spaceM).AlignItems(ui.Center).Shrink(0).Children(func() {
+				ui.Text(c, "任务").FontSize(textBody).FontWeight(600).TextColor(k.text)
+				ui.Text(c, fmt.Sprint(len(v.list)+len(a.setupSessions))).FontSize(textSmall).TextColor(k.textFaint).Grow(1)
 				if iconButton(c.Key("board-new"), k, "plus", "新建任务", 28, 14).Tooltip("新建任务").Clicked() {
 					a.openGoal(nil)
 				}
 			})
 			if len(v.list) == 0 && len(a.setupSessions) == 0 {
-				ui.Text(c, "还没有任务").FontSize(12.5).TextColor(k.textFaint).Padding(8, 20)
+				ui.Text(c, "还没有任务").FontSize(textSmall).TextColor(k.textFaint).Padding(spaceM, spaceM+spaceL)
 			}
-			ui.Scroll(c.Key("board-items")).Grow(1).MinHeight(0).FillWidth().Padding(0, 10, 10, 10).Gap(4).Children(func() {
+			ui.Scroll(c.Key("board-items")).Grow(1).MinHeight(0).FillWidth().Padding(0, spaceM, spaceM, spaceM).Gap(spaceXS).Children(func() {
 				for _, s := range a.setupSessions {
 					key := setupPrefix + s.info.ID
 					if boardRow(c, k, "board-setup-"+s.info.ID, "正在设置 "+s.request, s.request, "新任务", "设置中", stateColor(k, "running"), key == b.selected) {
@@ -299,15 +300,15 @@ func (a *App) boardView(c *ui.Context, k *colors, b *boardPane) {
 				}
 			})
 		})
-		ui.Scroll(c.Key("board-detail")).Label("任务详情").Grow(1).Basis(0).MinWidth(0).FillHeight().Padding(28, 36).Children(func() {
-			ui.Column(c).Gap(30).FillWidth().MaxWidth(980).Children(func() {
+		ui.Scroll(c.Key("board-detail")).Label("任务详情").Grow(1).Basis(0).MinWidth(0).FillHeight().Padding(space2XL, space3XL).Children(func() {
+			ui.Column(c).Gap(space3XL).FillWidth().MaxWidth(980).Children(func() {
 				if s, ok := a.setupSession(b.selected); ok {
 					a.boardSetupDetail(c, k, b, s)
 					return
 				}
 				i := slices.IndexFunc(v.list, func(x automation.Automation) bool { return x.ID == b.selected })
 				if i < 0 {
-					ui.Text(c, "未选择任务").FontSize(13).TextColor(k.textFaint)
+					ui.Text(c, "未选择任务").FontSize(textBody).TextColor(k.textFaint)
 					return
 				}
 				a.boardDetail(c, k, b, v.list[i], v.runs[v.list[i].ID], now)
@@ -318,10 +319,7 @@ func (a *App) boardView(c *ui.Context, k *colors, b *boardPane) {
 
 // boardAccent is the board's one accent, for its primary action.
 func boardAccent(c *ui.Context) ui.Color {
-	if c.Theme().Dark {
-		return ui.Hex("#4c8df6")
-	}
-	return ui.Hex("#2f6fdb")
+	return colorsOf(c).accent
 }
 
 func statusDot(c *ui.Context, tone ui.Color) {
@@ -330,15 +328,15 @@ func statusDot(c *ui.Context, tone ui.Color) {
 
 // statusPill is a state in a tinted capsule of its own color.
 func statusPill(c *ui.Context, text string, tone ui.Color) {
-	ui.Row(c).Height(22).Padding(0, 9).Gap(6).Radius(11).AlignItems(ui.Center).Background(tone.Alpha(0.14)).Shrink(0).Children(func() {
+	ui.Row(c).Height(22).Padding(0, spaceM).Gap(spaceS).Radius(22 / 2).AlignItems(ui.Center).Background(tone.Alpha(0.14)).Shrink(0).Children(func() {
 		statusDot(c, tone)
-		ui.Text(c, text).FontSize(11.5).FontWeight(500).TextColor(tone)
+		ui.Text(c, text).FontSize(textCaption).FontWeight(500).TextColor(tone)
 	})
 }
 
 // boardRow is one entry of the board's list; it reports a click.
 func boardRow(c *ui.Context, k *colors, key, label, title, detail, status string, tone ui.Color, selected bool) bool {
-	row := ui.ButtonBase(c.Key(key)).Label(label).FillWidth().Padding(10, 12).Gap(5).Radius(8).
+	row := ui.ButtonBase(c.Key(key)).Label(label).FillWidth().Padding(spaceM, spaceL).Gap(spaceXS).Radius(radiusM).
 		Cursor(ui.CursorPointer).Column().AlignItems(ui.Stretch)
 	if selected {
 		row.Background(k.panelSel)
@@ -346,11 +344,11 @@ func boardRow(c *ui.Context, k *colors, key, label, title, detail, status string
 		row.Background(k.hover)
 	}
 	row.Children(func() {
-		ui.Text(c, title).FontSize(13).FontWeight(500).TextColor(k.text).SingleLine().Ellipsis("…").MinWidth(0)
-		ui.Row(c).Gap(7).AlignItems(ui.Center).FillWidth().Children(func() {
+		ui.Text(c, title).FontSize(textBody).FontWeight(500).TextColor(k.text).SingleLine().Ellipsis("…").MinWidth(0)
+		ui.Row(c).Gap(spaceS).AlignItems(ui.Center).FillWidth().Children(func() {
 			statusDot(c, tone)
-			ui.Text(c, status).FontSize(11.5).TextColor(k.textMuted).Shrink(0)
-			ui.Text(c, detail).FontSize(11.5).TextColor(k.textFaint).SingleLine().Ellipsis("…").Grow(1).MinWidth(0)
+			ui.Text(c, status).FontSize(textCaption).TextColor(k.textMuted).Shrink(0)
+			ui.Text(c, detail).FontSize(textCaption).TextColor(k.textFaint).SingleLine().Ellipsis("…").Grow(1).MinWidth(0)
 		})
 	})
 	return row.Clicked()
@@ -413,9 +411,10 @@ func boardButton(c *ui.Context, k *colors, key, label string, kind int) ui.Eleme
 // boardIconButton leads its label with an icon, which tells the board's
 // actions apart before their labels are read.
 func boardIconButton(c *ui.Context, k *colors, key, name, label string, kind int) ui.Element {
-	b := ui.ButtonBase(c.Key(key)).Label(label).Height(30).Padding(0, 13).Gap(6).Radius(7).AlignItems(ui.Center)
+	b := ui.ButtonBase(c.Key(key)).Label(label).Height(30).Padding(0, spaceL).Gap(spaceS).Radius(radiusM).AlignItems(ui.Center)
+	// An icon's own side bearing reads as padding, so its side takes less.
 	if name != "" {
-		b.Padding(0, 13, 0, 11)
+		b.Padding(0, spaceL, 0, spaceL-space2XS)
 	}
 	if kind != buttonDisabled {
 		b.Cursor(ui.CursorPointer)
@@ -428,10 +427,10 @@ func boardIconButton(c *ui.Context, k *colors, key, name, label string, kind int
 			accent = stateColor(k, "failed")
 		}
 		if b.Hovered() || b.FocusVisible() {
-			accent = accent.Mix(ui.Hex("#ffffff"), 0.1)
+			accent = accent.Mix(k.onAccent, 0.1)
 		}
 		b.Background(accent)
-		text = ui.Hex("#ffffff")
+		text = k.onAccent
 	case buttonDisabled:
 		b.Border(1, k.panelBorder)
 		text = k.textFaint
@@ -450,23 +449,23 @@ func boardIconButton(c *ui.Context, k *colors, key, name, label string, kind int
 		if name != "" {
 			ui.Icon(c, icon(name)).Size(13, 13).TextColor(text).Shrink(0)
 		}
-		ui.Text(c, label).FontSize(12.5).FontWeight(500).TextColor(text)
+		ui.Text(c, label).FontSize(textSmall).FontWeight(500).TextColor(text)
 	})
 	return b
 }
 
 func boardSection(c *ui.Context, k *colors, title, count string) {
-	ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-		ui.Text(c, title).FontSize(14).FontWeight(600).TextColor(k.text)
+	ui.Row(c).Gap(spaceM).AlignItems(ui.Center).Children(func() {
+		ui.Text(c, title).FontSize(textTitle).FontWeight(600).TextColor(k.text)
 		if count != "" {
-			ui.Text(c, count).FontSize(12).TextColor(k.textFaint)
+			ui.Text(c, count).FontSize(textSmall).TextColor(k.textFaint)
 		}
 	})
 }
 
 // boardCard is the board's surface: a hairline border, no shadow.
 func boardCard(c *ui.Context, k *colors, key string) ui.Element {
-	return ui.Column(c.Key(key)).FillWidth().Radius(10).Clip().Border(1, k.panelBorder)
+	return ui.Column(c.Key(key)).FillWidth().Radius(radiusL).Clip().Border(1, k.panelBorder)
 }
 
 // boardTerminal previews a session's latest screen, read without attaching,
@@ -474,10 +473,10 @@ func boardCard(c *ui.Context, k *colors, key string) ui.Element {
 // opens the session in a tab, to see and use it in full.
 func (a *App) boardTerminal(c *ui.Context, k *colors, b *boardPane, in rex.SessionInfo, status string) {
 	if b.tabbed == in.ID || a.sessionInTab(in.ID) {
-		boardCard(c, k, "board-terminal-tabbed").Padding(14, 16).Children(func() {
-			ui.Row(c).Gap(10).AlignItems(ui.Center).FillWidth().Children(func() {
+		boardCard(c, k, "board-terminal-tabbed").Padding(spaceL, spaceXL).Children(func() {
+			ui.Row(c).Gap(spaceM).AlignItems(ui.Center).FillWidth().Children(func() {
 				ui.Icon(c, icon("square-terminal")).Size(15, 15).TextColor(k.iconMuted).Shrink(0)
-				ui.Text(c, "已在标签页中打开").FontSize(12.5).TextColor(k.textMuted).Grow(1)
+				ui.Text(c, "已在标签页中打开").FontSize(textSmall).TextColor(k.textMuted).Grow(1)
 				if boardButton(c, k, "board-switch-tab", "切换到标签页", buttonSecondary).Clicked() {
 					a.later(c, func() {
 						if !a.focusAgentPane(in.ID) {
@@ -494,21 +493,21 @@ func (a *App) boardTerminal(c *ui.Context, k *colors, b *boardPane, in rex.Sessi
 		fg = darkTerm.Foreground
 	}
 	boardCard(c, k, "board-terminal-frame").Background(terminalBackground(c)).Children(func() {
-		ui.Row(c).Height(38).Padding(0, 6, 0, 14).Gap(9).AlignItems(ui.Center).FillWidth().
+		ui.Row(c).Height(38).Padding(0, spaceS, 0, spaceL).Gap(spaceM).AlignItems(ui.Center).FillWidth().
 			BorderWidth(0, 0, 1, 0).BorderColor(fg.Alpha(0.1)).Children(func() {
 			ui.Icon(c, icon("square-terminal")).Size(14, 14).TextColor(fg.Alpha(0.5)).Shrink(0)
-			ui.Text(c, status).FontSize(12).TextColor(fg.Alpha(0.72)).SingleLine().Ellipsis("…").Grow(1).MinWidth(0)
+			ui.Text(c, status).FontSize(textSmall).TextColor(fg.Alpha(0.72)).SingleLine().Ellipsis("…").Grow(1).MinWidth(0)
 			if in.Exited {
-				ui.Text(c, "已结束").FontSize(12).TextColor(fg.Alpha(0.5)).Padding(0, 8)
+				ui.Text(c, "已结束").FontSize(textSmall).TextColor(fg.Alpha(0.5)).Padding(0, spaceM)
 				return
 			}
-			open := ui.ButtonBase(c.Key("board-open-tab")).Label("在标签页中打开").Height(26).Padding(0, 10).Gap(5).Radius(6).
+			open := ui.ButtonBase(c.Key("board-open-tab")).Label("在标签页中打开").Height(26).Padding(0, spaceM).Gap(spaceXS).Radius(radiusM).
 				AlignItems(ui.Center).Cursor(ui.CursorPointer)
 			if open.Hovered() || open.FocusVisible() {
 				open.Background(fg.Alpha(0.08))
 			}
 			open.Children(func() {
-				ui.Text(c, "在标签页中打开").FontSize(12).TextColor(fg.Alpha(0.85))
+				ui.Text(c, "在标签页中打开").FontSize(textSmall).TextColor(fg.Alpha(0.85))
 				ui.Icon(c, icon("arrow-up-right")).Size(12, 12).TextColor(fg.Alpha(0.6))
 			})
 			if open.Clicked() {
@@ -517,7 +516,7 @@ func (a *App) boardTerminal(c *ui.Context, k *colors, b *boardPane, in rex.Sessi
 		})
 		// The session's own screen, rendered as its tab renders it, from a
 		// snapshot: watching it neither resizes nor types into the session.
-		ui.Box(c.Key("board-terminal")).Label("终端预览").Height(360).FillWidth().Padding(10, 14).Clip().Children(func() {
+		ui.Box(c.Key("board-terminal")).Label("终端预览").Height(360).FillWidth().Padding(spaceM, spaceL).Clip().Children(func() {
 			if b.term != nil && b.termSID == in.ID {
 				terminal.View(c, b.term).Key("board-preview-terminal").Fill().TextCaretFunc(nil).Label("终端预览")
 			}
@@ -528,10 +527,10 @@ func (a *App) boardTerminal(c *ui.Context, k *colors, b *boardPane, in rex.Sessi
 // boardTitle is a detail's heading: its title and actions, then a line of
 // state and facts.
 func boardTitle(c *ui.Context, k *colors, title string, actions, meta func()) {
-	ui.Column(c).Gap(12).FillWidth().Children(func() {
-		ui.Row(c).Gap(20).AlignItems(ui.Start).FillWidth().Children(func() {
-			ui.Text(c, title).FontSize(20).FontWeight(600).LineHeight(1.35).TextColor(k.text).Grow(1).MinWidth(0).Wrap()
-			ui.Row(c).Gap(8).Shrink(0).Children(actions)
+	ui.Column(c).Gap(spaceL).FillWidth().Children(func() {
+		ui.Row(c).Gap(space2XL).AlignItems(ui.Start).FillWidth().Children(func() {
+			ui.Text(c, title).FontSize(textHeading).FontWeight(600).LineHeight(1.35).TextColor(k.text).Grow(1).MinWidth(0).Wrap()
+			ui.Row(c).Gap(spaceM).Shrink(0).Children(actions)
 		})
 		meta()
 	})
@@ -554,13 +553,13 @@ func (a *App) boardSetupDetail(c *ui.Context, k *colors, b *boardPane, s setupSe
 			}
 		}
 	}, func() {
-		ui.Row(c).Gap(10).AlignItems(ui.Center).Children(func() {
+		ui.Row(c).Gap(spaceM).AlignItems(ui.Center).Children(func() {
 			statusPill(c, "设置中", stateColor(k, "running"))
-			ui.Text(c, "正在设置任务").FontSize(12.5).TextColor(k.textMuted)
+			ui.Text(c, "正在设置任务").FontSize(textSmall).TextColor(k.textMuted)
 		})
 	})
 	if _, ok := a.setupSession(b.selected); ok {
-		ui.Column(c.Key("board-setup-current")).Gap(12).FillWidth().Children(func() {
+		ui.Column(c.Key("board-setup-current")).Gap(spaceL).FillWidth().Children(func() {
 			boardSection(c, k, "设置过程", "")
 			a.boardTerminal(c, k, b, in, "agent 正在设置任务")
 		})
@@ -595,26 +594,26 @@ func (a *App) boardDetail(c *ui.Context, k *colors, b *boardPane, item automatio
 		if next := nextRunLabel(item, run, now); next != "" {
 			meta = append(meta, next)
 		}
-		ui.Row(c).Gap(12).AlignItems(ui.Center).Children(func() {
+		ui.Row(c).Gap(spaceM).AlignItems(ui.Center).Children(func() {
 			statusPill(c, state, tone)
-			ui.Text(c, strings.Join(meta, "  ·  ")).FontSize(12.5).TextColor(k.textMuted).Tooltip(item.Dir)
+			ui.Text(c, strings.Join(meta, "  ·  ")).FontSize(textSmall).TextColor(k.textMuted).Tooltip(item.Dir)
 		})
 		// The full instruction the agent receives, under its short title.
 		if item.Goal != item.Name() {
-			ui.Text(c, item.Goal).FontSize(13).LineHeight(1.6).TextColor(k.textMuted).FillWidth().Wrap()
+			ui.Text(c, item.Goal).FontSize(textBody).LineHeight(1.6).TextColor(k.textMuted).FillWidth().Wrap()
 		}
 		if item.Check != "" {
-			ui.Row(c).Gap(10).AlignItems(ui.Center).Children(func() {
-				ui.Text(c, "检查").FontSize(12).TextColor(k.textFaint)
-				ui.Text(c, item.Check).Font(termFont.Family).FontSize(12).TextColor(k.textMuted)
+			ui.Row(c).Gap(spaceM).AlignItems(ui.Center).Children(func() {
+				ui.Text(c, "检查").FontSize(textSmall).TextColor(k.textFaint)
+				ui.Text(c, item.Check).Font(termFont.Family).FontSize(textSmall).TextColor(k.textMuted)
 			})
 		}
 		if err := a.automations.err; err != "" {
-			ui.Text(c, err).FontSize(12).TextColor(stateColor(k, "failed"))
+			ui.Text(c, err).FontSize(textSmall).TextColor(stateColor(k, "failed"))
 		}
 	})
 
-	ui.Column(c.Key("board-current")).Gap(12).FillWidth().Children(func() {
+	ui.Column(c.Key("board-current")).Gap(spaceL).FillWidth().Children(func() {
 		boardSection(c, k, "当前执行", "")
 		var status string
 		switch {
@@ -639,45 +638,45 @@ func (a *App) boardDetail(c *ui.Context, k *colors, b *boardPane, item automatio
 		if agent.ID != "" {
 			a.boardTerminal(c, k, b, agent, status)
 		} else {
-			boardCard(c, k, "board-idle").Padding(18, 18).Children(func() {
+			boardCard(c, k, "board-idle").Padding(spaceXL).Children(func() {
 				text := "未在运行"
 				if next := nextRunLabel(item, run, now); next != "" {
 					text += " · " + next
 				}
-				ui.Text(c, text).FontSize(12.5).TextColor(k.textFaint)
+				ui.Text(c, text).FontSize(textSmall).TextColor(k.textFaint)
 			})
 		}
 		if b.err != "" {
-			ui.Text(c, b.err).FontSize(12).TextColor(k.textFaint)
+			ui.Text(c, b.err).FontSize(textSmall).TextColor(k.textFaint)
 		}
 	})
 
 	a.boardResult(c, k, b, item)
 
-	ui.Column(c.Key("board-history")).Gap(12).FillWidth().Children(func() {
+	ui.Column(c.Key("board-history")).Gap(spaceL).FillWidth().Children(func() {
 		count := ""
 		if len(b.history) > 0 {
 			count = fmt.Sprint(len(b.history))
 		}
 		boardSection(c, k, "执行历史", count)
 		if len(b.history) == 0 {
-			boardCard(c, k, "board-history-empty").Padding(18, 18).Children(func() {
-				ui.Text(c, "暂无记录").FontSize(12.5).TextColor(k.textFaint)
+			boardCard(c, k, "board-history-empty").Padding(spaceXL).Children(func() {
+				ui.Text(c, "暂无记录").FontSize(textSmall).TextColor(k.textFaint)
 			})
 			return
 		}
 		boardCard(c, k, "board-history-list").Children(func() {
 			for i, r := range b.history {
-				row := ui.Row(c.Key(fmt.Sprint("board-run-", i))).Gap(18).Padding(14, 18).AlignItems(ui.Start).FillWidth()
+				row := ui.Row(c.Key(fmt.Sprint("board-run-", i))).Gap(spaceXL).Padding(spaceL, spaceXL).AlignItems(ui.Start).FillWidth()
 				if i > 0 {
 					row.BorderWidth(1, 0, 0, 0).BorderColor(k.panelBorder)
 				}
 				row.Children(func() {
-					ui.Column(c).Gap(3).Width(64).Shrink(0).Children(func() {
-						ui.Text(c, r.Started.Local().Format("15:04")).FontSize(13).FontWeight(500).TextColor(k.text)
-						ui.Text(c, r.Started.Local().Format("01-02")).FontSize(11.5).TextColor(k.textFaint)
+					ui.Column(c).Gap(space2XS).Width(64).Shrink(0).Children(func() {
+						ui.Text(c, r.Started.Local().Format("15:04")).FontSize(textBody).FontWeight(500).TextColor(k.text)
+						ui.Text(c, r.Started.Local().Format("01-02")).FontSize(textCaption).TextColor(k.textFaint)
 					})
-					ui.Column(c).Gap(7).Grow(1).MinWidth(0).Children(func() {
+					ui.Column(c).Gap(spaceS).Grow(1).MinWidth(0).Children(func() {
 						var meta []string
 						if !r.Finished.IsZero() && r.Finished.After(r.Started) {
 							meta = append(meta, "用时 "+r.Finished.Sub(r.Started).Round(time.Second).String())
@@ -685,20 +684,20 @@ func (a *App) boardDetail(c *ui.Context, k *colors, b *boardPane, item automatio
 						if r.Rounds > 0 {
 							meta = append(meta, fmt.Sprintf("%d 轮", r.Rounds))
 						}
-						ui.Row(c).Gap(10).AlignItems(ui.Center).Children(func() {
+						ui.Row(c).Gap(spaceM).AlignItems(ui.Center).Children(func() {
 							verdictPill(c, k, r)
-							ui.Text(c, strings.Join(meta, "  ·  ")).FontSize(12).TextColor(k.textFaint)
+							ui.Text(c, strings.Join(meta, "  ·  ")).FontSize(textSmall).TextColor(k.textFaint)
 						})
 						if r.Summary != "" {
-							ui.Text(c, r.Summary).FontSize(13).LineHeight(1.5).TextColor(k.text).FillWidth().Wrap()
+							ui.Text(c, r.Summary).FontSize(textBody).LineHeight(1.5).TextColor(k.text).FillWidth().Wrap()
 						}
 						if r.Result != nil {
 							if brief := resultBrief(*r.Result); brief != "" {
-								ui.Text(c, brief).FontSize(12).TextColor(k.textMuted).FillWidth().Wrap()
+								ui.Text(c, brief).FontSize(textSmall).TextColor(k.textMuted).FillWidth().Wrap()
 							}
 						}
 						if r.Message != r.Summary && !templateMessage(r.Message) {
-							ui.Text(c, r.Message).FontSize(12).LineHeight(1.5).TextColor(k.textMuted).FillWidth().Wrap()
+							ui.Text(c, r.Message).FontSize(textSmall).LineHeight(1.5).TextColor(k.textMuted).FillWidth().Wrap()
 						}
 					})
 				})

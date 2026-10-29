@@ -20,7 +20,21 @@ type colors struct {
 
 	busy, attention ui.Color
 
+	// accent is the one color of a primary action and of selection; the
+	// others tell a state, as a run's or a finding's, and read the same in
+	// either window until each is tuned for its own.
+	accent, info, success, warning, danger ui.Color
+	// onAccent is text and icons on a filled accent or danger button.
+	onAccent ui.Color
+
 	panel, panelBorder, panelSel, backdrop ui.Color
+	// scrim dims the window behind a dialog that waits for an answer,
+	// darker than a palette's backdrop.
+	scrim ui.Color
+
+	// sidebar is the sidebar's own surface and its edge, a step off the
+	// terminals' paper in a light window.
+	sidebar, sidebarBorder ui.Color
 }
 
 var lightColors = colors{
@@ -39,10 +53,21 @@ var lightColors = colors{
 	busy:      ui.Hex("#26773b"),
 	attention: ui.Hex("#9a6500"),
 
+	accent:   ui.Hex("#2f6fdb"),
+	onAccent: ui.Hex("#ffffff"),
+	info:     ui.Hex("#3b82f6"),
+	success:  ui.Hex("#22c55e"),
+	warning:  ui.Hex("#f59e0b"),
+	danger:   ui.Hex("#ef4444"),
+
 	panel:       ui.RGBA(252, 252, 253, 0.97),
 	panelBorder: ui.RGBA(0, 0, 0, 0.08),
 	panelSel:    ui.RGBA(46, 111, 208, 0.12),
 	backdrop:    ui.RGBA(40, 20, 40, 0.06),
+	scrim:       ui.RGBA(0, 0, 0, 0.3),
+
+	sidebar:       ui.Hex("#f0f1f4"),
+	sidebarBorder: ui.RGBA(0, 0, 0, 0.08),
 }
 
 var darkColors = colors{
@@ -63,17 +88,104 @@ var darkColors = colors{
 	busy:      ui.Hex("#4ade80"),
 	attention: ui.Hex("#fbbf24"),
 
+	accent:   ui.Hex("#4c8df6"),
+	onAccent: ui.Hex("#ffffff"),
+	info:     ui.Hex("#3b82f6"),
+	success:  ui.Hex("#22c55e"),
+	warning:  ui.Hex("#f59e0b"),
+	danger:   ui.Hex("#ef4444"),
+
 	panel:       ui.Hex("#25272b"),
 	panelBorder: ui.Hex("#44484f"),
 	panelSel:    ui.Hex("#354863"),
 	backdrop:    ui.RGBA(0, 0, 0, 0.32),
+	scrim:       ui.RGBA(0, 0, 0, 0.3),
+
+	sidebar:       ui.Hex("#1c1e21"),
+	sidebarBorder: ui.Hex("#303337"),
 }
+
+// The chrome's spacing steps, on a 4-point grid; spaceS is for dense rows
+// alone. docs/ui-design.md says which to use where. Like the radii and type
+// sizes below they are untyped, so they fit any length a style takes.
+const (
+	space2XS = 2
+	spaceXS  = 4
+	spaceS   = 6
+	spaceM   = 8
+	spaceL   = 12
+	spaceXL  = 16
+	space2XL = 24
+	// space3XL is a page's margin and the gap between its sections.
+	space3XL = 32
+)
+
+// The corner radii: small for pills and fields, medium for buttons and rows,
+// large for cards and panels, and extra large for the phone's cards. A dot
+// or a capsule takes half its height instead.
+const (
+	radiusS  = 4
+	radiusM  = 8
+	radiusL  = 12
+	radiusXL = 16
+)
+
+// The chrome's type sizes. The terminal's own font is termFont's, and the
+// user's font size setting scales it, not these.
+const (
+	// textMicro is the sidebar's dense metadata alone: branches, counts,
+	// times and its section labels.
+	textMicro   = 10
+	textCaption = 11
+	textSmall   = 12
+	textBody    = 13
+	textTitle   = 15
+	textHeading = 18
+	// textDisplay is a figure read at a glance, as a metric's value.
+	textDisplay = 22
+)
 
 func colorsOf(c *ui.Context) *colors {
 	if c.Theme().Dark {
 		return &darkColors
 	}
 	return &lightColors
+}
+
+// settingsTheme is the settings page's own, as docs/settings-design shows:
+// a softer accent and smaller controls than the rest of the chrome. side and
+// selected are its sidebar and the chosen section's row.
+func settingsTheme(original *ui.Theme) (theme ui.Theme, side, selected ui.Color) {
+	theme = *original
+	side, selected = ui.Hex("#f0f1f4"), ui.Hex("#dbe6fa")
+	theme.Background, theme.Text, theme.TextMuted = ui.Hex("#fafbfc"), ui.Hex("#24272d"), ui.Hex("#777c85")
+	if original.Dark {
+		side, selected = ui.Hex("#202327"), ui.Hex("#293d60")
+		theme.Background, theme.Text, theme.TextMuted = ui.Hex("#191c20"), ui.Hex("#d5d7db"), ui.Hex("#8d9198")
+		theme.Surface, theme.Border = ui.Hex("#25282d"), ui.Hex("#3b3f46")
+	}
+	theme.Accent, theme.AccentHover, theme.AccentPressed = ui.Hex("#85aaf4"), ui.Hex("#99b9fa"), ui.Hex("#7099e5")
+	theme.FontSize, theme.Spacing, theme.Radius = textBody, 3.5, 5
+	return theme, side, selected
+}
+
+// desktopConnectionTheme is the connections page's and the usage panel's:
+// the app's own colors on a surface of their own.
+func desktopConnectionTheme(original *ui.Theme) ui.Theme {
+	theme := *original
+	k := &lightColors
+	if theme.Dark {
+		k = &darkColors
+		theme.Background = ui.Hex("#1c1e21")
+		theme.Surface = ui.Hex("#25272b")
+	} else {
+		theme.Background = ui.Hex("#f5f6f8")
+		theme.Surface = ui.Hex("#ffffff")
+	}
+	theme.Text, theme.TextMuted, theme.Border = k.text, k.textMuted, k.panelBorder
+	theme.SurfaceHover, theme.SurfacePressed = k.hover, k.pressed
+	theme.FontSize, theme.Radius, theme.Spacing = textBody, radiusM, spaceXS
+	return theme
 }
 
 func terminalBackground(c *ui.Context) ui.Color {

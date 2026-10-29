@@ -96,7 +96,7 @@ func sparkline(c *ui.Context, series []float64, accent ui.Color) {
 		return
 	}
 	low, high := slices.Min(series), slices.Max(series)
-	ui.Row(c).Height(24).Gap(2).AlignItems(ui.End).Shrink(0).Children(func() {
+	ui.Row(c).Height(24).Gap(space2XS).AlignItems(ui.End).Shrink(0).Children(func() {
 		for i, v := range series {
 			h := float32(12)
 			if high > low {
@@ -112,16 +112,17 @@ func sparkline(c *ui.Context, series []float64, accent ui.Color) {
 }
 
 func metricCard(c *ui.Context, k *colors, key string, m automation.Metric, series []float64, accent ui.Color) {
-	boardCard(c, k, key).Padding(12, 14).Gap(6).Grow(1).Basis(0).MinWidth(0).Children(func() {
-		ui.Text(c, m.Name).FontSize(12).TextColor(k.textMuted).SingleLine().Ellipsis("…").MinWidth(0)
-		ui.Row(c).Gap(4).AlignItems(ui.End).Children(func() {
-			ui.Text(c, formatMetric(m.Value)).FontSize(22).FontWeight(600).TextColor(k.text)
+	boardCard(c, k, key).Padding(spaceL).Gap(spaceS).Grow(1).Basis(0).MinWidth(0).Children(func() {
+		ui.Text(c, m.Name).FontSize(textSmall).TextColor(k.textMuted).SingleLine().Ellipsis("…").MinWidth(0)
+		ui.Row(c).Gap(spaceXS).AlignItems(ui.End).Children(func() {
+			ui.Text(c, formatMetric(m.Value)).FontSize(textDisplay).FontWeight(600).TextColor(k.text)
 			if m.Unit != "" {
-				ui.Text(c, m.Unit).FontSize(12).TextColor(k.textFaint).Padding(0, 0, 3, 0)
+				// The unit sits on the figure's baseline, not its box's bottom.
+				ui.Text(c, m.Unit).FontSize(textSmall).TextColor(k.textFaint).Padding(0, 0, 3, 0)
 			}
 		})
-		ui.Row(c).Gap(8).AlignItems(ui.Center).FillWidth().Children(func() {
-			ui.Text(c, metricDelta(series)).FontSize(11.5).TextColor(k.textFaint).Grow(1).MinWidth(0)
+		ui.Row(c).Gap(spaceM).AlignItems(ui.Center).FillWidth().Children(func() {
+			ui.Text(c, metricDelta(series)).FontSize(textCaption).TextColor(k.textFaint).Grow(1).MinWidth(0)
 			sparkline(c, series, accent)
 		})
 	})
@@ -156,17 +157,17 @@ func (a *App) boardResult(c *ui.Context, k *colors, b *boardPane, item automatio
 	}
 	run := b.history[at]
 	res := *run.Result
-	ui.Column(c.Key("board-result")).Gap(12).FillWidth().Children(func() {
+	ui.Column(c.Key("board-result")).Gap(spaceL).FillWidth().Children(func() {
 		boardSection(c, k, "最新结果", run.Started.Local().Format("01-02 15:04"))
 		if res.Summary != "" {
-			ui.Row(c).Gap(10).AlignItems(ui.Center).FillWidth().Children(func() {
+			ui.Row(c).Gap(spaceM).AlignItems(ui.Center).FillWidth().Children(func() {
 				verdictPill(c, k, run)
-				ui.Text(c, res.Summary).FontSize(13.5).LineHeight(1.5).TextColor(k.text).Grow(1).MinWidth(0).Wrap()
+				ui.Text(c, res.Summary).FontSize(textBody).LineHeight(1.5).TextColor(k.text).Grow(1).MinWidth(0).Wrap()
 			})
 		}
 		accent := boardAccent(c)
 		for start := 0; start < len(res.Metrics); start += 4 {
-			ui.Row(c.Key(fmt.Sprint("board-metrics-", start))).Gap(10).FillWidth().Children(func() {
+			ui.Row(c.Key(fmt.Sprint("board-metrics-", start))).Gap(spaceM).FillWidth().Children(func() {
 				for i, m := range res.Metrics[start:min(start+4, len(res.Metrics))] {
 					metricCard(c, k, fmt.Sprint("board-metric-", start+i), m, metricSeries(b.history[at:], m.Name, 12), accent)
 				}
@@ -178,23 +179,23 @@ func (a *App) boardResult(c *ui.Context, k *colors, b *boardPane, item automatio
 		boardCard(c, k, "board-result-detail").Children(func() {
 			first := true
 			group := func(key, title string, body func()) {
-				col := ui.Column(c.Key(key)).Gap(9).Padding(14, 18).FillWidth()
+				col := ui.Column(c.Key(key)).Gap(spaceM).Padding(spaceL, spaceXL).FillWidth()
 				if !first {
 					col.BorderWidth(1, 0, 0, 0).BorderColor(k.panelBorder)
 				}
 				first = false
 				col.Children(func() {
-					ui.Text(c, title).FontSize(12).FontWeight(600).TextColor(k.textMuted)
+					ui.Text(c, title).FontSize(textSmall).FontWeight(600).TextColor(k.textMuted)
 					body()
 				})
 			}
 			entry := func(tone ui.Color, text, detail string) {
-				ui.Row(c).Gap(10).AlignItems(ui.Start).FillWidth().Children(func() {
-					ui.Box(c).Padding(6, 0, 0, 0).Shrink(0).Children(func() { statusDot(c, tone) })
-					ui.Column(c).Gap(3).Grow(1).MinWidth(0).Children(func() {
-						ui.Text(c, text).FontSize(13).LineHeight(1.5).TextColor(k.text).FillWidth().Wrap()
+				ui.Row(c).Gap(spaceM).AlignItems(ui.Start).FillWidth().Children(func() {
+					ui.Box(c).Padding(spaceS, 0, 0, 0).Shrink(0).Children(func() { statusDot(c, tone) })
+					ui.Column(c).Gap(space2XS).Grow(1).MinWidth(0).Children(func() {
+						ui.Text(c, text).FontSize(textBody).LineHeight(1.5).TextColor(k.text).FillWidth().Wrap()
 						if detail != "" {
-							ui.Text(c, detail).FontSize(12).LineHeight(1.5).TextColor(k.textMuted).FillWidth().Wrap()
+							ui.Text(c, detail).FontSize(textSmall).LineHeight(1.5).TextColor(k.textMuted).FillWidth().Wrap()
 						}
 					})
 				})
@@ -224,13 +225,13 @@ func (a *App) boardResult(c *ui.Context, k *colors, b *boardPane, item automatio
 				group("board-artifacts", "产物", func() {
 					for i, path := range res.Artifacts {
 						b := ui.ButtonBase(c.Key(fmt.Sprint("board-artifact-", i))).Label("打开 "+path).Tooltip(path).FillWidth().
-							Height(28).Padding(0, 8).Gap(8).Radius(6).AlignItems(ui.Center).Cursor(ui.CursorPointer)
+							Height(28).Padding(0, spaceM).Gap(spaceM).Radius(radiusM).AlignItems(ui.Center).Cursor(ui.CursorPointer)
 						if b.Hovered() || b.FocusVisible() {
 							b.Background(k.hover)
 						}
 						b.Children(func() {
 							ui.Icon(c, icon("file-code")).Size(14, 14).TextColor(k.iconMuted).Shrink(0)
-							ui.Text(c, path).Font(termFont.Family).FontSize(12).TextColor(k.text).SingleLine().Ellipsis("…").Grow(1).MinWidth(0)
+							ui.Text(c, path).Font(termFont.Family).FontSize(textSmall).TextColor(k.text).SingleLine().Ellipsis("…").Grow(1).MinWidth(0)
 							ui.Icon(c, icon("arrow-up-right")).Size(12, 12).TextColor(k.iconMuted).Shrink(0)
 						})
 						if b.Clicked() {
@@ -266,16 +267,16 @@ func resultBrief(r automation.Result) string {
 func mobileResult(c *ui.Context, r automation.Result) {
 	muted := c.Theme().TextMuted
 	for _, m := range r.Metrics {
-		ui.Text(c, m.Name+"："+metricText(m)).FontSize(13).FillWidth().Wrap()
+		ui.Text(c, m.Name+"："+metricText(m)).FontSize(textBody).FillWidth().Wrap()
 	}
 	for _, s := range r.Blockers {
-		ui.Text(c, "阻塞："+s).FontSize(12).TextColor(muted).FillWidth().Wrap()
+		ui.Text(c, "阻塞："+s).FontSize(textSmall).TextColor(muted).FillWidth().Wrap()
 	}
 	for _, f := range r.Findings {
 		text := f.Title
 		if f.Detail != "" {
 			text += "：" + f.Detail
 		}
-		ui.Text(c, "· "+text).FontSize(12).TextColor(muted).FillWidth().Wrap()
+		ui.Text(c, "· "+text).FontSize(textSmall).TextColor(muted).FillWidth().Wrap()
 	}
 }

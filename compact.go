@@ -67,7 +67,7 @@ func compactTitleButton(c *ui.Context, k *colors, name, label string, highlighte
 func (a *App) compactTabLabel(c *ui.Context, k *colors, i int, t *Tab, name, detail string, hovered bool) {
 	if t.Host != nil {
 		ui.Icon(c, icon("monitor")).Size(12, 12).Shrink(0).TextColor(k.iconMuted).Tooltip(t.Host.name()).Label("远端电脑 " + t.Host.name())
-		ui.Text(c, t.Host.name()).MaxWidth(82).MinWidth(0).FontSize(10).TextColor(k.textFaint).SingleLine().Ellipsis("…").Shrink(1)
+		ui.Text(c, t.Host.name()).MaxWidth(82).MinWidth(0).FontSize(textMicro).TextColor(k.textFaint).SingleLine().Ellipsis("…").Shrink(1)
 	}
 	if t.Focus != nil {
 		if prog := paneProgram(t.Focus); prog.Agent {
@@ -84,7 +84,7 @@ func (a *App) compactTabLabel(c *ui.Context, k *colors, i int, t *Tab, name, det
 		col = k.text
 	}
 	ui.Text(c, strings.TrimSpace(name+" "+detail)).Grow(1).MinWidth(0).
-		FontSize(11.5).FontWeight(500).TextColor(col).SingleLine().Ellipsis("…")
+		FontSize(textCaption).FontWeight(500).TextColor(col).SingleLine().Ellipsis("…")
 	if p, s := tabAgentState(t); p != nil {
 		a.agentIndicator(c, k, p, s)
 	} else if t.attention() {
