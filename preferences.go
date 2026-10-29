@@ -43,7 +43,7 @@ func (a *App) settingsPage(c *ui.Context, k *colors) {
 		return
 	}
 	original := c.Theme()
-	theme, side, selected := settingsTheme(original)
+	theme, side, selected := pageTheme(original), k.sidebar, k.panelSel
 	c.SetTheme(&theme)
 	defer c.SetTheme(original)
 	width, height := c.Size()

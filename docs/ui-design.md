@@ -32,9 +32,12 @@ Retty 的界面是 MyGo 的即时模式 UI。这份文档约定视图里使用�
 | agent 忙碌 / 需要关注（侧栏圆点） | `busy` / `attention` |
 
 - 状态色的浅色背景用 `tone.Alpha(0.14)`，参见 `statusPill`，不要另外定义一个颜色。
+- 分隔线（tab 之间、栏与栏之间、标题栏下方、分屏）用 `headerBorder`，light 和 dark 都要画出来，light 下是 8% 黑的细线。
+- 状态色（`info`/`success`/`warning`/`danger`）会直接用作 pill 文字，light 和 dark 各取一组：light 用更深的一档，dark 用更亮的一档。`TestStateColorsReadAsText` 要求它们和 `textFaint` 在两种主题的终端底色和 sidebar 底色上都不低于 4.5:1，改色值时先跑这个测试。
+- `textMuted` 和 `textFaint` 在两种主题下都要拉开层级；`textFaint` 在最深的底色（light 的 sidebar）上也要保持 4.5:1。
 - 文字和背景的对比度至少 4.5:1，可以用 `appearance_test.go` 里的 `colorContrast` 检查。
 - 终端自己的配色是 `lightTerm`/`darkTerm`，只用于终端，不要用在 chrome 上。
-- 整页覆盖 MyGo `ui.Theme` 的页面，主题函数也放在 `style.go`：设置页用 `settingsTheme`（按 `docs/settings-design/` 定稿，强调色更浅、控件更小），连接页和用量面板用 `desktopConnectionTheme`。两者目前取值不同，合并会改变设置页外观，需要单独决定。
+- 整页覆盖 MyGo `ui.Theme` 的页面统一用 `style.go` 里的 `pageTheme`：设置页、连接抽屉和用量面板共用，全部从 `colors` 取值（底色 `canvas`/`track`、强调色 `accent`、控件圆角 `radiusM`）。手机端用 `connectionTheme`。不要再为单个页面另写一套颜色。
 - 程序图标的颜色是图标本身的一部分，写在 `programs.go` 的程序表里（另有 `paneProgram` 里浏览器、Diff、文件三项），不属于界面配色。
 
 ## 间距
@@ -105,7 +108,7 @@ Retty 的界面是 MyGo 的即时模式 UI。这份文档约定视图里使用�
 
 token 已经加入 `style.go`。
 
-- **已完成**：主包里所有视图，包括桌面端（board、sidebar 和 tab、设置页、连接页和用量面板、文件面板、浏览器、palette、diagnostics）和手机端（`mobile*.go`）。页面级的主题覆盖 `settingsTheme`、`desktopConnectionTheme`、`connectionTheme`（手机）都在 `style.go`。
+- **已完成**：主包里所有视图，包括桌面端（board、sidebar 和 tab、设置页、连接页和用量面板、文件面板、浏览器、palette、diagnostics）和手机端（`mobile*.go`）。页面级的主题覆盖只剩 `pageTheme`（桌面）和 `connectionTheme`（手机），都在 `style.go`。
 - **守护测试**：`style_tokens_test.go` 扫描主包的视图源码，发现直接写的颜色（`ui.Hex`/`ui.RGBA`/`ui.RGB`）或数字字号（`FontSize(13)` 这类）就失败。`style.go`、`programs.go`（程序图标色）、`pairing.go`（二维码）整个跳过，另有程序图标色和二维码白底两类行放行。新增例外时在测试的允许名单里写明原因。
 
 间距和圆角暂未纳入守护测试：圆点和胶囊取半高的圆角、对齐用的缩进等合理的数值较多，靠评审和本文档约束。
@@ -122,9 +125,3 @@ sidebar 的 tab 列表高度是按行高加间距估算的，写在 `sidebarLayo
 - 圆点和胶囊取高度一半的圆角。
 - 已经写了注释说明原因的基线微调和对齐缩进，例如连接页分隔线跳过图标的 48px 左缩进。
 - 二维码的白底：扫码需要白底，与主题无关。
-
-已知需要单独修正的问题：
-
-- light 主题的 `textMuted` 和 `textFaint` 几乎一样，层级拉不开。
-- light 主题没有设置 `headerBorder`，取到的是零值。
-- 状态色在 light 和 dark 下共用一组取值，还没有针对各自背景校准对比度。

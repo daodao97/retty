@@ -16,7 +16,7 @@ func (a *App) desktopConnectionDialog(c *ui.Context, k *colors) {
 		return
 	}
 	original := c.Theme()
-	theme := desktopConnectionTheme(original)
+	theme := pageTheme(original)
 	c.SetTheme(&theme)
 	defer func() {
 		c.SetTheme(original)

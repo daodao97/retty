@@ -126,7 +126,7 @@ func (a *App) usagePanelView(c *ui.Context) {
 		return
 	}
 	original := c.Theme()
-	theme := desktopConnectionTheme(original)
+	theme := pageTheme(original)
 	c.SetTheme(&theme)
 	defer c.SetTheme(original)
 	c.Root().Background(ui.Transparent)

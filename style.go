@@ -52,10 +52,12 @@ type colors struct {
 var lightColors = colors{
 	cardBorderFocused: ui.RGBA(255, 255, 255, 1),
 	shadowFocused:     ui.RGBA(60, 40, 50, 0.12),
+	headerBorder:      ui.RGBA(0, 0, 0, 0.08),
 
 	text:      ui.Hex("#1d1d1f"),
 	textMuted: ui.Hex("#565960"),
-	textFaint: ui.Hex("#60636a"),
+	// textFaint stays 4.5:1 on the sidebar, a step below textMuted.
+	textFaint: ui.Hex("#6b6e76"),
 	iconMuted: ui.Hex("#737680"),
 	hover:     ui.RGBA(0, 0, 0, 0.055),
 	pressed:   ui.RGBA(0, 0, 0, 0.1),
@@ -67,10 +69,12 @@ var lightColors = colors{
 
 	accent:   ui.Hex("#2f6fdb"),
 	onAccent: ui.Hex("#ffffff"),
-	info:     ui.Hex("#3b82f6"),
-	success:  ui.Hex("#22c55e"),
-	warning:  ui.Hex("#f59e0b"),
-	danger:   ui.Hex("#ef4444"),
+	// The states read as text on light paper, a shade deeper than their dots
+	// would need, as a pill's label does.
+	info:    ui.Hex("#1d4ed8"),
+	success: ui.Hex("#157d3c"),
+	warning: ui.Hex("#b05109"),
+	danger:  ui.Hex("#b91c1c"),
 
 	panel:       ui.RGBA(252, 252, 253, 0.97),
 	panelBorder: ui.RGBA(0, 0, 0, 0.08),
@@ -109,10 +113,10 @@ var darkColors = colors{
 
 	accent:   ui.Hex("#4c8df6"),
 	onAccent: ui.Hex("#ffffff"),
-	info:     ui.Hex("#3b82f6"),
+	info:     ui.Hex("#60a5fa"),
 	success:  ui.Hex("#22c55e"),
 	warning:  ui.Hex("#f59e0b"),
-	danger:   ui.Hex("#ef4444"),
+	danger:   ui.Hex("#f87171"),
 
 	panel:       ui.Hex("#25272b"),
 	panelBorder: ui.Hex("#44484f"),
@@ -193,38 +197,21 @@ func colorsOf(c *ui.Context) *colors {
 	return &lightColors
 }
 
-// settingsTheme is the settings page's own, as docs/settings-design shows:
-// a softer accent and smaller controls than the rest of the chrome. side and
-// selected are its sidebar and the chosen section's row.
-func settingsTheme(original *ui.Theme) (theme ui.Theme, side, selected ui.Color) {
-	theme = *original
-	side, selected = ui.Hex("#f0f1f4"), ui.Hex("#dbe6fa")
-	theme.Background, theme.Text, theme.TextMuted = ui.Hex("#fafbfc"), ui.Hex("#24272d"), ui.Hex("#777c85")
-	if original.Dark {
-		side, selected = ui.Hex("#202327"), ui.Hex("#293d60")
-		theme.Background, theme.Text, theme.TextMuted = ui.Hex("#191c20"), ui.Hex("#d5d7db"), ui.Hex("#8d9198")
-		theme.Surface, theme.Border = ui.Hex("#25282d"), ui.Hex("#3b3f46")
-	}
-	theme.Accent, theme.AccentHover, theme.AccentPressed = ui.Hex("#85aaf4"), ui.Hex("#99b9fa"), ui.Hex("#7099e5")
-	theme.FontSize, theme.Spacing, theme.Radius = textBody, 3.5, 5
-	return theme, side, selected
-}
-
-// desktopConnectionTheme is the connections page's and the usage panel's:
-// the app's own colors on a surface of their own.
-func desktopConnectionTheme(original *ui.Theme) ui.Theme {
+// pageTheme is the settings page's, the connections drawer's and the usage
+// panel's: the app's own colors on a surface of their own, so a page and
+// the chrome around it read as one app.
+func pageTheme(original *ui.Theme) ui.Theme {
 	theme := *original
 	k := &lightColors
+	theme.Background, theme.Surface = k.canvas, ui.Hex("#ffffff")
 	if theme.Dark {
 		k = &darkColors
-		theme.Background = ui.Hex("#1c1e21")
-		theme.Surface = ui.Hex("#25272b")
-	} else {
-		theme.Background = ui.Hex("#f5f6f8")
-		theme.Surface = ui.Hex("#ffffff")
+		theme.Background, theme.Surface = k.track, k.panel
 	}
 	theme.Text, theme.TextMuted, theme.Border = k.text, k.textMuted, k.panelBorder
 	theme.SurfaceHover, theme.SurfacePressed = k.hover, k.pressed
+	theme.Accent = k.accent
+	theme.AccentHover, theme.AccentPressed = k.accent.Mix(k.onAccent, 0.1), k.accent.Mix(ui.Hex("#000000"), 0.1)
 	theme.FontSize, theme.Radius, theme.Spacing = textBody, radiusM, spaceXS
 	return theme
 }
