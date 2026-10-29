@@ -49,8 +49,8 @@ func (a *App) desktopQualityTip(c *ui.Context, h *desktopHost) {
 	}
 	open := a.desktops.qualityHost == h
 	popover := ui.PopoverBase(c.Key("connection-quality-popover"), button, &open, func(panel ui.Element) {
-		panel.Width(252).Padding(12).Gap(9).Radius(9).Background(c.Theme().Surface).
-			Border(1, c.Theme().Border).Shadow(0, 4, 16, 0, ui.RGBA(0, 0, 0, .14)).Label("连接指标弹层 " + h.name())
+		panel.Width(252).Padding(spaceL).Gap(spaceM).Radius(radiusM).Background(c.Theme().Surface).
+			Border(1, c.Theme().Border).Shadow(0, 4, 16, 0, colorsOf(c).popoverShadow).Label("连接指标弹层 " + h.name())
 		a.probeDesktopQuality(h, c.Now())
 		c.After(time.Second)
 		s := remote.QualitySnapshot{}
@@ -58,8 +58,8 @@ func (a *App) desktopQualityTip(c *ui.Context, h *desktopHost) {
 			s = h.quality.Snapshot(c.Now())
 		}
 		ui.Row(c).AlignItems(ui.Center).Children(func() {
-			ui.Text(c, "连接指标").FontSize(12).FontWeight(600).Grow(1)
-			ui.Text(c, "最近 5 分钟").FontSize(10).TextColor(c.Theme().TextMuted)
+			ui.Text(c, "连接指标").FontSize(textSmall).FontWeight(600).Grow(1)
+			ui.Text(c, "最近 5 分钟").FontSize(textCaption).TextColor(c.Theme().TextMuted)
 		})
 		path, latency := "暂无", "暂无"
 		if !s.Path.At.IsZero() && c.Now().Sub(s.Path.At) <= 45*time.Second && h.connected() {
@@ -98,7 +98,7 @@ func (a *App) desktopQualityTip(c *ui.Context, h *desktopHost) {
 		if !h.connected() {
 			footnote = "当前未连接 · 保留最近记录"
 		}
-		ui.Text(c, footnote).FontSize(10).TextColor(c.Theme().TextMuted).Margin(2, 0, 0, 0)
+		ui.Text(c, footnote).FontSize(textCaption).TextColor(c.Theme().TextMuted).Margin(space2XS, 0, 0, 0)
 	})
 	if popover.Dismissed() && a.desktops.qualityHost == h {
 		a.desktops.qualityHost = nil
@@ -106,9 +106,9 @@ func (a *App) desktopQualityTip(c *ui.Context, h *desktopHost) {
 }
 
 func qualityMetricRow(c *ui.Context, name, value string) {
-	ui.Row(c).AlignItems(ui.Center).Gap(12).Children(func() {
-		ui.Text(c, name).FontSize(11).TextColor(c.Theme().TextMuted).Grow(1)
-		ui.Text(c, value).FontSize(11).SingleLine()
+	ui.Row(c).AlignItems(ui.Center).Gap(spaceL).Children(func() {
+		ui.Text(c, name).FontSize(textCaption).TextColor(c.Theme().TextMuted).Grow(1)
+		ui.Text(c, value).FontSize(textCaption).SingleLine()
 	})
 }
 

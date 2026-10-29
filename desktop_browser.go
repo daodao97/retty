@@ -329,7 +329,7 @@ func (a *App) navigateBrowser(p *Pane, raw string) {
 
 func (a *App) browserContent(c *ui.Context, k *colors, t *Tab, p *Pane) {
 	b := p.browser()
-	ui.Row(c.Key("browser-toolbar")).Height(36).Padding(4, 8).Gap(4).AlignItems(ui.Center).Background(k.panel).Children(func() {
+	ui.Row(c.Key("browser-toolbar")).Height(36).Padding(spaceXS, spaceM).Gap(spaceXS).AlignItems(ui.Center).Background(k.panel).Children(func() {
 		if iconButton(c, k, "chevron-left", "浏览器后退", 24, 13).Clicked() && b.view != nil {
 			b.view.Back()
 		}
@@ -339,7 +339,7 @@ func (a *App) browserContent(c *ui.Context, k *colors, t *Tab, p *Pane) {
 		if iconButton(c, k, "rotate-ccw", "刷新浏览器", 24, 13).Clicked() {
 			a.later(c, func() { a.navigateBrowser(p, b.url) })
 		}
-		input := ui.TextInput(c.Key("browser-url"), &b.address).Label("浏览器地址").Placeholder("https:// 或 localhost:端口").Grow(1).MinWidth(0).FontSize(12)
+		input := ui.TextInput(c.Key("browser-url"), &b.address).Label("浏览器地址").Placeholder("https:// 或 localhost:端口").Grow(1).MinWidth(0).FontSize(textSmall)
 		if b.addressFocus {
 			input.Focus()
 			b.addressFocus = false
@@ -357,23 +357,23 @@ func (a *App) browserContent(c *ui.Context, k *colors, t *Tab, p *Pane) {
 			})
 		}
 		if p.host != nil {
-			ui.Text(c, p.host.name()).FontSize(10).TextColor(k.textMuted).SingleLine().MaxWidth(100).Ellipsis("…")
+			ui.Text(c, p.host.name()).FontSize(textCaption).TextColor(k.textMuted).SingleLine().MaxWidth(100).Ellipsis("…")
 		}
 		if iconButton(c, k, "x", "关闭浏览器", 24, 12).Clicked() {
 			a.later(c, func() { a.closePane(p) })
 		}
 	})
 	if b.err != "" {
-		ui.Text(c, b.err).FontSize(12).TextColor(k.textMuted).Padding(8, 12).FillWidth()
+		ui.Text(c, b.err).FontSize(textSmall).TextColor(k.textMuted).Padding(spaceM, spaceL).FillWidth()
 	}
 	if b.loading || b.connecting {
-		ui.Row(c).Height(24).Padding(0, 12).Gap(8).AlignItems(ui.Center).Children(func() {
+		ui.Row(c).Height(24).Padding(0, spaceL).Gap(spaceM).AlignItems(ui.Center).Children(func() {
 			ui.Spinner(c).Size(12, 12)
 			label := "正在加载页面…"
 			if b.connecting {
 				label = "连接远端开发端口…"
 			}
-			ui.Text(c, label).FontSize(11).TextColor(k.textMuted)
+			ui.Text(c, label).FontSize(textCaption).TextColor(k.textMuted)
 		})
 	}
 	if b.view != nil && b.view.Native() != nil {

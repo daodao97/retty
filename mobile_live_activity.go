@@ -217,15 +217,15 @@ func (m *mobileApp) openMobileURL(raw string) {
 }
 func (m *mobileApp) liveActivityDialog(c *ui.Context) {
 	ui.DialogBase(c, &m.live.tools, func(back, panel ui.Element) {
-		back.Background(ui.RGBA(0, 0, 0, .4)).Column().Justify(ui.End).AlignItems(ui.Center).Padding(12)
-		panel.Label("会话工具面板").FillWidth().MaxWidth(480).MaxHeight(c.Root().Bounds().H - 40).Padding(18).Radius(20).Background(c.Theme().Surface).Column().Gap(14).Clip()
+		back.Background(colorsOf(c).sheetScrim).Column().Justify(ui.End).AlignItems(ui.Center).Padding(spaceL)
+		panel.Label("会话工具面板").FillWidth().MaxWidth(480).MaxHeight(c.Root().Bounds().H - 40).Padding(spaceXL).Radius(radiusSheet).Background(c.Theme().Surface).Column().Gap(spaceL).Clip()
 		ui.Row(c).FillWidth().Shrink(0).AlignItems(ui.Center).Children(func() {
-			ui.Text(c, "会话工具").FontSize(18).Bold().Grow(1)
+			ui.Text(c, "会话工具").FontSize(mobileTitle).Bold().Grow(1)
 			if mobileIconAction(c, "关闭会话工具", "x").Clicked() {
 				m.live.tools = false
 			}
 		})
-		ui.Scroll(c.Key("mobile-session-tools")).FillWidth().MinHeight(0).Shrink(1).Gap(14).Children(func() {
+		ui.Scroll(c.Key("mobile-session-tools")).FillWidth().MinHeight(0).Shrink(1).Gap(spaceL).Children(func() {
 			if ui.Button(c, "开发页面预览").FillWidth().Height(48).Disabled(!m.connectionUsable()).Clicked() {
 				m.live.tools = false
 				m.openPreview()
@@ -242,10 +242,10 @@ func (m *mobileApp) liveActivityDialog(c *ui.Context) {
 				m.setLiveActivityEnabled(enabled)
 			}
 			if m.live.id != "" {
-				ui.Text(c, "正在跟踪一个会话 · 点按锁屏卡片返回").FontSize(12).TextColor(c.Theme().TextMuted).FillWidth()
+				ui.Text(c, "正在跟踪一个会话 · 点按锁屏卡片返回").FontSize(textSmall).TextColor(c.Theme().TextMuted).FillWidth()
 			}
 			if m.live.error != "" {
-				ui.Text(c, m.live.error).FontSize(12).TextColor(c.Theme().Danger).FillWidth()
+				ui.Text(c, m.live.error).FontSize(textSmall).TextColor(c.Theme().Danger).FillWidth()
 			}
 			if m.live.error != "" && ui.Button(c, "重试锁屏状态").FillWidth().Height(40).Clicked() {
 				m.live.last = ""

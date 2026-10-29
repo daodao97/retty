@@ -20,6 +20,11 @@ Retty 的界面是 MyGo 的即时模式 UI。这份文档约定视图里使用�
 | 浮层面板、边框、选中行、遮罩 | `panel`、`panelBorder`、`panelSel`、`backdrop` |
 | sidebar 的底色和右边线 | `sidebar`、`sidebarBorder` |
 | 需要用户作答的对话框遮罩（比 `backdrop` 深） | `scrim` |
+| 用量条等进度条的填充色（比 `accent` 柔和） | `meter` |
+| 小弹层（如连接指标）的阴影 | `popoverShadow` |
+| 对话框（如 palette）的两层阴影 | `dialogShadow`、`dialogShadowNear` |
+| 手机底部 sheet 的遮罩 | `sheetScrim` |
+| 文件面板的底色 | `canvas` |
 | 聚焦卡片的边框和阴影 | `cardBorderFocused`、`shadowFocused` |
 | 主操作、选中 | `accent` |
 | 实心主按钮、危险按钮上的文字和图标 | `onAccent` |
@@ -46,7 +51,7 @@ Retty 的界面是 MyGo 的即时模式 UI。这份文档约定视图里使用�
 
 ## 圆角
 
-`radiusS 4`：pill、输入框、小标签，以及 sidebar 里 30px 左右的紧凑行。`radiusM 8`：按钮、列表行、菜单项。`radiusL 12`：卡片、面板、对话框。`radiusXL 16`：手机端卡片。
+`radiusS 4`：pill、输入框、小标签，以及 sidebar 里 30px 左右的紧凑行。`radiusM 8`：按钮、列表行、菜单项。`radiusL 12`：卡片、面板、对话框。`radiusXL 16`：手机端卡片。`radiusSheet 20`：手机底部 sheet。
 
 圆点和胶囊的圆角取高度的一半，例如 `statusDot` 是 7px 高，圆角 3.5。
 
@@ -54,13 +59,24 @@ Retty 的界面是 MyGo 的即时模式 UI。这份文档约定视图里使用�
 
 | token | 大小 | 用途 |
 | --- | --- | --- |
-| `textMicro` | 10 | 只用于 sidebar 的密集元信息：分支名、计数、时间、提示文字 |
+| `textMicro` | 10 | 只用于 sidebar 的密集元信息（分支名、计数、时间、提示文字）和大写角标（如用量面板的套餐名） |
 | `textCaption` | 11 | 角标、时间、计数、辅助说明，sidebar 的分组标题（加 600 字重） |
 | `textSmall` | 12 | 侧栏、列表行、按钮 |
 | `textBody` | 13 | 正文、表单、设置项 |
 | `textTitle` | 15 | 卡片和面板标题、手机端列表 |
 | `textHeading` | 18 | 页面标题 |
 | `textDisplay` | 22 | 一眼要读到的数字，例如指标卡片里的值 |
+
+手机端按 iOS 的字号体系另有一组，比桌面大，小于 14 的字号与桌面共用 `textCaption`/`textSmall`/`textBody`：
+
+| token | 大小 | 用途 |
+| --- | --- | --- |
+| `mobileSubhead` | 14 | 次要说明、卡片标题 |
+| `mobileBody` | 15 | 列表行、正文 |
+| `mobileCallout` | 16 | 输入框、按钮，也是手机主题的默认字号 |
+| `mobileHeadline` | 17 | 页面和 sheet 的导航标题 |
+| `mobileTitle` | 18 | sheet 和确认框的大标题 |
+| `mobileLargeTitle` | 32 | 启动页标题 |
 
 - 字重：正文 400，强调 500，标题 600。不要用加大字号来表达强调。
 - 终端字体是 `termFont`（JetBrains Mono 11.6），由用户的字号设置缩放，不属于上面的阶梯。
@@ -89,11 +105,10 @@ Retty 的界面是 MyGo 的即时模式 UI。这份文档约定视图里使用�
 
 token 已经加入 `style.go`。
 
-- **已完成**：
-  - board（`board.go`、`board_result.go`），其中的 `stateColor`/`boardAccent` 已改为读取 token。
-  - sidebar 和 tab（`sidebar.go`、`sidebar_projects.go`、`sidebar_history.go`、`tabs.go`、`compact.go`，以及 `automations_view.go` 里的 sidebar 部分）。
-  - 设置页（`preferences.go`），主题覆盖已移到 `style.go`。
-- **待迁移**：连接页的视图代码、文件面板、浏览器、palette、mobile_* 等，还有大量直接写的颜色和数值。
+- **已完成**：主包里所有视图，包括桌面端（board、sidebar 和 tab、设置页、连接页和用量面板、文件面板、浏览器、palette、diagnostics）和手机端（`mobile*.go`）。页面级的主题覆盖 `settingsTheme`、`desktopConnectionTheme`、`connectionTheme`（手机）都在 `style.go`。
+- **守护测试**：`style_tokens_test.go` 扫描主包的视图源码，发现直接写的颜色（`ui.Hex`/`ui.RGBA`/`ui.RGB`）或数字字号（`FontSize(13)` 这类）就失败。`style.go`、`programs.go`（程序图标色）、`pairing.go`（二维码）整个跳过，另有程序图标色和二维码白底两类行放行。新增例外时在测试的允许名单里写明原因。
+
+间距和圆角暂未纳入守护测试：圆点和胶囊取半高的圆角、对齐用的缩进等合理的数值较多，靠评审和本文档约束。
 
 视图测试会在 1000×620 的窗口里点击按钮，而 `Tester.Click` 只检查坐标在窗口内，不检查元素是否被滚动区域裁掉。行高变大可能把页面末尾的按钮挤到可见范围外，测试就会点空。迁移后如果有点击类测试超时，先检查目标按钮渲染后的位置和高度。
 
@@ -105,7 +120,8 @@ sidebar 的 tab 列表高度是按行高加间距估算的，写在 `sidebarLayo
 
 - 图形内部的几何尺寸，例如迷你图的柱宽和圆角。
 - 圆点和胶囊取高度一半的圆角。
-- 已经写了注释说明原因的基线微调。迁移完成后，会加一个测试禁止在 `style.go` 以外直接写颜色和字号。
+- 已经写了注释说明原因的基线微调和对齐缩进，例如连接页分隔线跳过图标的 48px 左缩进。
+- 二维码的白底：扫码需要白底，与主题无关。
 
 已知需要单独修正的问题：
 

@@ -127,7 +127,6 @@ func (a *App) usagePanelView(c *ui.Context) {
 	}
 	original := c.Theme()
 	theme := desktopConnectionTheme(original)
-	theme.Spacing, theme.Radius = 4, 7
 	c.SetTheme(&theme)
 	defer c.SetTheme(original)
 	c.Root().Background(ui.Transparent)
@@ -135,19 +134,19 @@ func (a *App) usagePanelView(c *ui.Context) {
 	if !c.Vibrancy() {
 		box.Background(theme.Background)
 		if runtime.GOOS != "windows" {
-			box.Radius(12).Border(1, theme.Border)
+			box.Radius(radiusL).Border(1, theme.Border)
 		}
 	}
 	box.Children(func() {
-		ui.Row(c).FillWidth().Height(usagePanelHeader).Padding(8, 12).Gap(4).AlignItems(ui.Center).Children(func() {
+		ui.Row(c).FillWidth().Height(usagePanelHeader).Padding(spaceM, spaceL).Gap(spaceXS).AlignItems(ui.Center).Children(func() {
 			agents, selected := []string{"codex", "claude"}, 0
 			if d.panelAgent == "claude" {
 				selected = 1
 			}
 			tabs := ui.TabsBase(c, &selected, 2)
-			tabs.List.Gap(3).Children(func() {
+			tabs.List.Gap(space2XS).Children(func() {
 				for i, agent := range agents {
-					tab := tabs.Tab(i).Label("Usage provider "+usageAgentName(agent)).Height(30).Padding(0, 9).Gap(6).Radius(6).AlignItems(ui.Center)
+					tab := tabs.Tab(i).Label("Usage provider "+usageAgentName(agent)).Height(30).Padding(0, spaceM).Gap(spaceS).Radius(radiusM).AlignItems(ui.Center)
 					ink := theme.TextMuted
 					if i == selected {
 						tab.Background(theme.SurfaceHover)
@@ -157,7 +156,7 @@ func (a *App) usagePanelView(c *ui.Context) {
 					}
 					tab.Children(func() {
 						programIcon(c, "agent:"+agent).Size(14, 14).TextColor(ink)
-						ui.Text(c, usageAgentName(agent)).FontSize(12).FontWeight(500).TextColor(ink)
+						ui.Text(c, usageAgentName(agent)).FontSize(textSmall).FontWeight(500).TextColor(ink)
 					})
 				}
 			})
@@ -171,7 +170,7 @@ func (a *App) usagePanelView(c *ui.Context) {
 			}
 		})
 		r := d.reading(d.panelAgent)
-		ui.Scroll(c.Key("usage-panel-"+d.panelAgent)).FillWidth().Grow(1).MinHeight(0).Padding(10, 16, 14, 16).Gap(20).Children(func() {
+		ui.Scroll(c.Key("usage-panel-"+d.panelAgent)).FillWidth().Grow(1).MinHeight(0).Padding(spaceM, spaceXL, spaceL, spaceXL).Gap(spaceXL).Children(func() {
 			if d.panelAgent == "codex" && d.resetOpen {
 				a.usageResetConfirmation(c, r)
 				return
@@ -180,24 +179,21 @@ func (a *App) usagePanelView(c *ui.Context) {
 				usagePanelEmpty(c, r, d.busy)
 			}
 			for _, w := range r.Windows {
-				color := ui.Hex("#4976bc")
-				if theme.Dark {
-					color = ui.Hex("#84a7e8")
-				}
+				color := colorsOf(c).meter
 				ink := theme.Text
 				if w.Used >= 80 {
 					color = colorsOf(c).attention
 					ink = color
 				}
-				ui.Column(c).FillWidth().Gap(7).Children(func() {
+				ui.Column(c).FillWidth().Gap(spaceS).Children(func() {
 					ui.Row(c).FillWidth().Height(28).AlignItems(ui.Center).Children(func() {
-						ui.Text(c, w.Name).FontSize(12).TextColor(theme.TextMuted).Grow(1).MinWidth(0).SingleLine().Ellipsis("…").Tooltip(w.Name)
-						ui.Text(c, fmt.Sprintf("%d%%", remainingUsage(w.Used))).Label(fmt.Sprintf("%d%% 剩余", remainingUsage(w.Used))).FontSize(24).FontWeight(600).TextColor(ink).Shrink(0)
-						ui.Text(c, "剩余").FontSize(10.5).TextColor(theme.TextMuted).Margin(0, 0, 0, 5).Shrink(0)
+						ui.Text(c, w.Name).FontSize(textSmall).TextColor(theme.TextMuted).Grow(1).MinWidth(0).SingleLine().Ellipsis("…").Tooltip(w.Name)
+						ui.Text(c, fmt.Sprintf("%d%%", remainingUsage(w.Used))).Label(fmt.Sprintf("%d%% 剩余", remainingUsage(w.Used))).FontSize(textDisplay).FontWeight(600).TextColor(ink).Shrink(0)
+						ui.Text(c, "剩余").FontSize(textCaption).TextColor(theme.TextMuted).Margin(0, 0, 0, spaceXS).Shrink(0)
 					})
 					usagePanelMeter(c, 100-agentusage.Percent(w.Used), color, 4)
 					if w.Reset != "" {
-						ui.Text(c, "重置于 "+w.Reset).Height(14).FontSize(10.5).TextColor(theme.TextMuted).SingleLine().Ellipsis("…").Tooltip("重置于 " + w.Reset)
+						ui.Text(c, "重置于 "+w.Reset).Height(14).FontSize(textCaption).TextColor(theme.TextMuted).SingleLine().Ellipsis("…").Tooltip("重置于 " + w.Reset)
 					}
 				})
 			}
@@ -206,12 +202,12 @@ func (a *App) usagePanelView(c *ui.Context) {
 			}
 		})
 		usagePanelDivider(c)
-		ui.Row(c).FillWidth().Height(usagePanelFooter).Padding(0, 16).Gap(8).AlignItems(ui.Center).Children(func() {
+		ui.Row(c).FillWidth().Height(usagePanelFooter).Padding(0, spaceXL).Gap(spaceM).AlignItems(ui.Center).Children(func() {
 			if r.Plan != "" {
-				ui.Text(c, strings.ToUpper(r.Plan)).FontSize(9).FontWeight(600).TextColor(theme.TextMuted).
-					Padding(3, 5).Radius(4).Background(theme.SurfaceHover).MaxWidth(84).SingleLine().Ellipsis("…").Tooltip(r.Plan)
+				ui.Text(c, strings.ToUpper(r.Plan)).FontSize(textMicro).FontWeight(600).TextColor(theme.TextMuted).
+					Padding(space2XS, spaceS).Radius(radiusS).Background(theme.SurfaceHover).MaxWidth(84).SingleLine().Ellipsis("…").Tooltip(r.Plan)
 			}
-			ui.Text(c, usagePanelStatus(r, d.busy, c.Now())).FontSize(10).TextColor(theme.TextMuted).SingleLine().Ellipsis("…").MinWidth(0).Grow(1)
+			ui.Text(c, usagePanelStatus(r, d.busy, c.Now())).FontSize(textCaption).TextColor(theme.TextMuted).SingleLine().Ellipsis("…").MinWidth(0).Grow(1)
 			if desktopConnectionIconAction(c, "Refresh usage panel", "rotate-ccw").Size(26, 26).Tooltip("刷新用量").Disabled(d.busy).Clicked() {
 				a.refreshUsage()
 			}
@@ -228,16 +224,16 @@ func usagePanelEmpty(c *ui.Context, r agentusage.Reading, busy bool) {
 	if busy {
 		title, message = "正在读取额度", "正在查询 "+usageAgentName(r.Agent)+" 本机账户，请稍候…"
 	}
-	ui.Column(c).FillWidth().Gap(9).Margin(8, 0).Children(func() {
-		ui.Row(c).FillWidth().Gap(7).AlignItems(ui.Center).Children(func() {
+	ui.Column(c).FillWidth().Gap(spaceM).Margin(spaceM, 0).Children(func() {
+		ui.Row(c).FillWidth().Gap(spaceS).AlignItems(ui.Center).Children(func() {
 			if busy {
 				ui.Spinner(c).Size(14, 14).TextColor(theme.TextMuted)
 			} else {
 				ui.Icon(c, icon("info")).Size(14, 14).TextColor(theme.TextMuted)
 			}
-			ui.Text(c, title).FontSize(12.5).FontWeight(500).TextColor(theme.Text)
+			ui.Text(c, title).FontSize(textSmall).FontWeight(500).TextColor(theme.Text)
 		})
-		ui.Text(c, message).FillWidth().FontSize(11.5).LineHeight(1.5).TextColor(theme.TextMuted)
+		ui.Text(c, message).FillWidth().FontSize(textSmall).LineHeight(1.5).TextColor(theme.TextMuted)
 	})
 }
 
@@ -271,7 +267,7 @@ func usagePanelMeter(c *ui.Context, remaining float64, color ui.Color, height fl
 }
 
 func usagePanelDivider(c *ui.Context) {
-	ui.Row(c).FillWidth().Height(0.5).Padding(0, 16).Children(func() {
+	ui.Row(c).FillWidth().Height(0.5).Padding(0, spaceXL).Children(func() {
 		ui.Box(c).FillWidth().Height(0.5).Background(c.Theme().Border)
 	})
 }

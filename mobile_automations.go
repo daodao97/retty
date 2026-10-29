@@ -89,13 +89,13 @@ func (m *mobileApp) automationsDialog(c *ui.Context) {
 		}
 	}
 	dialog := ui.DialogBase(c, &v.open, func(back, panel ui.Element) {
-		back.Background(ui.RGBA(0, 0, 0, .4)).Column().Justify(ui.End).AlignItems(ui.Center).Padding(12)
-		panel.Label("手机自动化面板").FillWidth().MaxWidth(480).MaxHeight(c.Root().Bounds().H - 40).Padding(16).Radius(20).Background(c.Theme().Surface).Column().Gap(12).Clip()
+		back.Background(colorsOf(c).sheetScrim).Column().Justify(ui.End).AlignItems(ui.Center).Padding(spaceL)
+		panel.Label("手机自动化面板").FillWidth().MaxWidth(480).MaxHeight(c.Root().Bounds().H - 40).Padding(spaceXL).Radius(radiusSheet).Background(c.Theme().Surface).Column().Gap(spaceL).Clip()
 		ui.Row(c).FillWidth().Height(44).Shrink(0).AlignItems(ui.Center).Children(func() {
 			if v.selected != "" && mobileIconAction(c, "返回自动化列表", "chevron-left").Clicked() {
 				m.selectAutomation("")
 			}
-			ui.Text(c, "自动化").FontSize(18).Bold().Grow(1)
+			ui.Text(c, "自动化").FontSize(mobileTitle).Bold().Grow(1)
 			if mobileIconAction(c, "刷新自动化", "rotate-ccw").Disabled(v.busy || !m.connectionUsable()).Clicked() {
 				m.refreshAutomations()
 			}
@@ -103,19 +103,19 @@ func (m *mobileApp) automationsDialog(c *ui.Context) {
 				m.closeAutomations()
 			}
 		})
-		ui.Scroll(c.Key("mobile-automations-" + v.selected)).FillWidth().MinHeight(0).Shrink(1).Gap(12).Children(func() {
-			ui.Text(c, m.connectedDevice().displayName()).FontSize(12).TextColor(c.Theme().TextMuted).FillWidth()
+		ui.Scroll(c.Key("mobile-automations-" + v.selected)).FillWidth().MinHeight(0).Shrink(1).Gap(spaceL).Children(func() {
+			ui.Text(c, m.connectedDevice().displayName()).FontSize(textSmall).TextColor(c.Theme().TextMuted).FillWidth()
 			if v.busy {
-				ui.Text(c, "正在读取自动化…").FontSize(13).TextColor(c.Theme().TextMuted)
+				ui.Text(c, "正在读取自动化…").FontSize(textBody).TextColor(c.Theme().TextMuted)
 			}
 			if v.error != "" {
-				ui.Text(c, v.error).Label("自动化读取错误").FontSize(13).TextColor(c.Theme().Danger).FillWidth().Wrap()
+				ui.Text(c, v.error).Label("自动化读取错误").FontSize(textBody).TextColor(c.Theme().Danger).FillWidth().Wrap()
 			}
 			if m.degraded() || m.background {
-				ui.Text(c, "连接恢复后更新，以下为上次读取的记录。").FontSize(12).TextColor(c.Theme().TextMuted).FillWidth().Wrap()
+				ui.Text(c, "连接恢复后更新，以下为上次读取的记录。").FontSize(textSmall).TextColor(c.Theme().TextMuted).FillWidth().Wrap()
 			}
 			if !v.value.At.IsZero() {
-				ui.Text(c, "更新于 "+v.value.At.Local().Format("01-02 15:04:05")).FontSize(11).TextColor(c.Theme().TextMuted)
+				ui.Text(c, "更新于 "+v.value.At.Local().Format("01-02 15:04:05")).FontSize(textCaption).TextColor(c.Theme().TextMuted)
 			}
 			if v.selected == "" {
 				m.automationList(c)
@@ -132,15 +132,15 @@ func (m *mobileApp) automationsDialog(c *ui.Context) {
 func (m *mobileApp) automationList(c *ui.Context) {
 	v := &m.automations
 	if len(v.value.Entries) == 0 && !v.busy && v.error == "" {
-		ui.Text(c, "这台主机还没有自动化，可在桌面端创建。").FontSize(14).TextColor(c.Theme().TextMuted).FillWidth().Wrap()
+		ui.Text(c, "这台主机还没有自动化，可在桌面端创建。").FontSize(mobileSubhead).TextColor(c.Theme().TextMuted).FillWidth().Wrap()
 	}
 	for _, entry := range v.value.Entries {
 		row := ui.ButtonBase(c.Key("mobile-automation-" + entry.Task.ID)).Label("查看自动化 " + entry.Task.Name()).Role(ui.RoleButton).
-			FillWidth().MinHeight(76).Padding(12).Radius(12).Background(c.Theme().Background).Column().Gap(6)
+			FillWidth().MinHeight(76).Padding(spaceL).Radius(radiusL).Background(c.Theme().Background).Column().Gap(spaceS)
 		row.Children(func() {
-			ui.Text(c, entry.Task.Name()).FontSize(15).Bold().FillWidth().Wrap()
-			ui.Text(c, automationSchedule(entry.Task, entry.Run, time.Now())).FontSize(12).TextColor(c.Theme().TextMuted).FillWidth().Wrap()
-			ui.Text(c, mobileAutomationState(entry.Run)).FontSize(12).TextColor(stateColor(colorsOf(c), entry.Run.State)).FillWidth().Wrap()
+			ui.Text(c, entry.Task.Name()).FontSize(mobileBody).Bold().FillWidth().Wrap()
+			ui.Text(c, automationSchedule(entry.Task, entry.Run, time.Now())).FontSize(textSmall).TextColor(c.Theme().TextMuted).FillWidth().Wrap()
+			ui.Text(c, mobileAutomationState(entry.Run)).FontSize(textSmall).TextColor(stateColor(colorsOf(c), entry.Run.State)).FillWidth().Wrap()
 		})
 		if row.Clicked() {
 			m.selectAutomation(entry.Task.ID)
@@ -169,16 +169,16 @@ func (m *mobileApp) automationSession(run automation.Run) (rex.SessionInfo, bool
 
 func (m *mobileApp) automationDetail(c *ui.Context, entry remote.AutomationEntry) {
 	v, task, run := &m.automations, entry.Task, entry.Run
-	ui.Text(c, task.Name()).FontSize(17).Bold().FillWidth().Wrap()
+	ui.Text(c, task.Name()).FontSize(mobileHeadline).Bold().FillWidth().Wrap()
 	if task.Goal != task.Name() {
-		ui.Text(c, task.Goal).FontSize(14).FillWidth().Wrap()
+		ui.Text(c, task.Goal).FontSize(mobileSubhead).FillWidth().Wrap()
 	}
-	ui.Text(c, automationSchedule(task, run, time.Now())).FontSize(12).TextColor(c.Theme().TextMuted).FillWidth().Wrap()
-	ui.Text(c, task.Dir).FontSize(12).TextColor(c.Theme().TextMuted).FillWidth().Wrap()
+	ui.Text(c, automationSchedule(task, run, time.Now())).FontSize(textSmall).TextColor(c.Theme().TextMuted).FillWidth().Wrap()
+	ui.Text(c, task.Dir).FontSize(textSmall).TextColor(c.Theme().TextMuted).FillWidth().Wrap()
 	if task.Check != "" {
-		ui.Text(c, "检查命令："+task.Check).FontSize(12).TextColor(c.Theme().TextMuted).FillWidth().Wrap()
+		ui.Text(c, "检查命令："+task.Check).FontSize(textSmall).TextColor(c.Theme().TextMuted).FillWidth().Wrap()
 	}
-	ui.Text(c, "最近执行").FontSize(14).Bold()
+	ui.Text(c, "最近执行").FontSize(mobileSubhead).Bold()
 	mobileAutomationRun(c, run)
 	if session, ok := m.automationSession(run); ok {
 		if mobileTextAction(c, "打开自动化执行会话", "打开执行会话").Disabled(!m.connectionUsable()).Clicked() {
@@ -186,14 +186,14 @@ func (m *mobileApp) automationDetail(c *ui.Context, entry remote.AutomationEntry
 			m.openSession(session)
 		}
 	} else {
-		ui.Text(c, "当前没有可打开的执行会话").FontSize(12).TextColor(c.Theme().TextMuted).FillWidth()
+		ui.Text(c, "当前没有可打开的执行会话").FontSize(textSmall).TextColor(c.Theme().TextMuted).FillWidth()
 	}
-	ui.Text(c, "执行历史 · 最近 50 次").FontSize(14).Bold()
+	ui.Text(c, "执行历史 · 最近 50 次").FontSize(mobileSubhead).Bold()
 	if len(v.value.History) == 0 && !v.busy {
-		ui.Text(c, "还没有执行记录").FontSize(13).TextColor(c.Theme().TextMuted)
+		ui.Text(c, "还没有执行记录").FontSize(textBody).TextColor(c.Theme().TextMuted)
 	}
 	for i, previous := range v.value.History {
-		ui.Column(c.Key(fmt.Sprintf("automation-history-%d", i))).FillWidth().Padding(12).Radius(12).Background(c.Theme().Background).Gap(6).Children(func() {
+		ui.Column(c.Key(fmt.Sprintf("automation-history-%d", i))).FillWidth().Padding(spaceL).Radius(radiusL).Background(c.Theme().Background).Gap(spaceS).Children(func() {
 			mobileAutomationRun(c, previous)
 		})
 	}
@@ -210,14 +210,14 @@ func mobileAutomationRun(c *ui.Context, run automation.Run) {
 	if run.Rounds > 0 {
 		label += fmt.Sprintf(" · %d 轮", run.Rounds)
 	}
-	ui.Text(c, label).FontSize(13).TextColor(stateColor(colorsOf(c), run.State)).FillWidth().Wrap()
+	ui.Text(c, label).FontSize(textBody).TextColor(stateColor(colorsOf(c), run.State)).FillWidth().Wrap()
 	if run.Summary != "" {
-		ui.Text(c, run.Summary).FontSize(13).LineHeight(1.5).FillWidth().Wrap()
+		ui.Text(c, run.Summary).FontSize(textBody).LineHeight(1.5).FillWidth().Wrap()
 	}
 	if run.Result != nil {
 		mobileResult(c, *run.Result)
 	}
 	if run.Message != "" && run.Message != run.Summary {
-		ui.Text(c, run.Message).FontSize(12).TextColor(c.Theme().TextMuted).FillWidth().Wrap()
+		ui.Text(c, run.Message).FontSize(textSmall).TextColor(c.Theme().TextMuted).FillWidth().Wrap()
 	}
 }

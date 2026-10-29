@@ -4,7 +4,7 @@ import "github.com/egoist/mygo/ui"
 
 func mobileHistoryCheckbox(c *ui.Context, checked bool) {
 	ui.Box(c).Size(32, 32).Shrink(0).Center().PassThrough().Children(func() {
-		box := ui.Box(c).Size(22, 22).Radius(5).Center().PassThrough()
+		box := ui.Box(c).Size(22, 22).Radius(radiusS).Center().PassThrough()
 		if checked {
 			box.Background(c.Theme().Accent).Children(func() {
 				ui.Icon(c, icon("check")).Size(18, 18).TextColor(c.Theme().AccentText).PassThrough()

@@ -116,7 +116,7 @@ func paneActionInset(p *Pane) float32 {
 
 func (a *App) paneCloseButton(c *ui.Context, k *colors, p *Pane) {
 	b := ui.ButtonBase(c.Key("close-pane")).Size(24, 24).Absolute().Top(0).Right(0).
-		Radius(12).Cursor(ui.CursorPointer).Role(ui.RoleButton).Label("关闭窗格").Tooltip("关闭窗格")
+		Radius(radiusL).Cursor(ui.CursorPointer).Role(ui.RoleButton).Label("关闭窗格").Tooltip("关闭窗格")
 	col := k.iconMuted
 	if b.Pressed() {
 		b.Background(k.pressed)
@@ -233,10 +233,10 @@ func paneRunning(c *ui.Context, p *Pane) bool {
 func (a *App) errorBanner(c *ui.Context, k *colors) {
 	ui.Overlay(c, func() {
 		ui.Row(c).Absolute().Bottom(18).Left(0).Right(0).Justify(ui.Center).PassThrough().Children(func() {
-			ui.Row(c).Gap(10).Padding(8, 10, 8, 14).Radius(12).Background(k.panel).Border(1, k.panelBorder).
+			ui.Row(c).Gap(spaceM).Padding(spaceM, spaceM, spaceM, spaceL).Radius(radiusL).Background(k.panel).Border(1, k.panelBorder).
 				Shadow(0, 8, 24, 0, k.shadowFocused).AlignItems(ui.Center).Children(func() {
-				ui.Box(c).Size(8, 8).Radius(4).Background(ui.Hex("#ef4444"))
-				ui.Text(c, a.err).FontSize(12.5).TextColor(k.text).MaxWidth(520)
+				ui.Box(c).Size(8, 8).Radius(4).Background(colorsOf(c).danger)
+				ui.Text(c, a.err).FontSize(textSmall).TextColor(k.text).MaxWidth(520)
 				if iconButton(c, k, "x", "Dismiss", 22, 14).Clicked() {
 					a.err = ""
 				}

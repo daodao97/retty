@@ -35,6 +35,18 @@ type colors struct {
 	// sidebar is the sidebar's own surface and its edge, a step off the
 	// terminals' paper in a light window.
 	sidebar, sidebarBorder ui.Color
+
+	// meter fills a usage meter, an accent quieter than a button's.
+	meter ui.Color
+	// popoverShadow lifts a small popover off the window.
+	popoverShadow ui.Color
+	// dialogShadow lifts a dialog such as the palette; dialogShadowNear
+	// is its tight contact shadow.
+	dialogShadow, dialogShadowNear ui.Color
+	// sheetScrim dims the phone behind a bottom sheet.
+	sheetScrim ui.Color
+	// canvas is the file panel's ground, a step off the window's.
+	canvas ui.Color
 }
 
 var lightColors = colors{
@@ -68,6 +80,13 @@ var lightColors = colors{
 
 	sidebar:       ui.Hex("#f0f1f4"),
 	sidebarBorder: ui.RGBA(0, 0, 0, 0.08),
+
+	meter:            ui.Hex("#4976bc"),
+	popoverShadow:    ui.RGBA(0, 0, 0, 0.14),
+	dialogShadow:     ui.RGBA(0, 0, 0, 0.28),
+	dialogShadowNear: ui.RGBA(0, 0, 0, 0.06),
+	sheetScrim:       ui.RGBA(0, 0, 0, 0.4),
+	canvas:           ui.Hex("#f6f7f9"),
 }
 
 var darkColors = colors{
@@ -103,6 +122,13 @@ var darkColors = colors{
 
 	sidebar:       ui.Hex("#1c1e21"),
 	sidebarBorder: ui.Hex("#303337"),
+
+	meter:            ui.Hex("#84a7e8"),
+	popoverShadow:    ui.RGBA(0, 0, 0, 0.14),
+	dialogShadow:     ui.RGBA(0, 0, 0, 0.28),
+	dialogShadowNear: ui.RGBA(0, 0, 0, 0.06),
+	sheetScrim:       ui.RGBA(0, 0, 0, 0.4),
+	canvas:           ui.Hex("#25272b"),
 }
 
 // The chrome's spacing steps, on a 4-point grid; spaceS is for dense rows
@@ -128,6 +154,8 @@ const (
 	radiusM  = 8
 	radiusL  = 12
 	radiusXL = 16
+	// radiusSheet is a phone bottom sheet's top corners.
+	radiusSheet = 20
 )
 
 // The chrome's type sizes. The terminal's own font is termFont's, and the
@@ -143,6 +171,19 @@ const (
 	textHeading = 18
 	// textDisplay is a figure read at a glance, as a metric's value.
 	textDisplay = 22
+)
+
+// The phone's type sizes, as iOS sets them: a larger body than the
+// desktop's, for reading at arm's length. Below these the phone shares the
+// desktop's caption, small and body sizes.
+const (
+	mobileSubhead = 14
+	mobileBody    = 15
+	// mobileCallout is a field's and a button's, large enough to tap.
+	mobileCallout    = 16
+	mobileHeadline   = 17
+	mobileTitle      = 18
+	mobileLargeTitle = 32
 )
 
 func colorsOf(c *ui.Context) *colors {
@@ -185,6 +226,21 @@ func desktopConnectionTheme(original *ui.Theme) ui.Theme {
 	theme.Text, theme.TextMuted, theme.Border = k.text, k.textMuted, k.panelBorder
 	theme.SurfaceHover, theme.SurfacePressed = k.hover, k.pressed
 	theme.FontSize, theme.Radius, theme.Spacing = textBody, radiusM, spaceXS
+	return theme
+}
+
+// connectionTheme is the phone's, and its connection pages': larger
+// controls on a surface of their own.
+func connectionTheme(original *ui.Theme) ui.Theme {
+	theme := *original
+	theme.FontSize, theme.Radius = mobileCallout, radiusL
+	if theme.Dark {
+		theme.Background = ui.Hex("#111315")
+		theme.Surface = ui.Hex("#1e2126")
+	} else {
+		theme.Background = ui.Hex("#f5f6f8")
+		theme.Surface = ui.Hex("#ffffff")
+	}
 	return theme
 }
 

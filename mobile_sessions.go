@@ -180,8 +180,8 @@ func (m *mobileApp) sessionList(c *ui.Context) {
 							status = "正在结束"
 						}
 						if status != "" {
-							ui.Row(c).Gap(4).Shrink(0).Children(func() {
-								ui.Text(c, status).FontSize(11).TextColor(color).Shrink(0)
+							ui.Row(c).Gap(spaceXS).Shrink(0).Children(func() {
+								ui.Text(c, status).FontSize(textCaption).TextColor(color).Shrink(0)
 							})
 						}
 					},
@@ -307,10 +307,10 @@ func (m *mobileApp) sessionEditor(c *ui.Context) {
 		return
 	}
 	dialog := ui.DialogBase(c, &m.editingOpen, func(back, panel ui.Element) {
-		back.Background(ui.RGBA(0, 0, 0, 0.4)).Column().Justify(ui.End).AlignItems(ui.Center).Padding(12)
-		panel.Label("会话编辑面板").FillWidth().MaxWidth(480).Padding(16).Radius(20).Background(c.Theme().Surface).Column().Gap(10)
+		back.Background(colorsOf(c).sheetScrim).Column().Justify(ui.End).AlignItems(ui.Center).Padding(spaceL)
+		panel.Label("会话编辑面板").FillWidth().MaxWidth(480).Padding(spaceXL).Radius(radiusSheet).Background(c.Theme().Surface).Column().Gap(spaceM)
 		ui.Row(c).FillWidth().Height(44).AlignItems(ui.Center).Children(func() {
-			ui.Text(c, "会话设置").FontSize(17).Bold().Grow(1)
+			ui.Text(c, "会话设置").FontSize(mobileHeadline).Bold().Grow(1)
 			// The first focusable control is the close button, so opening the
 			// sheet does not summon a keyboard before the name is tapped.
 			if ui.ButtonBase(c).Label("取消").Role(ui.RoleButton).Size(44, 44).Radius(22).Background(c.Theme().Background).Children(func() {
@@ -326,27 +326,27 @@ func (m *mobileApp) sessionEditor(c *ui.Context) {
 				break
 			}
 		}
-		ui.Column(c).FillWidth().Padding(10, 12).Radius(12).Background(c.Theme().Background).Children(func() {
-			ui.Row(c).FillWidth().Gap(8).Children(func() {
-				ui.Text(c, "名称").FontSize(12).TextColor(c.Theme().TextMuted).Grow(1)
-				ui.Text(c, "留空使用原名称").FontSize(11).TextColor(c.Theme().TextMuted)
+		ui.Column(c).FillWidth().Padding(spaceM, spaceL).Radius(radiusL).Background(c.Theme().Background).Children(func() {
+			ui.Row(c).FillWidth().Gap(spaceM).Children(func() {
+				ui.Text(c, "名称").FontSize(textSmall).TextColor(c.Theme().TextMuted).Grow(1)
+				ui.Text(c, "留空使用原名称").FontSize(textCaption).TextColor(c.Theme().TextMuted)
 			})
-			ui.TextInputBase(c, &m.editingName).Label("会话名称").Placeholder(originalName).FontSize(16).FillWidth().Height(40).
+			ui.TextInputBase(c, &m.editingName).Label("会话名称").Placeholder(originalName).FontSize(mobileCallout).FillWidth().Height(40).
 				InputOptions(ui.InputOptions{Return: ui.ReturnDone, Correction: ui.CorrectionOff, Capitalization: ui.CapitalizeNone})
 		})
-		ui.SwitchBase(c, &m.editingPinned).Label("置顶会话").FillWidth().Height(48).Padding(0, 12).Radius(12).Background(c.Theme().Background).Gap(10).Children(func() {
+		ui.SwitchBase(c, &m.editingPinned).Label("置顶会话").FillWidth().Height(48).Padding(0, spaceL).Radius(radiusL).Background(c.Theme().Background).Gap(spaceM).Children(func() {
 			ui.Icon(c, icon("pin")).Size(17, 17).TextColor(c.Theme().TextMuted)
-			ui.Text(c, "置顶").FontSize(15).Grow(1)
+			ui.Text(c, "置顶").FontSize(mobileBody).Grow(1)
 			color, left := c.Theme().Border, float32(2)
 			if m.editingPinned {
 				color, left = c.Theme().Accent, 18
 			}
 			ui.Box(c).Size(36, 20).Radius(10).Background(color).Children(func() {
-				ui.Box(c).Absolute().Left(left).Top(2).Size(16, 16).Radius(8).Background(ui.RGB(255, 255, 255))
+				ui.Box(c).Absolute().Left(left).Top(2).Size(16, 16).Radius(8).Background(colorsOf(c).onAccent)
 			})
 		})
-		ui.Row(c).FillWidth().Gap(12).Children(func() {
-			if ui.ButtonBase(c).Label("结束会话").Role(ui.RoleButton).Size(44, 44).Radius(12).Background(c.Theme().Background).Disabled(!m.connectionUsable() || m.closingSession != "").Children(func() {
+		ui.Row(c).FillWidth().Gap(spaceL).Children(func() {
+			if ui.ButtonBase(c).Label("结束会话").Role(ui.RoleButton).Size(44, 44).Radius(radiusL).Background(c.Theme().Background).Disabled(!m.connectionUsable() || m.closingSession != "").Children(func() {
 				ui.Icon(c, icon("trash-2")).Size(17, 17).TextColor(c.Theme().Danger)
 			}).Clicked() {
 				for _, s := range m.sessions {
@@ -357,8 +357,8 @@ func (m *mobileApp) sessionEditor(c *ui.Context) {
 				}
 			}
 			ui.Box(c).Grow(1)
-			if ui.ButtonBase(c).Label("保存").Role(ui.RoleButton).Size(72, 44).Radius(12).Background(c.Theme().Accent).Children(func() {
-				ui.Icon(c, icon("check")).Size(19, 19).TextColor(ui.RGB(255, 255, 255))
+			if ui.ButtonBase(c).Label("保存").Role(ui.RoleButton).Size(72, 44).Radius(radiusL).Background(c.Theme().Accent).Children(func() {
+				ui.Icon(c, icon("check")).Size(19, 19).TextColor(colorsOf(c).onAccent)
 			}).Clicked() {
 				m.setSessionPreference(m.editingSession, m.editingName, m.editingPinned)
 				m.editingOpen = false
@@ -375,12 +375,12 @@ func (m *mobileApp) sessionEndDialog(c *ui.Context) {
 		return
 	}
 	dialog := ui.DialogBase(c, &m.endingOpen, func(back, panel ui.Element) {
-		back.Background(ui.RGBA(0, 0, 0, 0.3))
-		panel.Width(330).MaxWidth(330).Padding(20).Radius(18).Background(c.Theme().Surface).Column().Gap(14)
-		ui.Text(c, "结束这个会话？").FontSize(18).Bold()
-		ui.Text(c, m.sessionTitle(m.endingSession)).FontSize(15).FillWidth().SingleLine().Ellipsis("…")
-		ui.Text(c, "这会终止此会话中的终端和正在运行的任务。").FontSize(14).LineHeight(1.4).TextColor(c.Theme().TextMuted).FillWidth()
-		ui.Row(c).FillWidth().Gap(12).Children(func() {
+		back.Background(colorsOf(c).scrim)
+		panel.Width(330).MaxWidth(330).Padding(spaceXL).Radius(radiusXL).Background(c.Theme().Surface).Column().Gap(spaceL)
+		ui.Text(c, "结束这个会话？").FontSize(mobileTitle).Bold()
+		ui.Text(c, m.sessionTitle(m.endingSession)).FontSize(mobileBody).FillWidth().SingleLine().Ellipsis("…")
+		ui.Text(c, "这会终止此会话中的终端和正在运行的任务。").FontSize(mobileSubhead).LineHeight(1.4).TextColor(c.Theme().TextMuted).FillWidth()
+		ui.Row(c).FillWidth().Gap(spaceL).Children(func() {
 			if ui.ButtonBase(c).Label("取消").Role(ui.RoleButton).Height(44).Grow(1).Children(func() {
 				ui.Icon(c, icon("x")).Size(22, 22).TextColor(c.Theme().TextMuted)
 			}).Clicked() {

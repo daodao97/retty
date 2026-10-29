@@ -152,7 +152,7 @@ func (b *desktopFiles) treeEntries() []fileTreeEntry {
 
 func (a *App) fileTreeRow(c *ui.Context, k *colors, b *desktopFiles, item fileTreeEntry) {
 	e, path := item.entry, item.path
-	row := ui.Row(c.Key(path)).Label(e.Name).Role(ui.RoleTreeItem).Focusable().Cursor(ui.CursorPointer).Height(30).FillWidth().Radius(5).Padding(0, 8, 0, float32(8+min(item.depth, 12)*16)).Gap(6).AlignItems(ui.Center)
+	row := ui.Row(c.Key(path)).Label(e.Name).Role(ui.RoleTreeItem).Focusable().Cursor(ui.CursorPointer).Height(30).FillWidth().Radius(radiusS).Padding(0, 8, 0, float32(8+min(item.depth, 12)*16)).Gap(spaceS).AlignItems(ui.Center)
 	if b.preview == path {
 		row.Background(k.panelSel)
 	} else if row.Hovered() {
@@ -171,20 +171,20 @@ func (a *App) fileTreeRow(c *ui.Context, k *colors, b *desktopFiles, item fileTr
 			ui.Box(c).Width(12).Shrink(0)
 		}
 		ui.Icon(c, icon(glyph)).Size(14, 14).Shrink(0).TextColor(k.iconMuted)
-		ui.Text(c, e.Name).FontSize(11.5).Grow(1).MinWidth(0).SingleLine().Ellipsis("…").TextColor(k.text).Tooltip(path)
+		ui.Text(c, e.Name).FontSize(textCaption).Grow(1).MinWidth(0).SingleLine().Ellipsis("…").TextColor(k.text).Tooltip(path)
 		if e.Status != "" {
 			color := k.busy
 			if strings.Contains(e.Status, "D") {
-				color = ui.Hex("#e56c6c")
+				color = colorsOf(c).danger
 			}
-			ui.Text(c, e.Status).FontSize(10).Font("monospace").TextColor(color).Shrink(0)
+			ui.Text(c, e.Status).FontSize(textCaption).Font("monospace").TextColor(color).Shrink(0)
 		}
 		if d := b.dirs[path]; d != nil {
 			if d.loading {
 				ui.Spinner(c).Size(12, 12)
 			}
 			if d.err != "" || d.truncated {
-				ui.Text(c, "!").FontSize(10).Tooltip(d.err + "（目录最多 5000 项）")
+				ui.Text(c, "!").FontSize(textCaption).Tooltip(d.err + "（目录最多 5000 项）")
 			}
 		}
 	})

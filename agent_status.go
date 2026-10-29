@@ -97,13 +97,13 @@ func (a *App) agentIndicator(c *ui.Context, k *colors, p *Pane, s rex.AgentState
 	e.Children(func() {
 		switch s.State {
 		case agents.Waiting:
-			ui.Text(c, "Ⅱ").FontSize(11).FontWeight(700).TextColor(k.attention)
+			ui.Text(c, "Ⅱ").FontSize(textCaption).FontWeight(700).TextColor(k.attention)
 		case agents.Running:
 			ui.Box(c).Size(6, 6).Radius(3).Background(k.busy)
 		case agents.Completed:
 			ui.Icon(c, icon("check")).Size(12, 12).TextColor(k.busy)
 		case agents.Failed:
-			ui.Icon(c, icon("x")).Size(12, 12).TextColor(ui.Hex("#e56c6c"))
+			ui.Icon(c, icon("x")).Size(12, 12).TextColor(colorsOf(c).danger)
 		default:
 			ui.Icon(c, icon("circle-dot")).Size(9, 9).TextColor(k.textFaint)
 		}

@@ -43,7 +43,7 @@ func (a *App) desktopConnectionDialog(c *ui.Context, k *colors) {
 }
 
 func (a *App) desktopConnectionHeader(c *ui.Context) {
-	ui.Row(c).FillWidth().Height(48).Padding(0, 12).Gap(6).AlignItems(ui.Center).Background(colorsOf(c).track).
+	ui.Row(c).FillWidth().Height(48).Padding(0, spaceL).Gap(spaceS).AlignItems(ui.Center).Background(colorsOf(c).track).
 		BorderWidth(0, 0, 1, 0).BorderColor(colorsOf(c).headerBorder).Children(func() {
 		title := "连接"
 		if a.desktops.showLocal || a.desktops.selected != nil {
@@ -56,9 +56,9 @@ func (a *App) desktopConnectionHeader(c *ui.Context) {
 				title = h.name()
 			}
 		} else {
-			ui.Icon(c, icon("plug-connected")).Size(17, 17).TextColor(c.Theme().Accent).Margin(0, 5)
+			ui.Icon(c, icon("plug-connected")).Size(17, 17).TextColor(c.Theme().Accent).Margin(0, spaceXS)
 		}
-		ui.Text(c, title).FontSize(14).FontWeight(600).Grow(1).MinWidth(0).SingleLine().Ellipsis("…").PassThrough()
+		ui.Text(c, title).FontSize(textTitle).FontWeight(600).Grow(1).MinWidth(0).SingleLine().Ellipsis("…").PassThrough()
 		if h := a.desktops.selected; h != nil && !a.desktops.showLocal {
 			if desktopConnectionIconAction(c, "新建远端会话", "plus").Disabled(!h.connected() || h.creating).Clicked() {
 				a.createDesktopSession(h, "", nil, false)
@@ -88,17 +88,17 @@ func (a *App) pasteDesktopConnection(c *ui.Context) {
 }
 
 func (a *App) desktopConnectionHome(c *ui.Context) {
-	ui.Scroll(c.Key("desktop-connection-home")).Grow(1).MinHeight(0).FillWidth().Padding(16).Gap(14).Children(func() {
-		desktopConnectionGroup(c).Padding(14).Gap(12).Children(func() {
-			ui.Row(c).Gap(10).AlignItems(ui.Center).Children(func() {
-				ui.Box(c).Size(36, 36).Radius(8).Background(colorsOf(c).panelSel).Center().Children(func() {
+	ui.Scroll(c.Key("desktop-connection-home")).Grow(1).MinHeight(0).FillWidth().Padding(spaceXL).Gap(spaceL).Children(func() {
+		desktopConnectionGroup(c).Padding(spaceL).Gap(spaceL).Children(func() {
+			ui.Row(c).Gap(spaceM).AlignItems(ui.Center).Children(func() {
+				ui.Box(c).Size(36, 36).Radius(radiusM).Background(colorsOf(c).panelSel).Center().Children(func() {
 					ui.Icon(c, icon("plug-connected")).Size(20, 20).TextColor(c.Theme().Accent)
 				})
 				desktopConnectionText(c, mobileListTextOptions{Title: "连接另一台电脑", Subtitle: "也可以连接运行 Retty 的服务器"})
 			})
 			if ui.PrimaryButton(c, "").Label("粘贴桌面连接码").Role(ui.RoleButton).Height(34).FillWidth().Children(func() {
 				ui.Icon(c, icon("clipboard-paste")).Size(15, 15)
-				ui.Text(c, "粘贴连接码").FontSize(13)
+				ui.Text(c, "粘贴连接码").FontSize(textBody)
 			}).Clicked() {
 				a.pasteDesktopConnection(c)
 			}
@@ -110,7 +110,7 @@ func (a *App) desktopConnectionHome(c *ui.Context) {
 		a.desktopRecentSessionRows(c)
 		a.desktopIncomingRows(c)
 	})
-	ui.Row(c).FillWidth().Height(64).Shrink(0).Padding(0, 16).Gap(9).AlignItems(ui.Center).
+	ui.Row(c).FillWidth().Height(64).Shrink(0).Padding(0, spaceXL).Gap(spaceM).AlignItems(ui.Center).
 		Background(colorsOf(c).track).BorderWidth(1, 0, 0, 0).BorderColor(colorsOf(c).headerBorder).Children(func() {
 		mobileListIcon(c, "monitor", colorsOf(c).iconMuted)
 		name := a.hello.Host.Name
@@ -177,13 +177,13 @@ func (a *App) desktopHostRows(c *ui.Context) {
 						mobileListIcon(c, platform.Glyph, colorsOf(c).iconMuted)
 					}
 					desktopConnectionText(c, mobileListTextOptions{Title: h.name()})
-					ui.Row(c).Gap(5).Shrink(0).AlignItems(ui.Center).Children(func() {
+					ui.Row(c).Gap(spaceXS).Shrink(0).AlignItems(ui.Center).Children(func() {
 						if h.busy {
 							mobileReconnectIcon(c, 12, c.Theme().Accent)
 						} else {
 							ui.Box(c).Size(6, 6).Radius(3).Background(color)
 						}
-						ui.Text(c, status).FontSize(12).TextColor(c.Theme().TextMuted)
+						ui.Text(c, status).FontSize(textSmall).TextColor(c.Theme().TextMuted)
 					})
 					if !selecting {
 						a.desktopQualityTip(c, h)
@@ -255,10 +255,10 @@ func (a *App) desktopRecentSessionRows(c *ui.Context) {
 }
 
 func (a *App) desktopHostSessions(c *ui.Context, h *desktopHost) {
-	ui.Scroll(c.Key("desktop-sessions-" + h.key)).Grow(1).MinHeight(0).FillWidth().Padding(16).Gap(16).Children(func() {
+	ui.Scroll(c.Key("desktop-sessions-" + h.key)).Grow(1).MinHeight(0).FillWidth().Padding(spaceXL).Gap(spaceXL).Children(func() {
 		ui.Row(c).FillWidth().AlignItems(ui.Center).Children(func() {
-			ui.Text(c, "会话").FontSize(13).TextColor(c.Theme().TextMuted).Grow(1)
-			ui.Text(c, fmt.Sprint(len(h.sessions))).FontSize(13).TextColor(c.Theme().TextMuted)
+			ui.Text(c, "会话").FontSize(textBody).TextColor(c.Theme().TextMuted).Grow(1)
+			ui.Text(c, fmt.Sprint(len(h.sessions))).FontSize(textBody).TextColor(c.Theme().TextMuted)
 			desktopConnectionIconAction(c, "管理电脑 "+h.name(), "settings-2").Menu(func(m *ui.Menu) {
 				if m.Item("断开连接").Disabled(!h.connected() && !h.busy).Chosen() {
 					a.laterFrom(a.services, func() { a.disconnectDesktop(h) })
@@ -277,7 +277,7 @@ func (a *App) desktopHostSessions(c *ui.Context, h *desktopHost) {
 				body = h.err
 			}
 			connectionStatusCard(c, title, body, h.busy, func() {
-				ui.Row(c).FillWidth().Gap(4).Children(func() {
+				ui.Row(c).FillWidth().Gap(spaceXS).Children(func() {
 					if desktopConnectionIconAction(c, "重连电脑 "+h.name(), "rotate-ccw").Disabled(h.busy).Clicked() {
 						a.connectDesktop(h)
 					}
@@ -288,7 +288,7 @@ func (a *App) desktopHostSessions(c *ui.Context, h *desktopHost) {
 			})
 		}
 		if a.desktops.err != "" {
-			ui.Text(c, a.desktops.err).FontSize(13).TextColor(c.Theme().Danger)
+			ui.Text(c, a.desktops.err).FontSize(textBody).TextColor(c.Theme().Danger)
 		}
 		desktopConnectionGroup(c).Children(func() {
 			if len(h.sessions) == 0 {
@@ -316,16 +316,17 @@ func (a *App) desktopHostSessions(c *ui.Context, h *desktopHost) {
 }
 
 func (a *App) desktopLocalConnection(c *ui.Context) {
-	ui.Scroll(c.Key("desktop-local-connection")).Grow(1).MinHeight(0).FillWidth().Padding(16).Gap(16).Children(func() {
-		ui.Text(c, "手机扫码，或在另一台电脑粘贴连接码。").FontSize(13).TextColor(c.Theme().TextMuted)
+	ui.Scroll(c.Key("desktop-local-connection")).Grow(1).MinHeight(0).FillWidth().Padding(spaceXL).Gap(spaceXL).Children(func() {
+		ui.Text(c, "手机扫码，或在另一台电脑粘贴连接码。").FontSize(textBody).TextColor(c.Theme().TextMuted)
 		p := a.phone
 		if p == nil {
 			return
 		}
-		desktopConnectionGroup(c).Padding(20).Gap(12).AlignItems(ui.Center).Children(func() {
+		desktopConnectionGroup(c).Padding(spaceXL).Gap(spaceL).AlignItems(ui.Center).Children(func() {
 			if len(p.qr) > 0 {
+				// A QR code reads on white in either window.
 				ui.Box(c.Key("phone-qr")).Label("手机连接二维码").Size(240, 240).Background(ui.Hex("#ffffff")).Draw(func(painter *ui.Painter, r ui.Rect) { paintQR(painter, r, p.qr) })
-				ui.Row(c).FillWidth().Justify(ui.Center).Gap(12).Children(func() {
+				ui.Row(c).FillWidth().Justify(ui.Center).Gap(spaceL).Children(func() {
 					if desktopConnectionIconAction(c, "复制连接码", "copy").Tooltip("复制连接码").Clicked() {
 						c.WriteClipboard(p.link)
 					}
@@ -335,13 +336,13 @@ func (a *App) desktopLocalConnection(c *ui.Context) {
 				})
 			} else if p.busy || p.revoking {
 				ui.Spinner(c).Size(20, 20)
-				ui.Text(c, "正在准备连接…").FontSize(13).TextColor(c.Theme().TextMuted)
+				ui.Text(c, "正在准备连接…").FontSize(textBody).TextColor(c.Theme().TextMuted)
 				if p.busy && !p.revoking && desktopConnectionIconAction(c, "取消开启连接", "x").Clicked() {
 					a.stopPhonePair()
 				}
 			} else {
 				if p.message != "" {
-					ui.Text(c, p.message).FontSize(13).TextColor(c.Theme().TextMuted)
+					ui.Text(c, p.message).FontSize(textBody).TextColor(c.Theme().TextMuted)
 				}
 				if ui.PrimaryButton(c, "开启连接").Label("开启本机连接").Height(44).FillWidth().Clicked() {
 					a.startPhonePair()
@@ -375,17 +376,17 @@ func (a *App) desktopIncomingRows(c *ui.Context) {
 	}
 	ui.Column(c).FillWidth().Children(func() {
 		desktopConnectionSection(c, "最近接入此电脑", func() {
-			ui.Text(c, fmt.Sprint(len(active))+" 在线").FontSize(10).TextColor(colorsOf(c).textFaint)
+			ui.Text(c, fmt.Sprint(len(active))+" 在线").FontSize(textCaption).TextColor(colorsOf(c).textFaint)
 		})
 		desktopConnectionGroup(c).Children(func() {
 			if len(incoming) == 0 {
-				ui.Text(c, "手机或其他电脑连接后，会保留在这里").FontSize(11).TextColor(colorsOf(c).textFaint).Padding(14)
+				ui.Text(c, "手机或其他电脑连接后，会保留在这里").FontSize(textCaption).TextColor(colorsOf(c).textFaint).Padding(spaceL)
 			}
 			for i, d := range incoming {
 				if i > 0 {
 					desktopConnectionDivider(c)
 				}
-				ui.Row(c.Key("incoming-"+d.ID)).FillWidth().Height(60).Padding(0, 12).Gap(9).AlignItems(ui.Center).Children(func() {
+				ui.Row(c.Key("incoming-"+d.ID)).FillWidth().Height(60).Padding(0, spaceL).Gap(spaceM).AlignItems(ui.Center).Children(func() {
 					glyph := "monitor"
 					if strings.Contains(strings.ToLower(d.OS), "ios") || strings.Contains(strings.ToLower(d.OS), "android") {
 						glyph = "smartphone"
@@ -410,9 +411,9 @@ func (a *App) desktopIncomingRows(c *ui.Context) {
 						subtitle = "上次连接 " + d.Connected.Local().Format("01-02 15:04")
 					}
 					desktopConnectionText(c, mobileListTextOptions{Title: d.Name, Subtitle: subtitle})
-					ui.Row(c).Gap(4).AlignItems(ui.Center).Children(func() {
+					ui.Row(c).Gap(spaceXS).AlignItems(ui.Center).Children(func() {
 						ui.Box(c).Size(5, 5).Radius(3).Background(col)
-						ui.Text(c, status).FontSize(10).TextColor(col)
+						ui.Text(c, status).FontSize(textCaption).TextColor(col)
 					})
 					if disconnected {
 						if desktopConnectionIconAction(c, "允许设备 "+d.Name+" 重新连接", "plug-connected").Clicked() {
@@ -443,9 +444,9 @@ func remoteShortDir(dir, home string) string {
 }
 
 func (a *App) desktopOfflineBar(c *ui.Context, k *colors, h *desktopHost) {
-	ui.Row(c).FillWidth().Height(32).Padding(0, 10).Gap(8).AlignItems(ui.Center).Background(k.panel).Children(func() {
+	ui.Row(c).FillWidth().Height(32).Padding(0, spaceM).Gap(spaceM).AlignItems(ui.Center).Background(k.panel).Children(func() {
 		ui.Icon(c, icon("monitor")).Size(13, 13).TextColor(k.iconMuted)
-		ui.Text(c, h.name()+" · 连接已断开，远端会话继续运行").FontSize(11).Grow(1).MinWidth(0).SingleLine().Ellipsis("…").TextColor(k.textMuted)
+		ui.Text(c, h.name()+" · 连接已断开，远端会话继续运行").FontSize(textCaption).Grow(1).MinWidth(0).SingleLine().Ellipsis("…").TextColor(k.textMuted)
 		if h.busy {
 			ui.Spinner(c).Size(14, 14)
 		} else if ui.Button(c, "重连").Label("重连远端电脑").Clicked() {

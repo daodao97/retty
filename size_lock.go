@@ -76,11 +76,11 @@ func (a *App) sizeLockBar(c *ui.Context, k *colors, p *Pane) {
 	if device == "" {
 		device = "iPhone"
 	}
-	ui.Row(c.Key("size-lock")).Height(32).Padding(0, 8+paneActionInset(p), 0, 12).Gap(8).
+	ui.Row(c.Key("size-lock")).Height(32).Padding(0, 8+paneActionInset(p), 0, 12).Gap(spaceM).
 		AlignItems(ui.Center).Background(k.panel).BorderWidth(0, 0, 1, 0).BorderColor(k.panelBorder).
 		Children(func() {
 			ui.Text(c, fmt.Sprintf("%s 正在使用此会话（%d×%d），窗格尺寸已锁定", device, p.terminal().info.Cols, p.terminal().info.Rows)).
-				FontSize(12).TextColor(k.textMuted).Grow(1).MinWidth(0).SingleLine().Ellipsis("…")
+				FontSize(textSmall).TextColor(k.textMuted).Grow(1).MinWidth(0).SingleLine().Ellipsis("…")
 			if ui.Button(c, "解锁").Disabled(p.terminal().unlocking).Label("Unlock Size").Clicked() {
 				a.unlockSize(p)
 			}

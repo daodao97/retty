@@ -72,12 +72,12 @@ func (a *App) findStep(direction int) {
 // findBar belongs to its pane, so switching tabs or focusing another pane
 // never searches a different session's output by accident.
 func (a *App) findBar(c *ui.Context, k *colors, t *Tab, p *Pane) {
-	bar := ui.Row(c.Key("find")).Height(36).Padding(0, 8+paneActionInset(p), 0, 12).Gap(6).
+	bar := ui.Row(c.Key("find")).Height(36).Padding(0, 8+paneActionInset(p), 0, 12).Gap(spaceS).
 		AlignItems(ui.Center).Background(k.panel).BorderWidth(0, 0, 1, 0).BorderColor(k.panelBorder).
 		Children(func() {
 			ui.Icon(c, icon("search")).Size(14, 14).TextColor(k.textFaint).Shrink(0)
 			in := ui.TextInputBase(c, &p.terminal().find.query).Label("Find in Terminal").Placeholder("Find in terminal…").
-				Grow(1).MinWidth(24).FontSize(13).TextColor(k.text)
+				Grow(1).MinWidth(24).FontSize(textBody).TextColor(k.text)
 			in.HandleInput(func(ev ui.InputEvent) bool {
 				if ev.Kind != ui.InputKeyDown || ev.Key != ui.KeyEnter || (ev.Mods != 0 && ev.Mods != ui.Shift) {
 					return false
@@ -129,7 +129,7 @@ func (a *App) findBar(c *ui.Context, k *colors, t *Tab, p *Pane) {
 			if state.Busy {
 				c.After(100 * time.Millisecond)
 			}
-			ui.Text(c, status).FontSize(11).TextColor(k.textFaint).Shrink(0).SingleLine().Role(ui.RoleStatus)
+			ui.Text(c, status).FontSize(textCaption).TextColor(k.textFaint).Shrink(0).SingleLine().Role(ui.RoleStatus)
 			prev := iconButton(c, k, "chevron-up", "Find Previous", 24, 14).Focusable().Disabled(state.Total == 0).Tooltip("Previous match  ⇧Enter / ⇧⌘G")
 			if prev.Clicked() {
 				p.terminal().term.SearchNext(-1)

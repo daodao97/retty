@@ -163,13 +163,13 @@ func (a *App) paneGitBar(c *ui.Context, k *colors, t *Tab, p *Pane) {
 	label := gitSummary(s)
 	tip := fmt.Sprintf("%s\n%s\n%d 个变更文件 · 上游 ↑%d ↓%d\n打开此窗格的 Git 变更", label, s.Root, s.Files, s.Ahead, s.Behind)
 	b := ui.ButtonBase(c.Key("pane-git")).Label("Git 变更 "+label).Tooltip(tip).
-		FillWidth().Height(23).Shrink(0).Padding(0, 12).Gap(6).AlignItems(ui.Center).Cursor(ui.CursorPointer).FocusRing(false)
+		FillWidth().Height(23).Shrink(0).Padding(0, spaceL).Gap(spaceS).AlignItems(ui.Center).Cursor(ui.CursorPointer).FocusRing(false)
 	if b.Hovered() || b.FocusVisible() {
 		b.Background(k.hover)
 	}
 	b.Children(func() {
 		ui.Icon(c, icon("git-branch")).Size(11, 11).TextColor(k.iconMuted).Shrink(0)
-		ui.Text(c, label).FontSize(10).TextColor(k.textFaint).SingleLine().Ellipsis("…").Grow(1).MinWidth(0)
+		ui.Text(c, label).FontSize(textCaption).TextColor(k.textFaint).SingleLine().Ellipsis("…").Grow(1).MinWidth(0)
 	})
 	if b.Clicked() {
 		a.later(c, func() { a.openPaneChanges(t, p, s.Root) })

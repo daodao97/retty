@@ -14,24 +14,24 @@ func (m *mobileApp) sessionSettingsDialog(c *ui.Context) {
 		m.deviceNameOpen = false
 	}
 	ui.DialogBase(c, &m.sessionSettingsOpen, func(back, panel ui.Element) {
-		back.Background(ui.RGBA(0, 0, 0, .4)).Column().Justify(ui.End).AlignItems(ui.Center).Padding(12)
-		panel.Label("会话列表设置面板").FillWidth().MaxWidth(480).MaxHeight(c.Root().Bounds().H - 24).Padding(16).Radius(20).Background(c.Theme().Surface).Column().Gap(12).Clip()
+		back.Background(colorsOf(c).sheetScrim).Column().Justify(ui.End).AlignItems(ui.Center).Padding(spaceL)
+		panel.Label("会话列表设置面板").FillWidth().MaxWidth(480).MaxHeight(c.Root().Bounds().H - 24).Padding(spaceXL).Radius(radiusSheet).Background(c.Theme().Surface).Column().Gap(spaceL).Clip()
 		ui.Row(c).FillWidth().Height(40).Shrink(0).AlignItems(ui.Center).Children(func() {
-			ui.Text(c, "会话列表设置").FontSize(17).Bold().Grow(1)
-			if ui.ButtonBase(c).Label("关闭会话列表设置").Role(ui.RoleButton).Size(40, 40).Radius(20).Background(c.Theme().Background).Children(func() {
+			ui.Text(c, "会话列表设置").FontSize(mobileHeadline).Bold().Grow(1)
+			if ui.ButtonBase(c).Label("关闭会话列表设置").Role(ui.RoleButton).Size(40, 40).Radius(radiusSheet).Background(c.Theme().Background).Children(func() {
 				ui.Icon(c, icon("x")).Size(16, 16).TextColor(c.Theme().TextMuted)
 			}).Clicked() {
 				m.sessionSettingsOpen = false
 			}
 		})
-		ui.Scroll(c.Key("mobile-settings-options")).FillWidth().MinHeight(0).Shrink(1).Gap(12).Children(func() {
-			if ui.ButtonBase(c).Label("重命名连接设备").Role(ui.RoleButton).FillWidth().MinHeight(72).Padding(12).Radius(12).Background(c.Theme().Background).Gap(12).AlignItems(ui.Center).Children(func() {
-				ui.Box(c).Size(32, 32).Shrink(0).Radius(10).Background(c.Theme().Surface).Center().Children(func() {
+		ui.Scroll(c.Key("mobile-settings-options")).FillWidth().MinHeight(0).Shrink(1).Gap(spaceL).Children(func() {
+			if ui.ButtonBase(c).Label("重命名连接设备").Role(ui.RoleButton).FillWidth().MinHeight(72).Padding(spaceL).Radius(radiusL).Background(c.Theme().Background).Gap(spaceL).AlignItems(ui.Center).Children(func() {
+				ui.Box(c).Size(32, 32).Shrink(0).Radius(radiusL).Background(c.Theme().Surface).Center().Children(func() {
 					ui.Icon(c, icon("monitor")).Size(17, 17).TextColor(c.Theme().TextMuted)
 				})
-				ui.Column(c).Grow(1).MinWidth(0).Gap(4).Children(func() {
-					ui.Text(c, "设备名称").FontSize(15)
-					ui.Text(c, m.connectedDevice().displayName()).FontSize(12).TextColor(c.Theme().TextMuted).FillWidth().SingleLine().Ellipsis("…")
+				ui.Column(c).Grow(1).MinWidth(0).Gap(spaceXS).Children(func() {
+					ui.Text(c, "设备名称").FontSize(mobileBody)
+					ui.Text(c, m.connectedDevice().displayName()).FontSize(textSmall).TextColor(c.Theme().TextMuted).FillWidth().SingleLine().Ellipsis("…")
 				})
 				ui.Icon(c, icon("pencil")).Size(16, 16).Shrink(0).TextColor(c.Theme().TextMuted)
 			}).Clicked() {
@@ -47,14 +47,14 @@ func (m *mobileApp) sessionSettingsDialog(c *ui.Context) {
 			if mobileSettingSwitch(c, &voiceEnabled, "语音输入", "mic", "语音输入", "在会话页面显示按住说话区域").Changed() {
 				m.setVoiceEnabled(voiceEnabled)
 			}
-			ui.Column(c).FillWidth().Padding(12).Radius(12).Background(c.Theme().Background).Gap(8).Children(func() {
-				ui.Text(c, "标题文件夹名位置").FontSize(15)
+			ui.Column(c).FillWidth().Padding(spaceL).Radius(radiusL).Background(c.Theme().Background).Gap(spaceM).Children(func() {
+				ui.Text(c, "标题文件夹名位置").FontSize(mobileBody)
 				selected := titleFolderPositionIndex(m.titleFolderPosition)
 				if ui.Segmented(c, &selected, "前面", "后面", "无").Label("标题文件夹名位置").FillWidth().Height(44).Changed() {
 					m.setTitleFolderPosition(titleFolderPositions[selected])
 				}
 				preview := positionTitleFolder("会话标题 | 文件夹名", m.titleFolderPosition)
-				ui.Text(c, preview).FontSize(12).TextColor(c.Theme().TextMuted).FillWidth().SingleLine().Ellipsis("…")
+				ui.Text(c, preview).FontSize(textSmall).TextColor(c.Theme().TextMuted).FillWidth().SingleLine().Ellipsis("…")
 			})
 			if m.hello.Version >= 6 {
 				enabled := m.sizeLock
@@ -63,8 +63,8 @@ func (m *mobileApp) sessionSettingsDialog(c *ui.Context) {
 				}
 			}
 			if m.pushError != "" && !m.pushDisabled {
-				ui.Row(c).FillWidth().Gap(8).AlignItems(ui.Center).Children(func() {
-					ui.Text(c, m.pushError).FontSize(12).LineHeight(1.4).TextColor(c.Theme().TextMuted).Grow(1).MinWidth(0)
+				ui.Row(c).FillWidth().Gap(spaceM).AlignItems(ui.Center).Children(func() {
+					ui.Text(c, m.pushError).FontSize(textSmall).LineHeight(1.4).TextColor(c.Theme().TextMuted).Grow(1).MinWidth(0)
 					if m.notificationDenied && mobileIconAction(c, "打开通知设置", "chevron-right").Clicked() {
 						go mygo.Permissions.OpenSettings()
 					}
@@ -114,7 +114,7 @@ func (m *mobileApp) setTitleFolderPosition(position string) {
 }
 
 func mobileSettingSwitch(c *ui.Context, enabled *bool, label, glyph, title, description string) ui.Element {
-	switchRow := ui.SwitchBase(c, enabled).Label(label).FillWidth().MinHeight(72).Padding(12).Radius(12).Background(c.Theme().Background).Gap(12).AlignItems(ui.Center)
+	switchRow := ui.SwitchBase(c, enabled).Label(label).FillWidth().MinHeight(72).Padding(spaceL).Radius(radiusL).Background(c.Theme().Background).Gap(spaceL).AlignItems(ui.Center)
 	on := float32(0)
 	if *enabled {
 		on = 1
@@ -125,16 +125,16 @@ func mobileSettingSwitch(c *ui.Context, enabled *bool, label, glyph, title, desc
 		if *enabled {
 			color = c.Theme().Accent
 		}
-		ui.Box(c).Size(32, 32).Shrink(0).Radius(10).Background(c.Theme().Surface).Center().Children(func() {
+		ui.Box(c).Size(32, 32).Shrink(0).Radius(radiusL).Background(c.Theme().Surface).Center().Children(func() {
 			ui.Icon(c, icon(glyph)).Size(17, 17).TextColor(color)
 		})
-		ui.Column(c).Grow(1).MinWidth(0).Gap(4).Children(func() {
-			ui.Text(c, title).FontSize(15)
-			ui.Text(c, description).FontSize(12).LineHeight(1.4).TextColor(c.Theme().TextMuted).FillWidth()
+		ui.Column(c).Grow(1).MinWidth(0).Gap(spaceXS).Children(func() {
+			ui.Text(c, title).FontSize(mobileBody)
+			ui.Text(c, description).FontSize(textSmall).LineHeight(1.4).TextColor(c.Theme().TextMuted).FillWidth()
 		})
 		track, left := c.Theme().Border.Mix(c.Theme().Accent, position), 2+14*position
 		ui.Box(c).Size(36, 22).Shrink(0).Radius(11).Background(track).Children(func() {
-			ui.Box(c).Absolute().Left(left).Top(2).Size(18, 18).Radius(9).Background(ui.RGB(255, 255, 255))
+			ui.Box(c).Absolute().Left(left).Top(2).Size(18, 18).Radius(9).Background(colorsOf(c).onAccent)
 		})
 	})
 }

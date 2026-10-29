@@ -182,7 +182,7 @@ func (v *unavailablePane) label(*Pane) (string, string) {
 	return "不支持的窗格", string(v.saved.Kind)
 }
 func (v *unavailablePane) render(a *App, c *ui.Context, k *colors, p *Pane) {
-	ui.Text(c, "当前版本不支持此窗格："+string(v.saved.Kind)).Padding(16).TextColor(k.textMuted)
+	ui.Text(c, "当前版本不支持此窗格："+string(v.saved.Kind)).Padding(spaceXL).TextColor(k.textMuted)
 }
 func (v *unavailablePane) dispose(*App, *Pane, bool) {}
 func (v *unavailablePane) snapshot(*Pane) *savedNode { saved := v.saved; return &saved }

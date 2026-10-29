@@ -115,7 +115,7 @@ func (a *App) uploadPaneData(t *Tab, p *Pane, send func(context.Context, *rex.Cl
 
 func (a *App) fileUploadBar(c *ui.Context, k *colors, p *Pane) {
 	upload := p.terminal().upload
-	ui.Row(c.Key("file-upload")).Height(30).Padding(0, 8+paneActionInset(p), 0, 12).AlignItems(ui.Center).Gap(8).Background(k.panel).Children(func() {
+	ui.Row(c.Key("file-upload")).Height(30).Padding(0, 8+paneActionInset(p), 0, 12).AlignItems(ui.Center).Gap(spaceM).Background(k.panel).Children(func() {
 		message := "正在准备上传…"
 		if upload.prepared.Load() {
 			sent, total := upload.sent.Load(), upload.total.Load()
@@ -125,7 +125,7 @@ func (a *App) fileUploadBar(c *ui.Context, k *colors, p *Pane) {
 				message = fmt.Sprintf("上传文件 %.0f%% · %.1f / %.1f MB", float64(sent)*100/float64(total), float64(sent)/(1<<20), float64(total)/(1<<20))
 			}
 		}
-		ui.Text(c, message).FontSize(12).TextColor(k.textMuted).Grow(1)
+		ui.Text(c, message).FontSize(textSmall).TextColor(k.textMuted).Grow(1)
 		if iconButton(c, k, "x", "取消文件上传", 24, 13).Clicked() {
 			p.cancelFileUpload()
 		}

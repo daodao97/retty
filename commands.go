@@ -492,13 +492,13 @@ func (a *App) palette(c *ui.Context, k *colors) {
 	was := a.paletteOpen
 	dialog := ui.DialogBase(c, &a.paletteOpen, func(backdrop, panel ui.Element) {
 		backdrop.Background(k.backdrop).Justify(ui.Start).Padding(78, 0, 0, 0)
-		panel.Width(560).MaxHeight(440).Radius(16).Background(k.panel).Border(1, k.panelBorder).
-			Shadow(0, 24, 60, -8, ui.RGBA(0, 0, 0, 0.28)).Shadow(0, 2, 6, 0, ui.RGBA(0, 0, 0, 0.06)).Clip()
+		panel.Width(560).MaxHeight(440).Radius(radiusXL).Background(k.panel).Border(1, k.panelBorder).
+			Shadow(0, 24, 60, -8, k.dialogShadow).Shadow(0, 2, 6, 0, k.dialogShadowNear).Clip()
 		var choices ui.ComboboxParts
-		ui.Row(c).Padding(12, 16).Gap(10).AlignItems(ui.Center).BorderWidth(0, 0, 1, 0).BorderColor(k.panelBorder).Children(func() {
+		ui.Row(c).Padding(spaceL, spaceXL).Gap(spaceM).AlignItems(ui.Center).BorderWidth(0, 0, 1, 0).BorderColor(k.panelBorder).Children(func() {
 			ui.Icon(c, icon("search")).Size(17, 17).TextColor(k.textFaint)
 			choices = ui.ComboboxBase(c.Key("palette-input"), &a.paletteQuery)
-			choices.Input.Label("Search commands").Grow(1).FontSize(15).Placeholder("Type a command, a pane name, or ssh…").AutoFocus()
+			choices.Input.Label("Search commands").Grow(1).FontSize(textTitle).Placeholder("Type a command, a pane name, or ssh…").AutoFocus()
 		})
 		var items []paletteItem
 		choices.Inline(func(list ui.Element) {
@@ -506,14 +506,14 @@ func (a *App) palette(c *ui.Context, k *colors) {
 			items = a.paletteItems()
 			list.FillWidth()
 			listH := float32(min(max(len(items), 1)*34+12, 384))
-			ui.Scroll(c.Key("palette-options")).Height(listH).Padding(6).Children(func() {
+			ui.Scroll(c.Key("palette-options")).Height(listH).Padding(spaceS).Children(func() {
 				if len(items) == 0 {
-					ui.Text(c, a.paletteEmptyMessage()).FontSize(13).TextColor(k.textFaint).Padding(14)
+					ui.Text(c, a.paletteEmptyMessage()).FontSize(textBody).TextColor(k.textFaint).Padding(spaceL)
 				}
 				for _, it := range items {
 					// No Key: an option takes its click as Item returns, so
 					// re-keying it afterwards would lose the click.
-					row := choices.Item(it.id).Label(it.title).Height(34).Padding(0, 10).Gap(10).Radius(8).AlignItems(ui.Center).Cursor(ui.CursorPointer)
+					row := choices.Item(it.id).Label(it.title).Height(34).Padding(0, spaceM).Gap(spaceM).Radius(radiusM).AlignItems(ui.Center).Cursor(ui.CursorPointer)
 					if row.Highlighted() {
 						row.Background(k.panelSel)
 					} else if row.Hovered() {
@@ -521,13 +521,13 @@ func (a *App) palette(c *ui.Context, k *colors) {
 					}
 					row.Children(func() {
 						programIcon(c, it.glyph).Size(15, 15).TextColor(k.textMuted)
-						ui.Text(c, it.title).FontSize(13.5).FontWeight(500).TextColor(k.text).SingleLine().Ellipsis("…").Shrink(0.3).MinWidth(0)
+						ui.Text(c, it.title).FontSize(textBody).FontWeight(500).TextColor(k.text).SingleLine().Ellipsis("…").Shrink(0.3).MinWidth(0)
 						if it.detail != "" {
-							ui.Text(c, it.detail).FontSize(13).TextColor(k.textFaint).SingleLine().Ellipsis("…").Shrink(1).MinWidth(0)
+							ui.Text(c, it.detail).FontSize(textBody).TextColor(k.textFaint).SingleLine().Ellipsis("…").Shrink(1).MinWidth(0)
 						}
 						ui.Spacer(c)
 						if it.keys != "" {
-							ui.Text(c, it.keys).FontSize(12).TextColor(k.textFaint).Padding(2, 7).Radius(6).Background(k.hover).Shrink(0)
+							ui.Text(c, it.keys).FontSize(textSmall).TextColor(k.textFaint).Padding(space2XS, spaceS).Radius(radiusM).Background(k.hover).Shrink(0)
 						}
 					})
 				}

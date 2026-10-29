@@ -106,9 +106,9 @@ func (h *terminalHistory) view(c *ui.Context) {
 	ui.DialogBase(c.Key("terminal-history"), &h.open, func(backdrop, panel ui.Element) {
 		backdrop.Background(k.backdrop)
 		w, height := c.Size()
-		panel.Column().Width(min(1000, w-24)).Height(height - 48).Radius(12).Background(k.panel).Clip().Children(func() {
-			ui.Row(c).Padding(10, 12).Gap(8).AlignItems(ui.Center).Children(func() {
-				ui.Text(c, fmt.Sprintf("历史快照 · 最多 %d 行", max(h.rows, 512))).FontSize(13).Grow(1).SingleLine().Ellipsis("…")
+		panel.Column().Width(min(1000, w-24)).Height(height - 48).Radius(radiusL).Background(k.panel).Clip().Children(func() {
+			ui.Row(c).Padding(spaceM, spaceL).Gap(spaceM).AlignItems(ui.Center).Children(func() {
+				ui.Text(c, fmt.Sprintf("历史快照 · 最多 %d 行", max(h.rows, 512))).FontSize(textBody).Grow(1).SingleLine().Ellipsis("…")
 				if ui.Button(c, "加载更多").Disabled(h.busy || h.rows >= 8192).Clicked() {
 					h.load(min(max(h.rows, 512)*4, 8192))
 				}
@@ -117,10 +117,10 @@ func (h *terminalHistory) view(c *ui.Context) {
 				}
 			})
 			if h.busy {
-				ui.Text(c, "正在读取历史…").FontSize(12).Padding(0, 12, 8, 12)
+				ui.Text(c, "正在读取历史…").FontSize(textSmall).Padding(0, spaceL, spaceM, spaceL)
 			}
 			if h.err != "" {
-				ui.Text(c, h.err).FontSize(12).TextColor(c.Theme().Danger).Padding(0, 12, 8, 12)
+				ui.Text(c, h.err).FontSize(textSmall).TextColor(c.Theme().Danger).Padding(0, spaceL, spaceM, spaceL)
 			}
 			if h.term != nil {
 				terminal.View(c, h.term).Key("history-terminal").Fill().TextCaretFunc(nil).Label("历史终端")

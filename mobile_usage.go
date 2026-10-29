@@ -123,10 +123,10 @@ func (m *mobileApp) refreshUsage(force bool) {
 
 func (m *mobileApp) usageDialog(c *ui.Context) {
 	ui.DialogBase(c, &m.usage.open, func(back, panel ui.Element) {
-		back.Background(ui.RGBA(0, 0, 0, .4)).Column().Justify(ui.End).AlignItems(ui.Center).Padding(12)
-		panel.Label("订阅用量汇总面板").FillWidth().MaxWidth(480).MaxHeight(c.Root().Bounds().H - 40).Padding(16).Radius(20).Background(c.Theme().Surface).Column().Gap(12).Clip()
+		back.Background(colorsOf(c).sheetScrim).Column().Justify(ui.End).AlignItems(ui.Center).Padding(spaceL)
+		panel.Label("订阅用量汇总面板").FillWidth().MaxWidth(480).MaxHeight(c.Root().Bounds().H - 40).Padding(spaceXL).Radius(radiusSheet).Background(c.Theme().Surface).Column().Gap(spaceL).Clip()
 		ui.Row(c).FillWidth().Height(44).Shrink(0).AlignItems(ui.Center).Children(func() {
-			ui.Text(c, "订阅用量").FontSize(18).Bold().Grow(1)
+			ui.Text(c, "订阅用量").FontSize(mobileTitle).Bold().Grow(1)
 			if mobileIconAction(c, "刷新订阅用量", "rotate-ccw").Disabled(m.usage.busy).Clicked() {
 				m.refreshUsage(true)
 			}
@@ -135,10 +135,10 @@ func (m *mobileApp) usageDialog(c *ui.Context) {
 				m.cancelUsage()
 			}
 		})
-		ui.Scroll(c.Key("mobile-usage-hosts")).FillWidth().Shrink(1).MinHeight(0).Gap(14).Children(func() {
-			ui.Text(c, fmt.Sprintf("%d 台主机 · 各账号额度独立计算", len(m.usage.hosts))).FontSize(12).TextColor(c.Theme().TextMuted).FillWidth()
+		ui.Scroll(c.Key("mobile-usage-hosts")).FillWidth().Shrink(1).MinHeight(0).Gap(spaceL).Children(func() {
+			ui.Text(c, fmt.Sprintf("%d 台主机 · 各账号额度独立计算", len(m.usage.hosts))).FontSize(textSmall).TextColor(c.Theme().TextMuted).FillWidth()
 			if len(m.usage.hosts) == 0 {
-				ui.Text(c, "连接一台主机后，即可在这里查看 Codex 和 Claude 用量。").FontSize(14).LineHeight(1.5).FillWidth()
+				ui.Text(c, "连接一台主机后，即可在这里查看 Codex 和 Claude 用量。").FontSize(mobileSubhead).LineHeight(1.5).FillWidth()
 			}
 			for _, h := range m.usage.hosts {
 				mobileUsageHostView(c, h)
@@ -150,19 +150,19 @@ func (m *mobileApp) usageDialog(c *ui.Context) {
 	}
 }
 func mobileUsageHostView(c *ui.Context, h mobileUsageHost) {
-	ui.Column(c).FillWidth().Padding(14).Radius(14).Background(c.Theme().Background).Gap(12).Children(func() {
-		ui.Row(c).FillWidth().AlignItems(ui.Center).Gap(8).Children(func() {
+	ui.Column(c).FillWidth().Padding(spaceL).Radius(radiusL).Background(c.Theme().Background).Gap(spaceL).Children(func() {
+		ui.Row(c).FillWidth().AlignItems(ui.Center).Gap(spaceM).Children(func() {
 			ui.Icon(c, icon("monitor")).Size(16, 16).TextColor(c.Theme().TextMuted)
-			ui.Text(c, h.desktop.displayName()).FontSize(15).Bold().Grow(1).MinWidth(0).SingleLine().Ellipsis("…")
+			ui.Text(c, h.desktop.displayName()).FontSize(mobileBody).Bold().Grow(1).MinWidth(0).SingleLine().Ellipsis("…")
 			if h.busy {
 				ui.Spinner(c).Size(16, 16)
 			}
 		})
 		if h.error != "" {
-			ui.Text(c, h.error).FontSize(12).TextColor(c.Theme().Danger).FillWidth()
+			ui.Text(c, h.error).FontSize(textSmall).TextColor(c.Theme().Danger).FillWidth()
 		}
 		if !h.value.At.IsZero() {
-			ui.Text(c, "更新于 "+h.value.At.Local().Format("01-02 15:04")).FontSize(11).TextColor(c.Theme().TextMuted)
+			ui.Text(c, "更新于 "+h.value.At.Local().Format("01-02 15:04")).FontSize(textCaption).TextColor(c.Theme().TextMuted)
 		}
 		for _, r := range h.value.Readings {
 			mobileUsageReading(c, r)
@@ -170,7 +170,7 @@ func mobileUsageHostView(c *ui.Context, h mobileUsageHost) {
 	})
 }
 func mobileUsageReading(c *ui.Context, r agentusage.PublicReading) {
-	ui.Column(c).FillWidth().Gap(7).Children(func() {
+	ui.Column(c).FillWidth().Gap(spaceS).Children(func() {
 		name := r.Agent
 		if name == "codex" {
 			name = "Codex"
@@ -182,27 +182,27 @@ func mobileUsageReading(c *ui.Context, r agentusage.PublicReading) {
 		if r.Plan != "" {
 			title += " · " + r.Plan
 		}
-		ui.Text(c, title).FontSize(14).Bold().FillWidth()
+		ui.Text(c, title).FontSize(mobileSubhead).Bold().FillWidth()
 		if r.Account != "" {
-			ui.Text(c, r.Account).FontSize(11).TextColor(c.Theme().TextMuted).FillWidth().SingleLine().Ellipsis("…")
+			ui.Text(c, r.Account).FontSize(textCaption).TextColor(c.Theme().TextMuted).FillWidth().SingleLine().Ellipsis("…")
 		}
 		if r.Error != "" {
-			ui.Text(c, r.Error).FontSize(12).LineHeight(1.4).TextColor(c.Theme().TextMuted).FillWidth()
+			ui.Text(c, r.Error).FontSize(textSmall).LineHeight(1.4).TextColor(c.Theme().TextMuted).FillWidth()
 		}
 		for _, w := range r.Windows {
 			ui.Row(c).FillWidth().Children(func() {
-				ui.Text(c, w.Name).FontSize(12).Grow(1)
-				ui.Text(c, fmt.Sprintf("已用 %.0f%%", w.Used)).FontSize(12)
+				ui.Text(c, w.Name).FontSize(textSmall).Grow(1)
+				ui.Text(c, fmt.Sprintf("已用 %.0f%%", w.Used)).FontSize(textSmall)
 			})
 			ui.Box(c).FillWidth().Height(5).Radius(3).Background(c.Theme().Border).Children(func() {
 				ui.Box(c).WidthPercent(float32(max(0, min(100, w.Used)))).Height(5).Radius(3).Background(c.Theme().Accent)
 			})
 			if w.Reset != "" {
-				ui.Text(c, "重置 "+w.Reset).FontSize(11).TextColor(c.Theme().TextMuted)
+				ui.Text(c, "重置 "+w.Reset).FontSize(textCaption).TextColor(c.Theme().TextMuted)
 			}
 		}
 		if r.ResetCount != nil {
-			ui.Text(c, fmt.Sprintf("Codex 重置卡 · %d 张", *r.ResetCount)).FontSize(12).TextColor(c.Theme().Accent)
+			ui.Text(c, fmt.Sprintf("Codex 重置卡 · %d 张", *r.ResetCount)).FontSize(textSmall).TextColor(c.Theme().Accent)
 		}
 	})
 }

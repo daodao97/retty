@@ -121,12 +121,12 @@ func (a *App) retryAgentRestore(p *Pane) {
 }
 
 func (a *App) agentRecoveryBar(c *ui.Context, k *colors, p *Pane) {
-	ui.Row(c).Height(30).Padding(0, 10).AlignItems(ui.Center).Gap(8).Background(k.panel).Children(func() {
+	ui.Row(c).Height(30).Padding(0, spaceM).AlignItems(ui.Center).Gap(spaceM).Background(k.panel).Children(func() {
 		message := "恢复失败"
 		if p.terminal().recoveryBusy {
 			message = "正在恢复会话…"
 		}
-		ui.Text(c, message).FontSize(12).TextColor(k.textMuted).Grow(1).Tooltip(p.terminal().recoveryError)
+		ui.Text(c, message).FontSize(textSmall).TextColor(k.textMuted).Grow(1).Tooltip(p.terminal().recoveryError)
 		if !p.terminal().recoveryBusy && iconButton(c, k, "rotate-ccw", "重试恢复会话", 24, 13).Clicked() {
 			a.retryAgentRestore(p)
 		}

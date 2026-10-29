@@ -142,9 +142,9 @@ func (v *terminalPane) render(a *App, c *ui.Context, k *colors, p *Pane) {
 		ui.Box(c).Absolute().Top(0).Left(0).Right(0).Height(32).Padding(0, paneActionInset(p), 0, 0).Background(k.panel).
 			Children(func() { a.desktopOfflineBar(c, k, p.host) })
 	} else if p.host != nil && v.remoteView != nil && a.remotePaneStatus(c, p) != "" {
-		ui.Row(c).Absolute().Top(0).Left(0).Right(0).Height(28).Padding(0, 8+paneActionInset(p), 0, 12).AlignItems(ui.Center).Gap(8).Background(k.panel).Children(func() {
+		ui.Row(c).Absolute().Top(0).Left(0).Right(0).Height(28).Padding(0, 8+paneActionInset(p), 0, 12).AlignItems(ui.Center).Gap(spaceM).Background(k.panel).Children(func() {
 			message := a.remotePaneStatus(c, p)
-			ui.Text(c, message).FontSize(12).TextColor(k.textMuted).Grow(1)
+			ui.Text(c, message).FontSize(textSmall).TextColor(k.textMuted).Grow(1)
 			if v.remoteYielded && iconButton(c, k, "rotate-ccw", "接入当前窗格", 24, 13).Clicked() {
 				t.setFocus(p)
 				a.focusReq = p

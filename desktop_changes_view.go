@@ -27,13 +27,13 @@ func (a *App) fileBaseControl(c *ui.Context, k *colors, b *desktopFiles) {
 		selected = 2
 	}
 	control := ui.SegmentedBase(c.Key("git-base"), &selected, 3)
-	control.Track.Label("Git 比较范围").Padding(3).Gap(2).Radius(6).Background(k.hover).Children(func() {
+	control.Track.Label("Git 比较范围").Padding(space2XS).Gap(space2XS).Radius(radiusM).Background(k.hover).Children(func() {
 		for i, label := range []string{"本轮", "未提交", "整个分支"} {
-			segment := control.Segment(i).Label(label).Height(24).Padding(0, 10).Radius(4).Cursor(ui.CursorPointer)
+			segment := control.Segment(i).Label(label).Height(24).Padding(0, spaceM).Radius(radiusS).Cursor(ui.CursorPointer)
 			if i == selected {
 				segment.Background(k.panel)
 			}
-			segment.Children(func() { ui.Text(c, label).FontSize(10.5).TextColor(k.textMuted) })
+			segment.Children(func() { ui.Text(c, label).FontSize(textCaption).TextColor(k.textMuted) })
 		}
 	})
 	if control.Track.Changed() {

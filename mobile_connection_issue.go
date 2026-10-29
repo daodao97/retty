@@ -82,7 +82,7 @@ func (m *mobileApp) connectionFeedback(c *ui.Context) {
 }
 
 func (m *mobileApp) connectionActions(c *ui.Context) {
-	ui.Row(c).FillWidth().Gap(4).Children(func() {
+	ui.Row(c).FillWidth().Gap(spaceXS).Children(func() {
 		if (m.connectionIssue == nil || m.connectionIssue.retry) && m.link != "" {
 			if mobileIconAction(c, "重试连接", "rotate-ccw").Disabled(m.busy).Clicked() {
 				m.retryConnection()
@@ -99,8 +99,8 @@ func (m *mobileApp) connectionActions(c *ui.Context) {
 
 func (m *mobileApp) connectionDialog(c *ui.Context) {
 	ui.DialogBase(c, &m.connectionDetailsOpen, func(back, panel ui.Element) {
-		back.Background(ui.RGBA(0, 0, 0, .35))
-		panel.Width(340).MaxWidthPercent(95).Padding(20).Radius(18).Background(c.Theme().Surface).Column().Gap(12)
+		back.Background(colorsOf(c).scrim)
+		panel.Width(340).MaxWidthPercent(95).Padding(spaceXL).Radius(radiusXL).Background(c.Theme().Surface).Column().Gap(spaceL)
 		title, body := "正在恢复连接", "恢复后将继续当前会话，可先阅读已有内容。"
 		closeText := "继续阅读"
 		if m.term == nil {
@@ -110,8 +110,8 @@ func (m *mobileApp) connectionDialog(c *ui.Context) {
 		if m.connectionIssue != nil {
 			title, body = m.connectionIssue.title, m.connectionIssue.body
 		}
-		ui.Text(c, title).FontSize(18).Bold()
-		ui.Text(c, body).FontSize(14).LineHeight(1.4).TextColor(c.Theme().TextMuted)
+		ui.Text(c, title).FontSize(mobileTitle).Bold()
+		ui.Text(c, body).FontSize(mobileSubhead).LineHeight(1.4).TextColor(c.Theme().TextMuted)
 		m.connectionActions(c)
 		m.connectionDiagnosticsAction(c)
 		if ui.Button(c, closeText).Label("关闭连接提示").FillWidth().Height(44).Clicked() {

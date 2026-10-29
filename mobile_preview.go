@@ -92,17 +92,17 @@ func (m *mobileApp) startPreview() {
 
 func (m *mobileApp) previewDialog(c *ui.Context) {
 	ui.DialogBase(c, &m.preview.open, func(back, panel ui.Element) {
-		back.Background(ui.RGBA(0, 0, 0, .4)).Column().Justify(ui.End).AlignItems(ui.Center).Padding(12)
-		panel.Label("开发页面预览").FillWidth().MaxWidth(480).MaxHeight(c.Root().Bounds().H - 24).Padding(20).Radius(20).Background(c.Theme().Surface).Column().Gap(16).Clip()
-		ui.Text(c, "开发页面预览").FontSize(18).Bold().Shrink(0)
-		ui.Scroll(c.Key("mobile-preview-address")).FillWidth().MinHeight(0).Shrink(1).Gap(12).Children(func() {
-			ui.Text(c, "输入这台主机上的开发地址，通过现有加密连接在手机预览。").FontSize(13).LineHeight(1.5).TextColor(c.Theme().TextMuted).FillWidth()
-			ui.TextInputBase(c, &m.preview.address).Label("开发页面地址").Placeholder("http://localhost:3000").FillWidth().Height(44).FontSize(15).InputOptions(ui.InputOptions{Keyboard: ui.KeyboardASCII, Correction: ui.CorrectionOff, Capitalization: ui.CapitalizeNone})
+		back.Background(colorsOf(c).sheetScrim).Column().Justify(ui.End).AlignItems(ui.Center).Padding(spaceL)
+		panel.Label("开发页面预览").FillWidth().MaxWidth(480).MaxHeight(c.Root().Bounds().H - 24).Padding(spaceXL).Radius(radiusSheet).Background(c.Theme().Surface).Column().Gap(spaceXL).Clip()
+		ui.Text(c, "开发页面预览").FontSize(mobileTitle).Bold().Shrink(0)
+		ui.Scroll(c.Key("mobile-preview-address")).FillWidth().MinHeight(0).Shrink(1).Gap(spaceL).Children(func() {
+			ui.Text(c, "输入这台主机上的开发地址，通过现有加密连接在手机预览。").FontSize(textBody).LineHeight(1.5).TextColor(c.Theme().TextMuted).FillWidth()
+			ui.TextInputBase(c, &m.preview.address).Label("开发页面地址").Placeholder("http://localhost:3000").FillWidth().Height(44).FontSize(mobileBody).InputOptions(ui.InputOptions{Keyboard: ui.KeyboardASCII, Correction: ui.CorrectionOff, Capitalization: ui.CapitalizeNone})
 			if m.preview.error != "" {
-				ui.Text(c, m.preview.error).FontSize(13).TextColor(c.Theme().Danger).FillWidth()
+				ui.Text(c, m.preview.error).FontSize(textBody).TextColor(c.Theme().Danger).FillWidth()
 			}
 		})
-		ui.Row(c).FillWidth().Shrink(0).Gap(12).Children(func() {
+		ui.Row(c).FillWidth().Shrink(0).Gap(spaceL).Children(func() {
 			if ui.Button(c, "关闭").Grow(1).Height(44).Clicked() {
 				m.closePreview()
 				m.preview.open = false

@@ -192,9 +192,9 @@ func TestDesktopFilesBrowsePreviewAndLayouts(t *testing.T) {
 		t.Fatal(err)
 	}
 	tt.Frame()
-	if a.focusedFiles().dirs[filepath.Join(dir,"src")].open {
- t.Fatal("directory did not collapse")
- }
+	if a.focusedFiles().dirs[filepath.Join(dir, "src")].open {
+		t.Fatal("directory did not collapse")
+	}
 
 	if err := tt.Click("文件选项"); err != nil {
 		t.Fatal(err)
@@ -266,7 +266,7 @@ func TestDesktopFilesBrowsePreviewAndLayouts(t *testing.T) {
 		t.Fatal(tt.Texts())
 	}
 	card, ok := tt.Find("文件内容卡片")
-	if !ok || card.X != content.X+14 || card.W != content.W-28 {
+	if !ok || card.X != content.X+spaceXL || card.W != content.W-2*spaceXL {
 		t.Fatal("card margins or width incorrect", card, content)
 	}
 	if _, ok := tt.Find("文件目录路径"); ok {

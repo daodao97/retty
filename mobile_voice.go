@@ -338,11 +338,11 @@ func (m *mobileApp) voiceView(c *ui.Context, terminalElement ui.Element) {
 		return
 	}
 	theme := *c.Theme()
-	ui.Column(c.Key("voice-input")).FillWidth().Padding(8, 12).Gap(8).Background(theme.Background).BorderWidth(1, 0, 0, 0).BorderColor(theme.Border.Mix(theme.Background, .5)).Children(func() {
+	ui.Column(c.Key("voice-input")).FillWidth().Padding(spaceM, spaceL).Gap(spaceM).Background(theme.Background).BorderWidth(1, 0, 0, 0).BorderColor(theme.Border.Mix(theme.Background, .5)).Children(func() {
 		if v.phase == voiceDraft {
-			ui.Column(c.Key("voice-review")).FillWidth().Padding(10, 12).Gap(6).Radius(16).Background(theme.Surface).Children(func() {
-				ui.Row(c).FillWidth().AlignItems(ui.Center).Gap(8).Children(func() {
-					ui.Text(c, "识别结果").FontSize(12).TextColor(theme.TextMuted).Grow(1)
+			ui.Column(c.Key("voice-review")).FillWidth().Padding(spaceM, spaceL).Gap(spaceS).Radius(radiusXL).Background(theme.Surface).Children(func() {
+				ui.Row(c).FillWidth().AlignItems(ui.Center).Gap(spaceM).Children(func() {
+					ui.Text(c, "识别结果").FontSize(textSmall).TextColor(theme.TextMuted).Grow(1)
 					if ui.ButtonBase(c).Label("取消语音草稿").Size(32, 32).Radius(16).KeepFocus().Children(func() {
 						ui.Icon(c, icon("x")).Size(15, 15).TextColor(theme.TextMuted)
 					}).Clicked() {
@@ -353,13 +353,13 @@ func (m *mobileApp) voiceView(c *ui.Context, terminalElement ui.Element) {
 						m.sendVoiceDraft(c.Services())
 					}
 				})
-				editor := ui.TextAreaBase(c.Key("voice-draft"), &v.text).Label("语音草稿").Placeholder("语音识别结果").Height(80).FillWidth().FontSize(15).InputOptions(ui.InputOptions{Return: ui.ReturnDefault})
+				editor := ui.TextAreaBase(c.Key("voice-draft"), &v.text).Label("语音草稿").Placeholder("语音识别结果").Height(80).FillWidth().FontSize(mobileBody).InputOptions(ui.InputOptions{Return: ui.ReturnDefault})
 				keyboardFocused = keyboardFocused || editor.Focused()
 			})
 		}
 		if v.error != "" {
-			ui.Row(c.Key("voice-error")).FillWidth().Gap(8).AlignItems(ui.Center).Children(func() {
-				ui.Text(c, v.error).FontSize(13).TextColor(theme.Danger).Grow(1).MinWidth(0)
+			ui.Row(c.Key("voice-error")).FillWidth().Gap(spaceM).AlignItems(ui.Center).Children(func() {
+				ui.Text(c, v.error).FontSize(textBody).TextColor(theme.Danger).Grow(1).MinWidth(0)
 				if v.error == "请在系统设置中允许麦克风和语音识别" {
 					if mobileTextAction(c, "打开语音权限设置", "去设置").Clicked() {
 						if err := mygo.Permissions.OpenSettings(); err != nil {
@@ -374,7 +374,7 @@ func (m *mobileApp) voiceView(c *ui.Context, terminalElement ui.Element) {
 		}
 		// Stable keys and KeepFocus retain touch capture and the keyboard viewport
 		// across partial transcripts, cancellation previews and overlay rebuilds.
-		ui.Row(c.Key("voice-controls")).FillWidth().Gap(10).AlignItems(ui.Center).Children(func() {
+		ui.Row(c.Key("voice-controls")).FillWidth().Gap(spaceM).AlignItems(ui.Center).Children(func() {
 			focused := terminalElement.Focused()
 			if ui.ButtonBase(c).Label("切换键盘输入").Size(44, 44).Radius(22).KeepFocus().Children(func() {
 				ui.Box(c).Size(32, 32).Radius(16).Border(1.4, theme.TextMuted).AlignItems(ui.Center).Justify(ui.Center).Children(func() {
@@ -410,7 +410,7 @@ func (m *mobileApp) voiceView(c *ui.Context, terminalElement ui.Element) {
 				}
 			}
 			button := ui.Box(c.Key("voice-hold")).Label("按住说话").Role(ui.RoleButton).Height(44).Grow(1).MinWidth(0).Radius(22).Background(fill).Border(1, theme.Border.Mix(fill, .65)).KeepFocus().AlignItems(ui.Center).Justify(ui.Center).Disabled(!m.voiceInputReady() || v.phase == voiceFinishing || v.phase == voiceAuthorizing).HandleInput(m.voicePointer).Children(func() {
-				ui.Text(c, label).FontSize(16).Bold().TextColor(theme.Text).PassThrough()
+				ui.Text(c, label).FontSize(mobileCallout).Bold().TextColor(theme.Text).PassThrough()
 			})
 			button.PointerPosition()
 		})
@@ -451,13 +451,13 @@ func (m *mobileApp) voiceOverlay(c *ui.Context, keyboardFocused bool) {
 	} else if v.phase == voiceFinishing {
 		title, hint = "正在完成识别…", "识别结果可编辑后发送"
 	}
-	ui.Column(c.Key("voice-feedback")).Label("语音识别面板").Absolute().Left(12).Right(12).Bottom(bottom).Height(height).Padding(16).Gap(12).Radius(16).Background(theme.Surface).Border(1, theme.Border).Shadow(0, 4, 18, 0, ui.RGBA(0, 0, 0, .12)).PassThrough().Children(func() {
-		ui.Row(c).FillWidth().Gap(8).AlignItems(ui.Center).PassThrough().Children(func() {
+	ui.Column(c.Key("voice-feedback")).Label("语音识别面板").Absolute().Left(12).Right(12).Bottom(bottom).Height(height).Padding(spaceXL).Gap(spaceL).Radius(radiusXL).Background(theme.Surface).Border(1, theme.Border).Shadow(0, 4, 18, 0, colorsOf(c).popoverShadow).PassThrough().Children(func() {
+		ui.Row(c).FillWidth().Gap(spaceM).AlignItems(ui.Center).PassThrough().Children(func() {
 			ui.Box(c).Size(6, 6).Radius(3).Background(color).PassThrough()
-			ui.Text(c, title).FontSize(13).TextColor(color).PassThrough()
+			ui.Text(c, title).FontSize(textBody).TextColor(color).PassThrough()
 		})
-		ui.Text(c.Key("voice-transcript"), preview).FillWidth().Grow(1).MinHeight(0).FontSize(17).LineHeight(1.4).MaxLines(lines).TextColor(textColor).PassThrough()
-		ui.Text(c, hint).FontSize(12).TextColor(theme.TextMuted).PassThrough()
+		ui.Text(c.Key("voice-transcript"), preview).FillWidth().Grow(1).MinHeight(0).FontSize(mobileHeadline).LineHeight(1.4).MaxLines(lines).TextColor(textColor).PassThrough()
+		ui.Text(c, hint).FontSize(textSmall).TextColor(theme.TextMuted).PassThrough()
 	})
 }
 func voiceLivePreview(text string, limit int) string {

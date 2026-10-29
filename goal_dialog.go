@@ -346,7 +346,7 @@ func (a *App) goalDialog(c *ui.Context, k *colors) {
 	ui.DialogBase(c.Key("goal"), &g.open, func(backdrop, panel ui.Element) {
 		backdrop.Background(k.backdrop)
 		width, _ := c.Size()
-		panel.Column().Width(480).MaxWidth(width - 32).Padding(20).Gap(12).Radius(12).Background(k.panel).Children(func() {
+		panel.Column().Width(480).MaxWidth(width - 32).Padding(spaceXL).Gap(spaceL).Radius(radiusL).Background(k.panel).Children(func() {
 			title, placeholder := "新建任务", "描述要做什么，例如：每小时检查 ~/work/subapi 的错误日志并报告"
 			switch {
 			case g.editing != nil:
@@ -354,25 +354,25 @@ func (a *App) goalDialog(c *ui.Context, k *colors) {
 			case g.target != nil:
 				title, placeholder = "为当前 agent 设定目标", "可留空：继续当前任务，直到检查通过"
 			}
-			ui.Text(c, title).FontSize(16).FontWeight(600)
+			ui.Text(c, title).FontSize(textTitle).FontWeight(600)
 			if g.editing != nil {
-				ui.TextInput(c.Key("goal-name"), &g.name).Label("标题").Placeholder("简短标题，留空则取说明首句").FillWidth().FontSize(13)
+				ui.TextInput(c.Key("goal-name"), &g.name).Label("标题").Placeholder("简短标题，留空则取说明首句").FillWidth().FontSize(textBody)
 			}
-			ui.TextArea(c.Key("goal-text"), &g.text).Label("目标").Placeholder(placeholder).Height(88).FillWidth().FontSize(13).AutoFocus()
+			ui.TextArea(c.Key("goal-text"), &g.text).Label("目标").Placeholder(placeholder).Height(88).FillWidth().FontSize(textBody).AutoFocus()
 			if !setup {
-				ui.TextInput(c.Key("goal-check"), &g.check).Label("检查命令").Placeholder("可选：检查命令，退出码 0 即达成，如 go test ./...").FillWidth().FontSize(13)
+				ui.TextInput(c.Key("goal-check"), &g.check).Label("检查命令").Placeholder("可选：检查命令，退出码 0 即达成，如 go test ./...").FillWidth().FontSize(textBody)
 			}
 			if g.editing != nil {
-				ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-					ui.Text(c, "目录").FontSize(13).TextColor(k.textMuted)
-					ui.TextInput(c.Key(fmt.Sprint("goal-dir-", g.dirEpoch)), &g.dir).Label("目录").Placeholder("agent 在此目录中工作").Grow(1).MinWidth(0).FontSize(13)
+				ui.Row(c).Gap(spaceM).AlignItems(ui.Center).Children(func() {
+					ui.Text(c, "目录").FontSize(textBody).TextColor(k.textMuted)
+					ui.TextInput(c.Key(fmt.Sprint("goal-dir-", g.dirEpoch)), &g.dir).Label("目录").Placeholder("agent 在此目录中工作").Grow(1).MinWidth(0).FontSize(textBody)
 					if ui.Button(c, "选择…").Clicked() {
 						a.pickGoalDir(g)
 					}
 				})
 			}
 			if g.target == nil {
-				ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
+				ui.Row(c).Gap(spaceM).AlignItems(ui.Center).Children(func() {
 					for _, name := range []string{"claude", "codex"} {
 						b := ui.Button(c.Key("goal-agent-"+name), name)
 						if g.agent == name {
@@ -385,8 +385,8 @@ func (a *App) goalDialog(c *ui.Context, k *colors) {
 				})
 			}
 			if g.editing != nil && !g.editing.Once {
-				ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
-					ui.Text(c, "重复").FontSize(13).TextColor(k.textMuted)
+				ui.Row(c).Gap(spaceS).AlignItems(ui.Center).Children(func() {
+					ui.Text(c, "重复").FontSize(textBody).TextColor(k.textMuted)
 					for _, o := range repeatOptions {
 						b := ui.Button(c.Key("goal-repeat-"+o.value), o.label)
 						if g.repeat == o.value {
@@ -397,7 +397,7 @@ func (a *App) goalDialog(c *ui.Context, k *colors) {
 						}
 					}
 					if g.repeat == "custom" {
-						ui.TextInput(c.Key("goal-every"), &g.custom).Label("间隔").Placeholder("如 2h").Width(72).FontSize(13)
+						ui.TextInput(c.Key("goal-every"), &g.custom).Label("间隔").Placeholder("如 2h").Width(72).FontSize(textBody)
 					}
 				})
 			}
@@ -412,11 +412,11 @@ func (a *App) goalDialog(c *ui.Context, k *colors) {
 			default:
 				hint = "每轮结束后运行检查；未通过就把失败输出交回 agent。你在 agent 中输入会暂停目标。"
 			}
-			ui.Text(c, hint).FontSize(12).TextColor(k.textMuted)
+			ui.Text(c, hint).FontSize(textSmall).TextColor(k.textMuted)
 			if g.err != "" {
-				ui.Text(c, g.err).FontSize(13)
+				ui.Text(c, g.err).FontSize(textBody)
 			}
-			ui.Row(c).Gap(10).Justify(ui.End).Children(func() {
+			ui.Row(c).Gap(spaceM).Justify(ui.End).Children(func() {
 				if ui.Button(c, "取消").Clicked() {
 					g.open = false
 				}

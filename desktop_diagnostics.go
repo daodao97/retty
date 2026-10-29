@@ -171,22 +171,22 @@ func buildDescription(b runtimeinfo.Info) string {
 func diagnosticPath(c *ui.Context, theme *ui.Theme, title string, p diagnostics.PathCheck) {
 	color := theme.TextMuted
 	if p.Code != "ok" && p.Code != "unknown" && p.Code != "dynamic" {
-		color = ui.Hex("#d96b65")
+		color = colorsOf(c).danger
 	}
-	ui.Text(c, title+"："+p.Detail).FontSize(12).TextColor(color)
+	ui.Text(c, title+"："+p.Detail).FontSize(textSmall).TextColor(color)
 	if p.Path != "" {
-		ui.Text(c, p.Path).FontSize(11).TextColor(theme.TextMuted)
+		ui.Text(c, p.Path).FontSize(textCaption).TextColor(theme.TextMuted)
 	}
 }
 
 func (a *App) diagnosticsPage(c *ui.Context, theme *ui.Theme) {
 	if a.diagnostics == nil {
 		a.later(c, func() { a.refreshDiagnostics("") })
-		ui.Text(c, "正在准备诊断…").FontSize(12)
+		ui.Text(c, "正在准备诊断…").FontSize(textSmall)
 		return
 	}
 	d := a.diagnostics
-	ui.Row(c).FillWidth().Gap(10).AlignItems(ui.Center).Children(func() {
+	ui.Row(c).FillWidth().Gap(spaceM).AlignItems(ui.Center).Children(func() {
 		selected := d.agent
 		if ui.Select(c, &selected, agents.Integrated).Label("Diagnostic agent").Grow(1).Changed() {
 			a.refreshDiagnostics(selected)
@@ -214,58 +214,58 @@ func (a *App) diagnosticsPage(c *ui.Context, theme *ui.Theme) {
 			c.WriteClipboard(string(data))
 		}
 	})
-	ui.Text(c, "检查主机："+d.source).FontSize(12).Margin(14, 0, 6, 0)
-	ui.Text(c, "GUI："+buildDescription(d.gui)).FontSize(12)
+	ui.Text(c, "检查主机："+d.source).FontSize(textSmall).Margin(spaceL, 0, spaceS, 0)
+	ui.Text(c, "GUI："+buildDescription(d.gui)).FontSize(textSmall)
 	if d.gui.MyGo != "" {
-		ui.Text(c, "GUI MyGo："+d.gui.MyGo).FontSize(11).TextColor(theme.TextMuted)
+		ui.Text(c, "GUI MyGo："+d.gui.MyGo).FontSize(textCaption).TextColor(theme.TextMuted)
 	}
 	if d.hello.PID > 0 {
-		ui.Text(c, fmt.Sprintf("会话服务：%s · PID %d · 协议 %d", buildDescription(d.hello.Build), d.hello.PID, d.hello.Version)).FontSize(12).Margin(8, 0, 0, 0)
-		ui.Text(c, d.hello.Exe).FontSize(11).TextColor(theme.TextMuted)
+		ui.Text(c, fmt.Sprintf("会话服务：%s · PID %d · 协议 %d", buildDescription(d.hello.Build), d.hello.PID, d.hello.Version)).FontSize(textSmall).Margin(spaceM, 0, 0, 0)
+		ui.Text(c, d.hello.Exe).FontSize(textCaption).TextColor(theme.TextMuted)
 		if d.hello.Build.MyGo != "" {
-			ui.Text(c, "服务 MyGo："+d.hello.Build.MyGo).FontSize(11).TextColor(theme.TextMuted)
+			ui.Text(c, "服务 MyGo："+d.hello.Build.MyGo).FontSize(textCaption).TextColor(theme.TextMuted)
 		}
 	}
 	if d.different || d.hello.Build.Version != "" && d.gui.Version != "" && d.hello.Build.Version != d.gui.Version {
-		ui.Text(c, "会话服务与当前 GUI 构建不同；正在运行的任务保持原样。").FontSize(12).TextColor(theme.TextMuted).Margin(8, 0)
+		ui.Text(c, "会话服务与当前 GUI 构建不同；正在运行的任务保持原样。").FontSize(textSmall).TextColor(theme.TextMuted).Margin(spaceM, 0)
 	}
 	if d.busy {
-		ui.Spinner(c).Size(16, 16).Margin(16, 0)
-		ui.Text(c, "正在读取主机配置…").FontSize(12)
+		ui.Spinner(c).Size(16, 16).Margin(spaceXL, 0)
+		ui.Text(c, "正在读取主机配置…").FontSize(textSmall)
 		return
 	}
 	if d.err != "" {
-		ui.Text(c, d.err).FontSize(12).TextColor(ui.Hex("#d96b65")).Margin(16, 0)
+		ui.Text(c, d.err).FontSize(textSmall).TextColor(colorsOf(c).danger).Margin(spaceXL, 0)
 		return
 	}
 	if d.report == nil {
 		return
 	}
 	r := d.report
-	ui.Text(c, "诊断进程 / 网关："+buildDescription(r.Build)).FontSize(12).Margin(8, 0, 0, 0)
-	ui.Text(c, r.Executable).FontSize(11).TextColor(theme.TextMuted)
-	ui.Text(c, "只读检查 · "+r.At.Format("15:04:05")).FontSize(11).TextColor(theme.TextMuted).Margin(14, 0, 6, 0)
-	ui.Text(c, r.Note).FontSize(11).TextColor(theme.TextMuted)
-	ui.Column(c).Gap(5).Margin(16, 0).Children(func() {
+	ui.Text(c, "诊断进程 / 网关："+buildDescription(r.Build)).FontSize(textSmall).Margin(spaceM, 0, 0, 0)
+	ui.Text(c, r.Executable).FontSize(textCaption).TextColor(theme.TextMuted)
+	ui.Text(c, "只读检查 · "+r.At.Format("15:04:05")).FontSize(textCaption).TextColor(theme.TextMuted).Margin(spaceL, 0, spaceS, 0)
+	ui.Text(c, r.Note).FontSize(textCaption).TextColor(theme.TextMuted)
+	ui.Column(c).Gap(spaceXS).Margin(spaceXL, 0).Children(func() {
 		diagnosticPath(c, theme, "工作目录（"+d.cwdSource+"）", r.CWD)
-		ui.Text(c, "Retty Hook 路径来源："+d.runnerSource).FontSize(11).TextColor(theme.TextMuted)
+		ui.Text(c, "Retty Hook 路径来源："+d.runnerSource).FontSize(textCaption).TextColor(theme.TextMuted)
 		diagnosticPath(c, theme, "系统 /bin/sh（参考；实际 Shell 由 Agent 选择）", r.Shell)
 		diagnosticPath(c, theme, "Hook 配置", r.Config)
 	})
 	if d.lastHook.HookEvent != "" {
-		ui.Text(c, "最近接受的 Agent 事件："+d.lastHook.ID+" / "+d.lastHook.HookEvent+" · "+d.lastHook.Updated.Format("15:04:05")).FontSize(11).TextColor(theme.TextMuted)
-		ui.Text(c, "事件到达不代表其他 Hook 执行成功。").FontSize(11).TextColor(theme.TextMuted)
+		ui.Text(c, "最近接受的 Agent 事件："+d.lastHook.ID+" / "+d.lastHook.HookEvent+" · "+d.lastHook.Updated.Format("15:04:05")).FontSize(textCaption).TextColor(theme.TextMuted)
+		ui.Text(c, "事件到达不代表其他 Hook 执行成功。").FontSize(textCaption).TextColor(theme.TextMuted)
 	} else {
-		ui.Text(c, "没有可确认的 Hook 运行记录；启动前失败的 Hook 需结合 Agent 的报错。").FontSize(11).TextColor(theme.TextMuted)
+		ui.Text(c, "没有可确认的 Hook 运行记录；启动前失败的 Hook 需结合 Agent 的报错。").FontSize(textCaption).TextColor(theme.TextMuted)
 	}
 	for i, h := range r.Hooks {
-		ui.Column(c.Key(fmt.Sprintf("diagnostic-hook-%d", i))).FillWidth().Gap(5).Padding(12).Margin(8, 0).Radius(7).Background(theme.Surface).Children(func() {
-			ui.Text(c, h.Event).FontSize(12).FontWeight(600)
+		ui.Column(c.Key(fmt.Sprintf("diagnostic-hook-%d", i))).FillWidth().Gap(spaceXS).Padding(spaceL).Margin(spaceM, 0).Radius(radiusM).Background(theme.Surface).Children(func() {
+			ui.Text(c, h.Event).FontSize(textSmall).FontWeight(600)
 			command := []rune(h.Command)
 			if len(command) > 400 {
 				command = append(command[:400], '…')
 			}
-			ui.Text(c, string(command)).FontSize(11).TextColor(theme.TextMuted)
+			ui.Text(c, string(command)).FontSize(textCaption).TextColor(theme.TextMuted)
 			diagnosticPath(c, theme, "执行文件", h.Executable)
 			if h.Script != nil {
 				diagnosticPath(c, theme, "脚本文件", *h.Script)
@@ -273,9 +273,9 @@ func (a *App) diagnosticsPage(c *ui.Context, theme *ui.Theme) {
 		})
 	}
 	if len(r.Hooks) == 0 {
-		ui.Text(c, "此配置中没有 command Hook。").FontSize(12).Margin(12, 0)
+		ui.Text(c, "此配置中没有 command Hook。").FontSize(textSmall).Margin(spaceL, 0)
 	}
 	if r.Truncated {
-		ui.Text(c, "诊断最多显示 128 条命令；过长条目已省略。").FontSize(11).TextColor(theme.TextMuted)
+		ui.Text(c, "诊断最多显示 128 条命令；过长条目已省略。").FontSize(textCaption).TextColor(theme.TextMuted)
 	}
 }

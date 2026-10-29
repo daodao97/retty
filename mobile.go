@@ -683,7 +683,7 @@ func (m *mobileApp) syncNavigation() {
 // Keep the full touch target while letting the title sit beside the visible
 // chevron. Header text passes pointer events through the overlapping area.
 func mobileBackButton(c *ui.Context) ui.Element {
-	button := ui.ButtonBase(c.Key("mobile-back")).Label("返回").Role(ui.RoleButton).Size(44, 44).Margin(0, -20, 0, 0).Justify(ui.Start).Radius(12)
+	button := ui.ButtonBase(c.Key("mobile-back")).Label("返回").Role(ui.RoleButton).Size(44, 44).Margin(0, -20, 0, 0).Justify(ui.Start).Radius(radiusL)
 	if button.Pressed() {
 		button.Background(c.Theme().SurfacePressed)
 	}
@@ -700,7 +700,7 @@ func (m *mobileApp) header(c *ui.Context, title string, back func(), terminalPag
 			status = m.recoveryStatus()
 		}
 	}
-	ui.Row(c).Height(52).Padding(0, 8).AlignItems(ui.Center).Children(func() {
+	ui.Row(c).Height(52).Padding(0, spaceM).AlignItems(ui.Center).Children(func() {
 		if back != nil {
 			if mobileBackButton(c).Clicked() {
 				back()
@@ -723,7 +723,7 @@ func (m *mobileApp) header(c *ui.Context, title string, back func(), terminalPag
 				if m.needsRecovery() {
 					label = "正在重连"
 				}
-				ui.Text(c, status).Label(label).FontSize(11).TextColor(c.Theme().TextMuted).TextAlign(align).FillWidth().SingleLine().Ellipsis("…").PassThrough()
+				ui.Text(c, status).Label(label).FontSize(textCaption).TextColor(c.Theme().TextMuted).TextAlign(align).FillWidth().SingleLine().Ellipsis("…").PassThrough()
 			}
 		})
 		if terminalPage {
@@ -735,7 +735,7 @@ func (m *mobileApp) header(c *ui.Context, title string, back func(), terminalPag
 		}
 		if terminalPage && m.term != nil && m.needsRecovery() {
 			if ui.ButtonBase(c).Label("连接恢复操作").Role(ui.RoleButton).Size(44, 44).Children(func() {
-				ui.Text(c, "•••").FontSize(16).TextColor(c.Theme().TextMuted)
+				ui.Text(c, "•••").FontSize(mobileCallout).TextColor(c.Theme().TextMuted)
 			}).Clicked() {
 				m.connectionDetailsOpen = true
 			}
@@ -751,25 +751,25 @@ func (m *mobileApp) header(c *ui.Context, title string, back func(), terminalPag
 // list and to the header on the terminal page.
 func (m *mobileApp) errorView(c *ui.Context) {
 	if m.error != "" && !m.degraded() {
-		ui.Text(c.Key("connection-status"), m.error).TextColor(c.Theme().Danger).FontSize(14).LineHeight(1.4).Margin(0, 16, 12, 16)
+		ui.Text(c.Key("connection-status"), m.error).TextColor(c.Theme().Danger).FontSize(mobileSubhead).LineHeight(1.4).Margin(0, spaceXL, spaceL, spaceXL)
 	}
 }
 
 func (m *mobileApp) connectView(c *ui.Context) {
 	m.refreshRecentPresence(c)
 	m.header(c, "Retty", nil, false)
-	ui.Scroll(c).Grow(1).MinHeight(0).FillWidth().HideScrollbars().Padding(16).Gap(16).Children(func() {
-		ui.Text(c, "电脑上的 Retty · 右上角连接按钮").FontSize(13).TextColor(c.Theme().TextMuted).FillWidth()
+	ui.Scroll(c).Grow(1).MinHeight(0).FillWidth().HideScrollbars().Padding(spaceXL).Gap(spaceXL).Children(func() {
+		ui.Text(c, "电脑上的 Retty · 右上角连接按钮").FontSize(textBody).TextColor(c.Theme().TextMuted).FillWidth()
 		if ui.PrimaryButton(c, "").Label("扫码连接桌面").Role(ui.RoleButton).Height(48).FillWidth().Disabled(m.busy || m.scanning || m.reconnecting).Children(func() {
 			ui.Icon(c, icon("scan-line")).Size(20, 20)
-			ui.Text(c, "扫码连接桌面").FontSize(16)
+			ui.Text(c, "扫码连接桌面").FontSize(mobileCallout)
 		}).Clicked() {
 			m.scan()
 		}
 		m.connectionFeedback(c)
 		if !m.reconnecting && m.busy {
 			ui.Row(c).FillWidth().AlignItems(ui.Center).Children(func() {
-				ui.Text(c, "正在连接桌面…").Label("正在连接桌面").FontSize(14).TextColor(c.Theme().TextMuted).Grow(1)
+				ui.Text(c, "正在连接桌面…").Label("正在连接桌面").FontSize(mobileSubhead).TextColor(c.Theme().TextMuted).Grow(1)
 				if mobileTextAction(c, "取消连接", "取消").Clicked() {
 					m.disconnect(false)
 				}
@@ -822,13 +822,13 @@ func (m *mobileApp) connectView(c *ui.Context) {
 							mobileListIcon(c, platform.Glyph, colorsOf(c).iconMuted).Role(ui.RoleImage).Label(platform.Name + " icon")
 						}
 						mobileListText(c, mobileListTextOptions{Title: entry.displayName()})
-						ui.Row(c).Gap(5).Shrink(0).AlignItems(ui.Center).Children(func() {
+						ui.Row(c).Gap(spaceXS).Shrink(0).AlignItems(ui.Center).Children(func() {
 							color := c.Theme().TextMuted
 							if m.presence[entry.Link].state == desktopOnline {
 								color = colorsOf(c).busy.Mix(color, 0.25)
 							}
 							ui.Box(c).Size(6, 6).Radius(3).Background(color)
-							ui.Text(c, status).Label("设备状态 " + entry.displayName() + " " + status).FontSize(12).TextColor(c.Theme().TextMuted)
+							ui.Text(c, status).Label("设备状态 " + entry.displayName() + " " + status).FontSize(textSmall).TextColor(c.Theme().TextMuted)
 						})
 						if !selecting {
 							mobileListChevron(c)
@@ -847,20 +847,20 @@ func (m *mobileApp) connectView(c *ui.Context) {
 		})
 		m.recentSessionsView(c)
 		if m.error != "" {
-			ui.Text(c.Key("connection-status"), m.error).TextColor(c.Theme().Danger).FontSize(14).LineHeight(1.4)
+			ui.Text(c.Key("connection-status"), m.error).TextColor(c.Theme().Danger).FontSize(mobileSubhead).LineHeight(1.4)
 		}
-		ui.Text(c, "通过 Tailcat 加密连接").FontSize(12).TextColor(c.Theme().TextMuted).TextAlign(ui.Center).FillWidth()
+		ui.Text(c, "通过 Tailcat 加密连接").FontSize(textSmall).TextColor(c.Theme().TextMuted).TextAlign(ui.Center).FillWidth()
 	})
 }
 
 func (m *mobileApp) sessionsView(c *ui.Context) {
-	ui.Row(c).Height(52).Padding(0, 8).AlignItems(ui.Center).Children(func() {
+	ui.Row(c).Height(52).Padding(0, spaceM).AlignItems(ui.Center).Children(func() {
 		if mobileBackButton(c).Clicked() {
 			m.goHome()
 		}
-		ui.Row(c).Grow(1).Gap(8).AlignItems(ui.Center).PassThrough().Children(func() {
-			ui.Text(c, "会话").FontSize(17).Bold().PassThrough()
-			ui.Text(c, fmt.Sprint(len(m.sessions))).FontSize(13).TextColor(c.Theme().TextMuted).PassThrough()
+		ui.Row(c).Grow(1).Gap(spaceM).AlignItems(ui.Center).PassThrough().Children(func() {
+			ui.Text(c, "会话").FontSize(mobileHeadline).Bold().PassThrough()
+			ui.Text(c, fmt.Sprint(len(m.sessions))).FontSize(textBody).TextColor(c.Theme().TextMuted).PassThrough()
 		})
 		if mobileIconAction(c, "查看自动化", "clock").Disabled(m.degraded()).Clicked() {
 			m.openAutomations()
@@ -875,14 +875,14 @@ func (m *mobileApp) sessionsView(c *ui.Context) {
 			m.create()
 		}
 	})
-	ui.Row(c).FillWidth().Height(44).Padding(0, 8, 0, 20).Gap(8).AlignItems(ui.Center).Children(func() {
+	ui.Row(c).FillWidth().Height(44).Padding(0, spaceM, 0, spaceXL).Gap(spaceM).AlignItems(ui.Center).Children(func() {
 		statusColor := colorsOf(c).busy.Mix(colorsOf(c).textMuted, 0.3)
 		status := "桌面已连接"
 		if m.degraded() {
 			statusColor, status = colorsOf(c).attention, "桌面连接已中断"
 		}
 		ui.Box(c).Label(status).Size(6, 6).Shrink(0).Radius(3).Background(statusColor)
-		ui.Text(c, m.connectedDevice().displayName()).FontSize(13).TextColor(c.Theme().TextMuted).Grow(1).MinWidth(0).SingleLine().Ellipsis("…")
+		ui.Text(c, m.connectedDevice().displayName()).FontSize(textBody).TextColor(c.Theme().TextMuted).Grow(1).MinWidth(0).SingleLine().Ellipsis("…")
 		if ui.ButtonBase(c).Label("会话列表设置").Role(ui.RoleButton).Size(44, 44).Children(func() {
 			ui.Icon(c, icon("settings-2")).Size(17, 17).TextColor(c.Theme().TextMuted)
 			if m.pushError != "" && !m.pushDisabled {
@@ -892,7 +892,7 @@ func (m *mobileApp) sessionsView(c *ui.Context) {
 			m.sessionSettingsOpen = true
 		}
 	})
-	ui.Scroll(c.Key("mobile-sessions")).Grow(1).MinHeight(0).FillWidth().TrackScroll(&m.scroll).HideScrollbars().Padding(8, 16, 16, 16).Gap(12).Children(func() {
+	ui.Scroll(c.Key("mobile-sessions")).Grow(1).MinHeight(0).FillWidth().TrackScroll(&m.scroll).HideScrollbars().Padding(spaceM, spaceXL, spaceXL, spaceXL).Gap(spaceL).Children(func() {
 		m.connectionFeedback(c)
 		m.errorView(c)
 		m.sessionList(c)
@@ -903,7 +903,7 @@ func (m *mobileApp) terminalView(c *ui.Context) {
 	m.header(c, m.sessionTitle(m.selected), func() { m.resumeSID = ""; m.detach() }, true)
 	// System browser keyboard/inset changes must not resize the hidden PTY.
 	if m.preview.busy {
-		ui.Text(c, "开发页面预览中…").FontSize(14).Padding(16).TextColor(c.Theme().TextMuted)
+		ui.Text(c, "开发页面预览中…").FontSize(mobileSubhead).Padding(spaceXL).TextColor(c.Theme().TextMuted)
 		ui.Box(c).Grow(1)
 		return
 	}
@@ -914,15 +914,15 @@ func (m *mobileApp) terminalView(c *ui.Context) {
 	m.term.SetInputEnabled(!m.reconnecting && !m.background && (m.stream == nil || m.stream.inputReady()))
 	m.errorView(c)
 	if m.selected.Exited {
-		ui.Text(c, "会话已结束").FontSize(13).Padding(6, 16).TextColor(c.Theme().TextMuted)
+		ui.Text(c, "会话已结束").FontSize(textBody).Padding(spaceS, spaceXL).TextColor(c.Theme().TextMuted)
 	}
 	if m.imagePasteBusy {
-		ui.Text(c, "正在粘贴图片…").FontSize(13).Padding(6, 16).TextColor(c.Theme().TextMuted)
+		ui.Text(c, "正在粘贴图片…").FontSize(textBody).Padding(spaceS, spaceXL).TextColor(c.Theme().TextMuted)
 	}
 	var element ui.Element
 	// Paste progress/error banners change the preceding siblings. Keep this
 	// container stable so its focused terminal retains the software keyboard.
-	ui.Box(c.Key("mobile-terminal-viewport")).Grow(1).MinHeight(0).FillWidth().Padding(4).Background(c.Theme().Background).Children(func() {
+	ui.Box(c.Key("mobile-terminal-viewport")).Grow(1).MinHeight(0).FillWidth().Padding(spaceXS).Background(c.Theme().Background).Children(func() {
 		keyboard := ui.KeyboardText
 		if m.keyboardLatch.Active() != 0 {
 			keyboard = ui.KeyboardASCII
@@ -972,14 +972,14 @@ func (m *mobileApp) selectionMenu(c *ui.Context, element ui.Element) {
 	}
 	y = max(0, min(y, viewport.H-48))
 	ui.Overlay(c, func() {
-		menu := ui.Row(c.Key("mobile-selection-menu")).Role(ui.RolePopup).Absolute().Left(x).Top(y).Size(148, 44).KeepFocus().Radius(12).Background(c.Theme().Surface).Shadow(0, 2, 12, 0, ui.RGBA(0, 0, 0, .18)).Children(func() {
-			if ui.ButtonBase(c).Label("复制").Role(ui.RoleButton).KeepFocus().Height(44).Grow(1).Children(func() { ui.Text(c, "复制").FontSize(15) }).Clicked() {
+		menu := ui.Row(c.Key("mobile-selection-menu")).Role(ui.RolePopup).Absolute().Left(x).Top(y).Size(148, 44).KeepFocus().Radius(radiusL).Background(c.Theme().Surface).Shadow(0, 2, 12, 0, colorsOf(c).popoverShadow).Children(func() {
+			if ui.ButtonBase(c).Label("复制").Role(ui.RoleButton).KeepFocus().Height(44).Grow(1).Children(func() { ui.Text(c, "复制").FontSize(mobileBody) }).Clicked() {
 				if text, ok := m.term.SelectedText(); ok {
 					c.WriteClipboard(text)
 				}
 				m.selectionMenuDismissed = true
 			}
-			if ui.ButtonBase(c).Label("全选").Role(ui.RoleButton).KeepFocus().Height(44).Grow(1).Children(func() { ui.Text(c, "全选").FontSize(15) }).Clicked() {
+			if ui.ButtonBase(c).Label("全选").Role(ui.RoleButton).KeepFocus().Height(44).Grow(1).Children(func() { ui.Text(c, "全选").FontSize(mobileBody) }).Clicked() {
 				m.term.SelectAll()
 			}
 		})

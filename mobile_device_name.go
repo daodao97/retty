@@ -42,24 +42,24 @@ func (m *mobileApp) deviceNameDialog(c *ui.Context) {
 		return
 	}
 	dialog := ui.DialogBase(c.Key("mobile-device-name"), &m.deviceNameOpen, func(back, panel ui.Element) {
-		back.Background(ui.RGBA(0, 0, 0, .4)).Column().Justify(ui.End).AlignItems(ui.Center).Padding(12)
-		panel.Label("设备名称面板").FillWidth().MaxWidth(480).Padding(16).Radius(20).Background(c.Theme().Surface).Column().Gap(12)
+		back.Background(colorsOf(c).sheetScrim).Column().Justify(ui.End).AlignItems(ui.Center).Padding(spaceL)
+		panel.Label("设备名称面板").FillWidth().MaxWidth(480).Padding(spaceXL).Radius(radiusSheet).Background(c.Theme().Surface).Column().Gap(spaceL)
 		ui.Row(c).FillWidth().Height(44).AlignItems(ui.Center).Children(func() {
-			ui.Text(c, "设备名称").FontSize(17).Bold().Grow(1)
+			ui.Text(c, "设备名称").FontSize(mobileHeadline).Bold().Grow(1)
 			if ui.ButtonBase(c).Label("取消设备重命名").Role(ui.RoleButton).Size(44, 44).Radius(22).Background(c.Theme().Background).Children(func() {
 				ui.Icon(c, icon("x")).Size(16, 16).TextColor(c.Theme().TextMuted)
 			}).Clicked() {
 				m.deviceNameOpen = false
 			}
 		})
-		ui.Column(c).FillWidth().Padding(10, 12).Radius(12).Background(c.Theme().Background).Children(func() {
-			ui.Text(c, "留空使用设备原名").FontSize(12).TextColor(c.Theme().TextMuted)
-			ui.TextInputBase(c, &m.deviceNameDraft).Label("连接设备名称").Placeholder(m.hello.Host.Name).FontSize(16).FillWidth().Height(40).
+		ui.Column(c).FillWidth().Padding(spaceM, spaceL).Radius(radiusL).Background(c.Theme().Background).Children(func() {
+			ui.Text(c, "留空使用设备原名").FontSize(textSmall).TextColor(c.Theme().TextMuted)
+			ui.TextInputBase(c, &m.deviceNameDraft).Label("连接设备名称").Placeholder(m.hello.Host.Name).FontSize(mobileCallout).FillWidth().Height(40).
 				InputOptions(ui.InputOptions{Return: ui.ReturnDone, Correction: ui.CorrectionOff, Capitalization: ui.CapitalizeNone})
 		})
-		ui.Row(c).FillWidth().AlignItems(ui.Center).Gap(12).Children(func() {
-			ui.Text(c, "仅在这台手机上显示").FontSize(12).TextColor(c.Theme().TextMuted).Grow(1)
-			if ui.ButtonBase(c).Label("保存设备名称").Role(ui.RoleButton).Size(72, 44).Radius(12).Background(c.Theme().Accent).Children(func() {
+		ui.Row(c).FillWidth().AlignItems(ui.Center).Gap(spaceL).Children(func() {
+			ui.Text(c, "仅在这台手机上显示").FontSize(textSmall).TextColor(c.Theme().TextMuted).Grow(1)
+			if ui.ButtonBase(c).Label("保存设备名称").Role(ui.RoleButton).Size(72, 44).Radius(radiusL).Background(c.Theme().Accent).Children(func() {
 				ui.Icon(c, icon("check")).Size(19, 19).TextColor(c.Theme().AccentText)
 			}).Clicked() {
 				m.setDeviceName(m.deviceNameDraft)

@@ -122,7 +122,7 @@ func usageAgentName(agent string) string {
 func (a *App) usagePage(c *ui.Context, theme *ui.Theme) {
 	d := a.usage
 	ui.Row(c).FillWidth().AlignItems(ui.Center).Children(func() {
-		ui.Text(c, "本机订阅额度 · 每 3 分钟更新").FontSize(12).TextColor(theme.TextMuted).Grow(1)
+		ui.Text(c, "本机订阅额度 · 每 3 分钟更新").FontSize(textSmall).TextColor(theme.TextMuted).Grow(1)
 		label := "刷新"
 		if d != nil && d.busy {
 			label = "读取中…"
@@ -131,7 +131,7 @@ func (a *App) usagePage(c *ui.Context, theme *ui.Theme) {
 			a.refreshUsage()
 		}
 	})
-	ui.Text(c, "已用比例；账户与本机 CLI 一致。").FontSize(11).TextColor(theme.TextMuted).Margin(6, 0, 20, 0)
+	ui.Text(c, "已用比例；账户与本机 CLI 一致。").FontSize(textCaption).TextColor(theme.TextMuted).Margin(spaceS, 0, spaceXL, 0)
 	for _, agent := range []string{"codex", "claude"} {
 		r := agentusage.Reading{Agent: agent}
 		if d != nil {
@@ -141,12 +141,12 @@ func (a *App) usagePage(c *ui.Context, theme *ui.Theme) {
 				}
 			}
 		}
-		ui.Column(c.Key("usage-"+agent)).FillWidth().Padding(18).Gap(12).Radius(8).
-			Border(1, theme.Border).Margin(0, 0, 12, 0).Children(func() {
+		ui.Column(c.Key("usage-"+agent)).FillWidth().Padding(spaceXL).Gap(spaceL).Radius(radiusM).
+			Border(1, theme.Border).Margin(0, 0, spaceL, 0).Children(func() {
 			ui.Row(c).FillWidth().AlignItems(ui.Center).Children(func() {
-				ui.Text(c, usageAgentName(agent)).FontSize(14).FontWeight(600).TextColor(theme.Text).Grow(1)
+				ui.Text(c, usageAgentName(agent)).FontSize(textTitle).FontWeight(600).TextColor(theme.Text).Grow(1)
 				if r.Plan != "" {
-					ui.Text(c, r.Plan).FontSize(11).TextColor(theme.TextMuted)
+					ui.Text(c, r.Plan).FontSize(textCaption).TextColor(theme.TextMuted)
 				}
 			})
 			if len(r.Windows) == 0 && r.Resets == nil {
@@ -154,13 +154,13 @@ func (a *App) usagePage(c *ui.Context, theme *ui.Theme) {
 				if message == "" {
 					message = "正在读取…"
 				}
-				ui.Text(c, message).FontSize(12).TextColor(theme.TextMuted)
+				ui.Text(c, message).FontSize(textSmall).TextColor(theme.TextMuted)
 			}
 			for _, w := range r.Windows {
-				ui.Column(c).FillWidth().Gap(6).Children(func() {
+				ui.Column(c).FillWidth().Gap(spaceS).Children(func() {
 					ui.Row(c).FillWidth().Children(func() {
-						ui.Text(c, w.Name).FontSize(12).TextColor(theme.Text).Grow(1)
-						ui.Text(c, fmt.Sprintf("%.0f%% 已用", agentusage.Percent(w.Used))).FontSize(12).TextColor(theme.Text)
+						ui.Text(c, w.Name).FontSize(textSmall).TextColor(theme.Text).Grow(1)
+						ui.Text(c, fmt.Sprintf("%.0f%% 已用", agentusage.Percent(w.Used))).FontSize(textSmall).TextColor(theme.Text)
 					})
 					ui.Row(c).FillWidth().Height(4).Radius(2).Clip().Background(theme.Border).Children(func() {
 						if used := agentusage.Percent(w.Used); used > 0 {
@@ -168,7 +168,7 @@ func (a *App) usagePage(c *ui.Context, theme *ui.Theme) {
 						}
 					})
 					if w.Reset != "" {
-						ui.Text(c, "重置 "+w.Reset).FontSize(11).TextColor(theme.TextMuted)
+						ui.Text(c, "重置 "+w.Reset).FontSize(textCaption).TextColor(theme.TextMuted)
 					}
 				})
 			}
@@ -176,17 +176,17 @@ func (a *App) usagePage(c *ui.Context, theme *ui.Theme) {
 				a.usageResetSection(c, r, false)
 			}
 			if !r.At.IsZero() {
-				ui.Text(c, "更新于 "+r.At.Format("15:04")).FontSize(10.5).TextColor(theme.TextMuted)
+				ui.Text(c, "更新于 "+r.At.Format("15:04")).FontSize(textCaption).TextColor(theme.TextMuted)
 			}
 		})
 	}
-	ui.Box(c).FillWidth().Height(1).Background(theme.Border).Margin(12, 0)
+	ui.Box(c).FillWidth().Height(1).Background(theme.Border).Margin(spaceL, 0)
 	for _, item := range a.preferenceItems() {
 		if item.id != "usage-tray" && item.id != "usage-agent" && item.id != "usage-icon" {
 			continue
 		}
-		ui.Row(c).FillWidth().Padding(10, 0).Gap(12).AlignItems(ui.Center).Children(func() {
-			ui.Text(c, item.title).FontSize(12).TextColor(theme.Text).Grow(1)
+		ui.Row(c).FillWidth().Padding(spaceM, 0).Gap(spaceL).AlignItems(ui.Center).Children(func() {
+			ui.Text(c, item.title).FontSize(textSmall).TextColor(theme.Text).Grow(1)
 			item.control(c)
 		})
 	}

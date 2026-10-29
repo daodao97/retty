@@ -63,16 +63,16 @@ func (m *mobileApp) connectionDiagnosticsDialog(c *ui.Context) {
 		return
 	}
 	ui.DialogBase(c, &m.connectionDiagnosticsOpen, func(back, panel ui.Element) {
-		back.Background(ui.RGBA(0, 0, 0, .35))
-		panel.Label("连接诊断面板").Width(440).MaxWidthPercent(95).HeightPercent(85).MaxHeight(640).Padding(16).Radius(18).Background(c.Theme().Surface).Column().Gap(10)
-		ui.Text(c, "连接诊断").FontSize(18).Bold()
-		ui.Text(c, "保留最近 6 次连接记录，便于排查连接失败原因。").FontSize(12).TextColor(c.Theme().TextMuted).FillWidth()
-		ui.Scroll(c.Key("connection-diagnostics-scroll")).Grow(1).MinHeight(0).FillWidth().Gap(16).Children(func() {
+		back.Background(colorsOf(c).scrim)
+		panel.Label("连接诊断面板").Width(440).MaxWidthPercent(95).HeightPercent(85).MaxHeight(640).Padding(spaceXL).Radius(radiusXL).Background(c.Theme().Surface).Column().Gap(spaceM)
+		ui.Text(c, "连接诊断").FontSize(mobileTitle).Bold()
+		ui.Text(c, "保留最近 6 次连接记录，便于排查连接失败原因。").FontSize(textSmall).TextColor(c.Theme().TextMuted).FillWidth()
+		ui.Scroll(c.Key("connection-diagnostics-scroll")).Grow(1).MinHeight(0).FillWidth().Gap(spaceXL).Children(func() {
 			for i := len(m.connectionDiagnostics) - 1; i >= 0; i-- {
 				report := m.connectionDiagnostics[i]
-				ui.Column(c.Key(fmt.Sprintf("diagnostic-%d", i))).FillWidth().Gap(6).Children(func() {
-					ui.Text(c, report.Result).FontSize(14).Bold().FillWidth()
-					ui.Text(c, report.Text).Label(fmt.Sprintf("连接诊断记录 %d", i+1)).FontSize(12).LineHeight(1.4).FillWidth()
+				ui.Column(c.Key(fmt.Sprintf("diagnostic-%d", i))).FillWidth().Gap(spaceS).Children(func() {
+					ui.Text(c, report.Result).FontSize(mobileSubhead).Bold().FillWidth()
+					ui.Text(c, report.Text).Label(fmt.Sprintf("连接诊断记录 %d", i+1)).FontSize(textSmall).LineHeight(1.4).FillWidth()
 				})
 			}
 		})
@@ -80,7 +80,7 @@ func (m *mobileApp) connectionDiagnosticsDialog(c *ui.Context) {
 		if m.connectionDiagnosticsCopied {
 			copyText = "已复制"
 		}
-		ui.Row(c).FillWidth().Gap(8).Children(func() {
+		ui.Row(c).FillWidth().Gap(spaceM).Children(func() {
 			if ui.Button(c, copyText).Label("复制连接诊断").Grow(1).MinWidth(0).Height(44).Disabled(len(m.connectionDiagnostics) == 0).Clicked() {
 				c.WriteClipboard(m.connectionDiagnosticsText())
 				m.connectionDiagnosticsCopied = true

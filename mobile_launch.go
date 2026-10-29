@@ -23,10 +23,10 @@ var mobileLaunchLogo = sync.OnceValue(func() *ui.Bitmap {
 
 func mobileLaunchView(c *ui.Context) {
 	ui.Column(c).Fill().Center().Label("Retty 启动画面").Children(func() {
-		ui.Column(c).AlignItems(ui.Center).Gap(16).Children(func() {
+		ui.Column(c).AlignItems(ui.Center).Gap(spaceXL).Children(func() {
 			ui.Image(c, mobileLaunchLogo()).Size(120, 120).Fit(ui.Contain).
 				Role(ui.RoleImage).Label("Retty Logo")
-			ui.Text(c, "Retty").FontSize(32).Bold().TextColor(c.Theme().Text)
+			ui.Text(c, "Retty").FontSize(mobileLargeTitle).Bold().TextColor(c.Theme().Text)
 		})
 	})
 }

@@ -90,9 +90,9 @@ func (a *App) remoteUpdateView(c *ui.Context, k *colors) {
 	ui.DialogBase(c.Key("remote-update"), &d.open, func(backdrop, panel ui.Element) {
 		backdrop.Background(k.backdrop)
 		width, _ := c.Size()
-		panel.Column().Width(440).MaxWidth(width - 32).Padding(20).Gap(14).Radius(12).Background(k.panel).Children(func() {
-			ui.Text(c, "更新远端 Retty").FontSize(16).FontWeight(600)
-			ui.Text(c, d.host.hello.Host.Name).FontSize(13).TextColor(k.textMuted)
+		panel.Column().Width(440).MaxWidth(width - 32).Padding(spaceXL).Gap(spaceL).Radius(radiusL).Background(k.panel).Children(func() {
+			ui.Text(c, "更新远端 Retty").FontSize(textTitle).FontWeight(600)
+			ui.Text(c, d.host.hello.Host.Name).FontSize(textBody).TextColor(k.textMuted)
 			message := "正在检查版本…"
 			if d.status.Current != "" {
 				message = "当前 " + d.status.Current
@@ -100,9 +100,9 @@ func (a *App) remoteUpdateView(c *ui.Context, k *colors) {
 					message += " · 最新 " + d.status.Latest
 				}
 			}
-			ui.Text(c, message).FontSize(13)
+			ui.Text(c, message).FontSize(textBody)
 			if d.err != "" {
-				ui.Text(c, d.err).FontSize(13)
+				ui.Text(c, d.err).FontSize(textBody)
 			} else if d.tracking {
 				phase := "正在更新…"
 				switch d.status.Phase {
@@ -116,20 +116,20 @@ func (a *App) remoteUpdateView(c *ui.Context, k *colors) {
 				if !d.host.connected() {
 					phase = "正在等待远端重新连接…"
 				}
-				ui.Text(c, phase).FontSize(13)
+				ui.Text(c, phase).FontSize(textBody)
 			} else if d.status.Phase == "updated" {
-				ui.Text(c, "更新完成，现有终端任务继续运行。").FontSize(13)
+				ui.Text(c, "更新完成，现有终端任务继续运行。").FontSize(textBody)
 			} else if d.status.Phase == "failed" {
-				ui.Text(c, "更新失败："+d.status.Error).FontSize(13)
+				ui.Text(c, "更新失败："+d.status.Error).FontSize(textBody)
 			} else if !d.busy && !d.status.Available && d.status.Current != "" {
-				ui.Text(c, "当前已是最新正式版本。").FontSize(13)
+				ui.Text(c, "当前已是最新正式版本。").FontSize(textBody)
 			}
 			hint := "更新连接网关时会短暂断线。会话服务和正在运行的任务保持不变。"
 			if d.status.Kind == "desktop" {
 				hint = "更新后会重开远端 Retty 窗口。后台会话服务和正在运行的任务保持不变。"
 			}
-			ui.Text(c, hint).FontSize(12).TextColor(k.textMuted)
-			ui.Row(c).Gap(10).Justify(ui.End).Children(func() {
+			ui.Text(c, hint).FontSize(textSmall).TextColor(k.textMuted)
+			ui.Row(c).Gap(spaceM).Justify(ui.End).Children(func() {
 				if ui.Button(c, "关闭").Clicked() {
 					d.open = false
 				}
