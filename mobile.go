@@ -168,6 +168,7 @@ func mobileMain() {
 			}
 			if err == nil {
 				remote.SetClientSecret(secret)
+				remote.SetKeySlotFile(filepath.Join(rex.Dir(), "client-key-slot"))
 			}
 			var history []desktopRecent
 			var recentSessions []mobileRecentSession

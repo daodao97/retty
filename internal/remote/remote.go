@@ -273,6 +273,16 @@ func dialTunnel(ctx context.Context, raw string, reportFailure bool, diagnostics
 	}
 	t := openTunnel(addr, server)
 	t.setLog(logf)
+	// Dialing would ping too; pinging first only times the two apart.
+	if diagnostics != nil {
+		if err := diagnostics.Measure(StageRelay, func() error {
+			_, err := t.client.Ping(ctx)
+			return err
+		}); err != nil {
+			t.close()
+			return nil, nil, err
+		}
+	}
 	var client *rex.Client
 	err = diagnostics.Measure(StageTunnel, func() error {
 		var err error
@@ -304,12 +314,13 @@ func tunnelLog(diagnostics *Diagnostics) func(string, ...any) {
 // Preview reads host and session display metadata without registering a phone
 // or attaching to a terminal. A desktop that answers keeps its tunnel parked
 // briefly, for the next probe or a connection to reuse.
-func Preview(ctx context.Context, raw string) (rex.Hello, []rex.SessionInfo, error) {
-	t, client, err := dialTunnel(ctx, raw, false, nil)
+// A non-nil trace times its stages, as a connection's are.
+func Preview(ctx context.Context, raw string, trace *Diagnostics) (rex.Hello, []rex.SessionInfo, error) {
+	t, client, err := dialTunnel(ctx, raw, false, trace)
 	if err != nil {
 		return rex.Hello{}, nil, err
 	}
-	hello, sessions, err := readDesktopInfo(ctx, client, true)
+	hello, sessions, err := readDesktopInfoTraced(ctx, client, true, trace)
 	client.Close()
 	if err != nil {
 		t.close()
@@ -320,28 +331,49 @@ func Preview(ctx context.Context, raw string) (rex.Hello, []rex.SessionInfo, err
 }
 
 func readDesktopInfo(ctx context.Context, client *rex.Client, list bool) (rex.Hello, []rex.SessionInfo, error) {
+	return readDesktopInfoTraced(ctx, client, list, nil)
+}
+
+// readDesktopInfoTraced times its requests only with a trace, so an untraced
+// probe keeps its plain errors.
+func readDesktopInfoTraced(ctx context.Context, client *rex.Client, list bool, trace *Diagnostics) (rex.Hello, []rex.SessionInfo, error) {
+	measure := func(stage ConnectionStage, fn func() error) error {
+		if trace == nil {
+			return fn()
+		}
+		return trace.Measure(stage, fn)
+	}
 	stop := context.AfterFunc(ctx, func() { client.Close() })
 	defer stop()
 	var sessions []rex.SessionInfo
 	if list {
 		// The bridge registers phones only after hello followed by list.
 		// Reading the list first keeps a preview invisible on older bridges too.
-		var err error
-		sessions, err = client.List()
-		if ctx.Err() != nil {
-			return rex.Hello{}, nil, ctx.Err()
-		}
+		err := measure(StageSessions, func() error {
+			var err error
+			sessions, err = client.List()
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			return err
+		})
 		if err != nil {
 			return rex.Hello{}, nil, err
 		}
 	}
-	hello, err := client.Hello()
-	if ctx.Err() != nil {
-		return hello, nil, ctx.Err()
-	}
+	var hello rex.Hello
+	err := measure(StageHello, func() error {
+		var err error
+		hello, err = client.Hello()
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		return err
+	})
 	if err != nil {
 		return hello, nil, err
 	}
+	trace.ProtocolVersion(hello.Version)
 	if hello.Version <= 0 || hello.Host.Name == "" {
 		return hello, nil, errors.New("invalid Retty hello")
 	}

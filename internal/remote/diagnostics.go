@@ -24,8 +24,12 @@ import (
 type ConnectionStage string
 
 const (
-	StageLink     ConnectionStage = "解析连接码"
-	StageNetwork  ConnectionStage = "准备系统网络"
+	StageLink    ConnectionStage = "解析连接码"
+	StageNetwork ConnectionStage = "准备系统网络"
+	// StageRelay is the relayed meow handshake, after which the desktop has
+	// added this device as a peer; StageTunnel is the WireGuard and TCP dial
+	// that follows. A new tunnel times them apart.
+	StageRelay    ConnectionStage = "中继握手"
 	StageTunnel   ConnectionStage = "建立加密隧道"
 	StageHello    ConnectionStage = "等待桌面响应"
 	StageProtocol ConnectionStage = "检查协议版本"
@@ -63,6 +67,13 @@ func NewDiagnostics(recovering bool, attempt int, budget time.Duration) *Diagnos
 		mode = "恢复连接"
 	}
 	return &Diagnostics{started: time.Now(), mode: mode, attempt: max(attempt, 1), budget: budget}
+}
+
+// NewPreviewDiagnostics times a home-page availability probe. It builds the
+// tunnel that a later tap reuses, so on a poor network its tunnel stages are
+// where the time goes.
+func NewPreviewDiagnostics(budget time.Duration) *Diagnostics {
+	return &Diagnostics{started: time.Now(), mode: "首页探测", attempt: 1, budget: budget}
 }
 
 // Measure also annotates failures when diagnostics are disabled. A caller can

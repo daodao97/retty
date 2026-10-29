@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net"
 	"os"
+	"path/filepath"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -66,6 +67,49 @@ func TestTunnelKeysRestBetweenTunnels(t *testing.T) {
 	}
 	for _, tunnel := range []*tunnel{second, third, fourth, fifth, rested} {
 		tunnel.close()
+	}
+}
+
+// A process that ended without closing its tunnel leaves its slot unrecorded
+// in memory; the next process starts past it, as it would past a key closed a
+// moment ago.
+func TestTunnelKeysSkipLastProcessSlot(t *testing.T) {
+	SetClientSecret([]byte("0123456789abcdef0123456789abcdef"))
+	defer SetClientSecret(nil)
+	reset := func() {
+		keyed.Lock()
+		keyed.live, keyed.closed = nil, nil
+		keyed.first, keyed.path, keyed.saved = 0, "", -1
+		keyed.Unlock()
+	}
+	reset()
+	defer reset()
+	addr := tailcat.NewPrivateKey().Public.Addr()
+	slot := func(i byte) key.NodePublic { return clientKey(addr, i).Public() }
+	path := filepath.Join(t.TempDir(), "client-key-slot")
+	SetKeySlotFile(path)
+	if first := openTunnel(addr, addr); first.pub != slot(0) {
+		t.Fatal("a first process did not start at slot 0")
+	}
+	// The process ends; its tunnel is never closed.
+	reset()
+	SetKeySlotFile(path)
+	next := openTunnel(addr, addr)
+	defer next.close()
+	if next.pub != slot(1) {
+		t.Fatal("a new process reused the slot the last one left live")
+	}
+	if data, _ := os.ReadFile(path); len(data) != 1 || data[0] != 1 {
+		t.Fatalf("recorded slot %v, want 1", data)
+	}
+	reset()
+	SetKeySlotFile(path)
+	// Starting at 2, each closed key rests, so these take 2, 3, then 0.
+	for range keySlots - 1 {
+		openTunnel(addr, addr).close()
+	}
+	if data, _ := os.ReadFile(path); len(data) != 1 || data[0] != 0 {
+		t.Fatalf("slots did not wrap around: recorded %v", data)
 	}
 }
 
@@ -183,7 +227,7 @@ func TestTailcatStableKeyAndWarmTunnel(t *testing.T) {
 	addr, _ := ParseLink(link)
 
 	started := time.Now()
-	if _, _, err := Preview(ctx, link); err != nil {
+	if _, _, err := Preview(ctx, link, nil); err != nil {
 		t.Fatalf("probe: %v", err)
 	}
 	cold := time.Since(started)

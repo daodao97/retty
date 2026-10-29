@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"log"
 	"sync"
 	"time"
 
@@ -39,6 +40,9 @@ type desktopPresence struct {
 
 const recentPresenceInterval = 30 * time.Second
 const maxPresenceInterval = 5 * time.Minute
+
+// presenceProbeTimeout bounds one probe, tunnel included.
+const presenceProbeTimeout = 12 * time.Second
 
 // Each probe of an unreachable desktop builds a whole tunnel only to time
 // out; probe it less often the longer it stays away, up to five minutes.
@@ -95,12 +99,16 @@ func (m *mobileApp) refreshRecentPresence(c *ui.Context) {
 				case <-ctx.Done():
 					return
 				}
-				probeCtx, stop := context.WithTimeout(ctx, 12*time.Second)
-				hello, sessions, err := remote.Preview(probeCtx, link)
+				probeCtx, stop := context.WithTimeout(ctx, presenceProbeTimeout)
+				trace := remote.NewPreviewDiagnostics(presenceProbeTimeout)
+				hello, sessions, err := remote.Preview(probeCtx, link, trace)
 				stop()
 				if ctx.Err() != nil {
 					return
 				}
+				// Only the log keeps a probe's report: one every 30 seconds would
+				// push the connections out of the diagnostics the user can copy.
+				log.Printf("%s", trace.Finish(err).Text)
 				result := desktopPresence{state: desktopOnline, checked: time.Now()}
 				mygo.RunOnMain(func() {
 					if m.presenceEpoch == epoch {

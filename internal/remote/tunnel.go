@@ -51,6 +51,7 @@ func LoadClientSecret(dir string) error {
 		return err
 	}
 	SetClientSecret(secret)
+	SetKeySlotFile(filepath.Join(dir, "client-key-slot"))
 	return nil
 }
 
@@ -91,6 +92,25 @@ var keyed struct {
 	sync.Mutex
 	live   map[key.NodePublic]bool
 	closed map[key.NodePublic]time.Time
+	// first is the slot this process tries first, and path records the last
+	// slot it claimed, saved.
+	first byte
+	path  string
+	saved int
+}
+
+// SetKeySlotFile keeps the last claimed slot in path. A process that ends
+// without closing its tunnels, as when iOS ends a suspended app, leaves no
+// record of its closed keys, and the next one would take the same slot
+// within the desktop's trust of its dead path. Each process therefore starts
+// past the slot the last one claimed.
+func SetKeySlotFile(path string) {
+	keyed.Lock()
+	defer keyed.Unlock()
+	keyed.path, keyed.first, keyed.saved = path, 0, -1
+	if data, err := os.ReadFile(path); err == nil && len(data) == 1 && data[0] < keySlots {
+		keyed.first, keyed.saved = (data[0]+1)%keySlots, int(data[0])
+	}
 }
 
 type tunnel struct {
@@ -128,7 +148,8 @@ func openTunnel(addr, server tailcat.Addr) *tunnel {
 func claimKey(addr tailcat.Addr) key.NodePrivate {
 	keyed.Lock()
 	defer keyed.Unlock()
-	for slot := range byte(keySlots) {
+	for i := range byte(keySlots) {
+		slot := (keyed.first + i) % keySlots
 		k := clientKey(addr, slot)
 		if k.IsZero() {
 			return k
@@ -141,6 +162,9 @@ func claimKey(addr tailcat.Addr) key.NodePrivate {
 			keyed.live = make(map[key.NodePublic]bool)
 		}
 		keyed.live[pub] = true
+		if keyed.path != "" && int(slot) != keyed.saved && atomicfile.Write(keyed.path, []byte{slot}) == nil {
+			keyed.saved = int(slot)
+		}
 		return k
 	}
 	return key.NodePrivate{}
