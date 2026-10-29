@@ -7,7 +7,9 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"log"
 	"net"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"sync"
@@ -121,6 +123,9 @@ type tunnel struct {
 	used   atomic.Bool // a connection succeeded, so its stack is up
 	once   sync.Once
 	path   *pathDiscovery
+	// pathKind is the last logged path: 0 none yet, then relay, direct or
+	// local direct.
+	pathKind atomic.Int32
 }
 
 func openTunnel(addr, server tailcat.Addr) *tunnel {
@@ -140,9 +145,27 @@ func openTunnel(addr, server tailcat.Addr) *tunnel {
 		if err != nil {
 			return PathSample{}, err
 		}
-		return PathSample{At: time.Now(), Direct: p.Endpoint != "", Latency: time.Duration(p.LatencySeconds * float64(time.Second))}, nil
+		s := PathSample{At: time.Now(), Direct: p.Endpoint != "", Latency: time.Duration(p.LatencySeconds * float64(time.Second))}
+		t.logPath(p.Endpoint, s)
+		return s, nil
 	})
 	return t
+}
+
+// logPath logs a tunnel's path when it changes. It names only the kind of
+// path: a private endpoint is the local network, and the address itself is
+// never logged, as diagnostics never record one.
+func (t *tunnel) logPath(endpoint string, s PathSample) {
+	kind, label := int32(1), "中继"
+	if endpoint != "" {
+		kind, label = 2, "直连"
+		if ap, err := netip.ParseAddrPort(endpoint); err == nil && (ap.Addr().IsPrivate() || ap.Addr().IsLinkLocalUnicast()) {
+			kind, label = 3, "局域网直连"
+		}
+	}
+	if t.pathKind.Swap(kind) != kind {
+		log.Printf("Retty 隧道路径：%s，%d ms，桌面指纹 %s", label, s.Latency.Milliseconds(), desktopFingerprint(t.addr))
+	}
 }
 
 func claimKey(addr tailcat.Addr) key.NodePrivate {

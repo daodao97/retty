@@ -101,18 +101,28 @@ func (d *Diagnostics) Measure(stage ConnectionStage, fn func() error) error {
 	return nil
 }
 
+// desktopFingerprint names a desktop in reports and logs by a short hash of
+// its public key, which tells desktops apart without revealing the key.
+func desktopFingerprint(addr tailcat.Addr) string {
+	ci, err := tailcat.ParseAddr(addr)
+	if err != nil {
+		return ""
+	}
+	fingerprint := sha256.Sum256(ci.ServerPublic.AppendTo(nil))
+	return fmt.Sprintf("%x", fingerprint[:6])
+}
+
 func (d *Diagnostics) target(addr tailcat.Addr) {
 	if d == nil {
 		return
 	}
-	ci, err := tailcat.ParseAddr(addr)
-	if err != nil {
+	desktop := desktopFingerprint(addr)
+	if desktop == "" {
 		return
 	}
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	fingerprint := sha256.Sum256(ci.ServerPublic.AppendTo(nil))
-	d.desktop = fmt.Sprintf("%x", fingerprint[:6])
+	d.desktop = desktop
 	// The URL is used only for its public hostname. Never copy credentials,
 	// path or query from an untrusted link into the report.
 	if u, err := url.Parse(derpURL(addr)); err == nil {
