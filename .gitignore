@@ -13,3 +13,9 @@ mygo_windows_*.syso
 
 # Python tooling caches
 __pycache__/
+
+# Built by scripts/build-screen-helper.sh
+/resources/darwin/retty-screen
+
+# Personal Claude Code settings
+/.claude/settings.local.json

@@ -123,22 +123,28 @@ type App struct {
 	hiddenSessions   map[string]bool
 	// setupSessions are agents setting up tasks; the task board shows
 	// them. taskBoard shows over boardOver's content while boardShown.
-	setupSessions         []setupSession
-	taskBoard             *boardPane
-	boardShown            bool
-	boardOver             *Tab
-	saveDue               bool
-	lastSave              time.Time
-	quitting              bool
-	shuttingDown          func() bool // nil uses the OS detector
-	focusedWin            bool
-	activeRemote          *Pane
-	remoteReleases        []remoteSizeRelease
-	lastSnapshot          string
-	title                 string
-	agentHooks            map[string]agents.HookInstallation
-	agentHookBusy         string
-	agentHookError        string
+	setupSessions  []setupSession
+	taskBoard      *boardPane
+	boardShown     bool
+	boardOver      *Tab
+	saveDue        bool
+	lastSave       time.Time
+	quitting       bool
+	shuttingDown   func() bool // nil uses the OS detector
+	focusedWin     bool
+	activeRemote   *Pane
+	remoteReleases []remoteSizeRelease
+	lastSnapshot   string
+	title          string
+	agentHooks     map[string]agents.HookInstallation
+	agentHookBusy  string
+	agentHookError string
+	// screenViewers is how many devices watch the screen; screenAccess is
+	// the helper's permissions, nil until read.
+	screenViewers         int
+	screenAccess          *screenAccess
+	screenBusy            bool
+	closedLid             closedLid
 	agentNotified         map[string]uint64
 	agentFinishedNotified map[string]uint64
 	programNoticeLimiter  rex.ProgramNoticeLimiter

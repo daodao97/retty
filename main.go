@@ -265,6 +265,7 @@ func (a *App) open() {
 		a.win = nil
 	})
 	a.restorePhonePair()
+	a.refreshClosedLid()
 	// Tunnels to other desktops then keep one key each across connections.
 	if err := remote.LoadClientSecret(filepath.Join(rex.Dir(), "remote")); err != nil {
 		log.Printf("remote: client secret: %v", err)

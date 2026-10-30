@@ -37,6 +37,8 @@ type settings struct {
 	HidePhoneNotifications           bool    `json:"hidePhoneNotifications,omitempty"`
 	HideAgentNotifications           bool    `json:"hideAgentNotifications,omitempty"`
 	HideAgentCompletionNotifications bool    `json:"hideAgentCompletionNotifications,omitempty"`
+	// ScreenSharing lets paired devices view and operate this Mac's screen.
+	ScreenSharing bool `json:"screenSharing,omitempty"`
 }
 
 const defaultFontSize = 11.6

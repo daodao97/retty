@@ -59,6 +59,14 @@ func (b *Bridge) serveConnection(conn net.Conn, socket string) {
 		b.serveFiles(conn, line)
 		return
 	}
+	if req.Op == "screen-unlock" {
+		b.serveScreenUnlock(conn, line)
+		return
+	}
+	if req.Op == "screen-view" {
+		b.serveScreen(conn, reader, line)
+		return
+	}
 	if req.Op == "port-forward" {
 		b.servePort(conn, reader, line)
 		return

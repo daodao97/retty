@@ -24,6 +24,7 @@ import (
 type mobileApp struct {
 	automations                        mobileAutomations
 	preview                            mobilePreview
+	screen                             mobileScreen
 	usage                              mobileUsage
 	live                               mobileLiveActivity
 	approval                           *mobileApproval
@@ -622,6 +623,7 @@ func (m *mobileApp) contentView(c *ui.Context) {
 	m.connectionDialog(c)
 	m.connectionDiagnosticsDialog(c)
 	m.previewDialog(c)
+	m.screenDialog(c)
 	m.usageDialog(c)
 	m.automationsDialog(c)
 	m.liveActivityDialog(c)
@@ -728,6 +730,10 @@ func (m *mobileApp) header(c *ui.Context, title string, back func(), terminalPag
 			}
 		})
 		if terminalPage {
+			if mobileIconAction(c, "查看电脑屏幕", "monitor").Disabled(!m.connectionUsable()).Clicked() {
+				c.Blur()
+				m.openScreen()
+			}
 			if mobileIconAction(c, "会话工具", "ellipsis").Clicked() {
 				m.live.tools = true
 				c.Blur()
@@ -863,6 +869,9 @@ func (m *mobileApp) sessionsView(c *ui.Context) {
 			ui.Text(c, "会话").FontSize(mobileHeadline).Bold().PassThrough()
 			ui.Text(c, fmt.Sprint(len(m.sessions))).FontSize(textBody).TextColor(c.Theme().TextMuted).PassThrough()
 		})
+		if mobileIconAction(c, "查看电脑屏幕", "monitor").Disabled(!m.connectionUsable()).Clicked() {
+			m.openScreen()
+		}
 		if mobileIconAction(c, "查看自动化", "clock").Disabled(m.degraded()).Clicked() {
 			m.openAutomations()
 		}

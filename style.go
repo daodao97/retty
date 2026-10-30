@@ -47,6 +47,9 @@ type colors struct {
 	sheetScrim ui.Color
 	// canvas is the file panel's ground, a step off the window's.
 	canvas ui.Color
+	// screenCanvas is the ground of a remote screen, and onScreenCanvas the
+	// text on it, the same in either window.
+	screenCanvas, onScreenCanvas ui.Color
 }
 
 var lightColors = colors{
@@ -91,6 +94,8 @@ var lightColors = colors{
 	dialogShadowNear: ui.RGBA(0, 0, 0, 0.06),
 	sheetScrim:       ui.RGBA(0, 0, 0, 0.4),
 	canvas:           ui.Hex("#f6f7f9"),
+	screenCanvas:     ui.Hex("#000000"),
+	onScreenCanvas:   ui.Hex("#ffffff"),
 }
 
 var darkColors = colors{
@@ -133,6 +138,8 @@ var darkColors = colors{
 	dialogShadowNear: ui.RGBA(0, 0, 0, 0.06),
 	sheetScrim:       ui.RGBA(0, 0, 0, 0.4),
 	canvas:           ui.Hex("#25272b"),
+	screenCanvas:     ui.Hex("#000000"),
+	onScreenCanvas:   ui.Hex("#ffffff"),
 }
 
 // The chrome's spacing steps, on a 4-point grid; spaceS is for dense rows

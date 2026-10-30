@@ -38,6 +38,8 @@ func (a *App) view(c *ui.Context) {
 	a.saveFileWidth(c)
 	if a.err != "" {
 		a.errorBanner(c, k)
+	} else if a.screenViewers > 0 {
+		a.screenSharingBar(c, k)
 	}
 	a.shortcuts(c)
 	a.palette(c, k)

@@ -10,10 +10,12 @@ import (
 	"net/netip"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/tailscale/tailcat"
@@ -87,6 +89,14 @@ type Bridge struct {
 	usagePending *usageFlight
 	usageRead    func(context.Context) agentusage.Snapshot
 	activity     *activityPublisher
+	// screen serves the screen-view stream; screenStops ends each of its
+	// viewers, and screenAwake keeps the Mac awake while there are any.
+	screen      *ScreenHost
+	screenStops map[uint64]context.CancelFunc
+	screenNext  uint64
+	screenAwake *exec.Cmd
+	// screenUnlocking tells that an unlock is typing at the lock screen.
+	screenUnlocking atomic.Bool
 
 	automationDir string
 }
@@ -115,6 +125,8 @@ type Options struct {
 	OnPasteImage func(context.Context, string, []byte) error
 	// OnUpdate accepts only official CLI updates. Nil on desktop/mobile bridges.
 	OnUpdate func(context.Context, selfupdate.Request) (selfupdate.Status, error)
+	// Screen lets paired devices view and operate the screen. Nil refuses.
+	Screen *ScreenHost
 }
 
 func Start(ctx context.Context, socket string, options Options) (*Bridge, error) {
@@ -135,7 +147,7 @@ func Start(ctx context.Context, socket string, options Options) (*Bridge, error)
 		b.uploadDir = filepath.Join(stateDir, "uploads")
 	}
 	b.onDevice, b.onNotice, b.onPeer, b.onImage = options.OnDevice, options.OnNotice, options.OnPeer, options.OnPasteImage
-	b.onUpdate = options.OnUpdate
+	b.onUpdate, b.screen = options.OnUpdate, options.Screen
 	ln, err := b.server.Listen(ctx, "tcp", fmt.Sprintf(":%d", Port))
 	if err != nil {
 		b.imageCancel()

@@ -29,6 +29,7 @@ type preferenceItem struct {
 func (a *App) openSettings() {
 	a.finishDesktopDialog()
 	a.refreshAgentHooks()
+	a.refreshScreenAccess(false)
 	a.settingsOpen = true
 	a.settingsQuery = ""
 	a.settingsInitialFocus = true
@@ -292,6 +293,29 @@ func (a *App) preferenceItems() []preferenceItem {
 							a.setLinkEditor(values[i])
 						}
 					}
+				}
+			}},
+		{id: "screen-sharing", title: "允许远程桌面", label: "Screen sharing", detail: "已配对的手机或电脑可以查看并操作此电脑的屏幕。有人查看时，窗口底部会显示提示，可随时断开。", group: "远程桌面", section: 1,
+			modified: prefs.ScreenSharing, reset: func() { a.setScreenSharing(false) },
+			control: func(c *ui.Context) {
+				on := prefs.ScreenSharing
+				if settingsSwitch(c, &on, "Screen sharing").Changed() {
+					a.setScreenSharing(on)
+				}
+			}},
+		{id: "closed-lid", title: "合盖模式", label: "Closed-lid mode", detail: a.closedLidLabel(), group: "远程桌面", section: 1,
+			modified: a.closedLid.on, disabled: !a.closedLid.known || a.closedLid.busy, reset: func() { a.setClosedLid(false) },
+			control: func(c *ui.Context) {
+				on := a.closedLid.on
+				if settingsSwitch(c, &on, "Closed-lid mode").Changed() {
+					a.setClosedLid(on)
+				}
+			}},
+		{id: "screen-access", title: "系统权限", label: "Screen sharing permissions", detail: a.screenAccessLabel(), group: "远程桌面", section: 1,
+			disabled: !prefs.ScreenSharing || screenHelperPath() == "",
+			control: func(c *ui.Context) {
+				if ui.Button(c, "申请权限").Label("Request screen sharing permissions").Clicked() {
+					a.refreshScreenAccess(true)
 				}
 			}},
 		{id: "desktop-notifications", title: "桌面通知", label: "Desktop notifications", detail: "在此电脑显示系统通知，包括任务完成、等待输入和终端提醒。", group: "通知", section: 2,

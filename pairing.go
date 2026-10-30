@@ -95,7 +95,7 @@ func (a *App) startPhonePair() {
 					a.saveDesktopHistory()
 				}
 			})
-		}, OnPasteImage: pasteRemoteImage, OnUpdate: a.desktopUpdater.request})
+		}, OnPasteImage: pasteRemoteImage, OnUpdate: a.desktopUpdater.request, Screen: a.screenHost()})
 		if err != nil {
 			close(stopPush)
 		} else {
