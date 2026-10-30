@@ -6,10 +6,10 @@ import (
 	"github.com/egoist/mygo/ui"
 )
 
-// Characters of box drawing, blocks and Powerline's separators are drawn
-// rather than taken from the font, as Ghostty draws them: fonts leave gaps
-// between the lines of cells taller than their glyphs, and many lack the
-// separators.
+// Characters of box drawing, blocks, legacy-computing sextants and
+// Powerline's separators are drawn rather than taken from the font, as
+// Ghostty draws them: fonts leave gaps between the lines of cells taller
+// than their glyphs, and many lack the separators and the sextants.
 
 // Weights of the arms of box drawing characters.
 const (
@@ -40,6 +40,8 @@ func drawn(r rune) bool {
 		return boxArms[r-0x2500] != "" || 0x256d <= r && r <= 0x2573
 	case 0x2580 <= r && r <= 0x259f:
 		return true
+	case 0x1fb00 <= r && r <= 0x1fb3b:
+		return true
 	case 0xe0b0 <= r && r <= 0xe0b7:
 		return true
 	}
@@ -67,6 +69,9 @@ func drawBox(p *ui.Painter, r rune, c ui.Rect, col ui.Color) {
 	switch {
 	case 0x2580 <= r && r <= 0x259f:
 		drawBlock(r, x0, y0, w, h, fill, p, col, s)
+		return
+	case 0x1fb00 <= r && r <= 0x1fb3b:
+		drawSextant(r, x0, y0, w, h, fill)
 		return
 	case 0xe0b0 <= r && r <= 0xe0b3:
 		var path ui.Path
@@ -255,6 +260,28 @@ func drawArms(fill func(ax, ay, bx, by float32), a [4]int, x0, y0, x1, y1, mx, m
 				}
 			}
 		}
+	}
+}
+
+// drawSextant draws one of U+1FB00 to U+1FB3B across the whole cell.
+// The sixty patterns are the six-bit masks except 0, 21, 42 and 63,
+// which are a space, ▌, ▐ and █. Bit 0 is the upper left, then across
+// and down; neighbors share an edge, as drawBlock's quadrants do.
+func drawSextant(r rune, x0, y0, w, h float32, fill func(ax, ay, bx, by float32)) {
+	idx := int(r - 0x1fb00)
+	pattern := idx + idx/20 + 1
+	rx := func(f float32) float32 { return x0 + float32(math.Round(float64(w*f))) }
+	ry := func(f float32) float32 { return y0 + float32(math.Round(float64(h*f))) }
+	xm := rx(0.5)
+	ya, yb := ry(1.0/3), ry(2.0/3)
+	xs := [...]float32{x0, xm, x0 + w}
+	ys := [...]float32{y0, ya, yb, y0 + h}
+	for i := range 6 {
+		if pattern&(1<<i) == 0 {
+			continue
+		}
+		col, row := i%2, i/2
+		fill(xs[col], ys[row], xs[col+1], ys[row+1])
 	}
 }
 

@@ -68,4 +68,4 @@ require (
 tool github.com/egoist/mygo/cmd/mygo
 
 // MyGo source branch: github.com/daodao97/mygo@main.
-replace github.com/egoist/mygo => github.com/daodao97/mygo v0.0.0-20261029135007-26031acefa75
+replace github.com/egoist/mygo => github.com/daodao97/mygo v0.0.0-20261030072721-80d5e6a3ea2f

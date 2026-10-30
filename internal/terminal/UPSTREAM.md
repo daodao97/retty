@@ -311,3 +311,8 @@ The terminal plugin and Ghostty manifest/bindings are unchanged from
 `cc1299d9a720`, so no terminal vendor changes are needed. Retty retains its
 local terminal additions and independent CLI/iOS packaging.
 The build-scoped UI migration preview requires no changes.
+
+Fork 80d5e6a3ea2f carries upstream's drawn legacy-computing sextants
+(U+1FB00 to U+1FB3B, upstream #920) into box.go, so QR codes printed with
+them render without gaps. They keep their colors under the minimum contrast
+as the other drawn shapes do.

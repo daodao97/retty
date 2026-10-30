@@ -182,12 +182,12 @@ func TestMinimumContrastPreservesArtwork(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer term.Close()
-	// Font artwork and drawn Powerline caps must retain their deliberately
+	// Font artwork, drawn sextants and Powerline caps must retain their deliberately
 	// low contrast and cached dark background through theme adaptation.
 	for _, tc := range []struct {
 		r   rune
 		box bool
-	}{{'┄', false}, {'\U0001fb00', false}, {'\ue0b8', false},
+	}{{'┄', false}, {'\U0001fb00', true}, {'\ue0b8', false},
 		{'\ue0b4', true}, {'\ue0b5', true}, {'\ue0b6', true}, {'\ue0b7', true}} {
 		t.Run(fmt.Sprintf("%U", tc.r), func(t *testing.T) {
 			term.Feed([]byte(fmt.Sprintf("\x1b[H\x1b[2J\x1b[48;2;20;20;20;38;2;30;30;30m%c\x1b[0m", tc.r)))
