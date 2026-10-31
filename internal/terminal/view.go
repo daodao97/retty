@@ -877,11 +877,18 @@ func (v *view) geometry() vt.Geometry {
 // Reaching a visible viewport edge should scroll a drag even when the window
 // prevents the pointer from leaving the grid. Only the gesture position is
 // projected outside; hit testing and the selection anchor use the real point.
+// A finger covers the rows it selects and stops on the first or the last one,
+// short of the edge a mouse would cross, so a touch selection scrolls from
+// two rows inside it.
 func (v *view) selectionPosition(x, y float32) (float64, float64) {
 	px, py := float64(x*v.scale), float64(y*v.scale)
 	top := max(v.oy, 0)
 	bottom := min(v.oy+v.rows*v.cellH, int(math.Round(padY*float64(v.scale)))+v.viewportH)
-	edge := min(int(math.Ceil(8*float64(v.scale))), max((bottom-top)/3, 1))
+	edge := int(math.Ceil(8 * float64(v.scale)))
+	if v.touchSelecting {
+		edge = max(edge, 2*v.cellH)
+	}
+	edge = min(edge, max((bottom-top)/3, 1))
 	if py < float64(top+edge) {
 		py = -1
 	} else if py > float64(bottom-edge) {

@@ -76,6 +76,9 @@ hardware app shortcuts retain their existing routing.
 
 Selection drags auto-scroll within an 8-DIP band of the visible top/bottom
 edge, so a maximized window does not require the pointer to leave its grid.
+A long-press touch selection widens the band to two rows (Retty-local, not yet
+in MyGo): a finger covers the text it selects and stops on the first or last
+row instead of crossing the edge.
 Ticks preserve the edge trigger and extend the selection across scrollback;
 moving back inside or releasing the pointer stops scrolling.
 
